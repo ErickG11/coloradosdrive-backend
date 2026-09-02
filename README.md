@@ -75,14 +75,14 @@ docs/
 
 ### Otros scripts disponibles
 
-| Script                 | Descripción                                        |
-| ---------------------- | --------------------------------------------------- |
-| `npm run build`        | Compila TypeScript a `dist/`                         |
-| `npm start`             | Corre el build compilado (`dist/index.js`)           |
-| `npm run lint`          | Corre ESLint                                         |
-| `npm run lint:fix`      | Corre ESLint con `--fix`                             |
-| `npm run format`        | Formatea el código con Prettier                      |
-| `npm run format:check`  | Verifica el formato sin modificar archivos           |
+| Script                 | Descripción                                |
+| ---------------------- | ------------------------------------------ |
+| `npm run build`        | Compila TypeScript a `dist/`               |
+| `npm start`            | Corre el build compilado (`dist/index.js`) |
+| `npm run lint`         | Corre ESLint                               |
+| `npm run lint:fix`     | Corre ESLint con `--fix`                   |
+| `npm run format`       | Formatea el código con Prettier            |
+| `npm run format:check` | Verifica el formato sin modificar archivos |
 
 ## Cómo correr los tests
 

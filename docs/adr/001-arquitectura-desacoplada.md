@@ -21,14 +21,14 @@ Se eligió la **arquitectura cliente-servidor desacoplada**, desplegando el back
 
 Tomada de la Tabla 1 del documento de titulación ("Matriz de decisión ponderada para elección de la mejor solución"). Escala de puntaje: 1 (deficiente) a 5 (excelente).
 
-| Criterio        | Peso | Cliente-servidor desacoplada | Monolítica |
-| ---------------- | ---: | ----------------------------: | ---------: |
-| Fiabilidad        |  35% |                              5 |          2 |
-| Seguridad         |  20% |                              5 |          3 |
-| Mantenibilidad    |  15% |                              5 |          2 |
-| Usabilidad        |  15% |                              4 |          2 |
-| Escalabilidad     |  15% |                              4 |          2 |
-| **Total ponderado** |      |                       **4.70** |    **2.20** |
+| Criterio            | Peso | Cliente-servidor desacoplada | Monolítica |
+| ------------------- | ---: | ---------------------------: | ---------: |
+| Fiabilidad          |  35% |                            5 |          2 |
+| Seguridad           |  20% |                            5 |          3 |
+| Mantenibilidad      |  15% |                            5 |          2 |
+| Usabilidad          |  15% |                            4 |          2 |
+| Escalabilidad       |  15% |                            4 |          2 |
+| **Total ponderado** |      |                     **4.70** |   **2.20** |
 
 Fiabilidad y seguridad concentran el 55% del peso total, por ser los criterios más críticos dado que el sistema procesa pagos y datos académicos sensibles.
 
