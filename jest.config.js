@@ -4,6 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   rootDir: '.',
   testMatch: ['<rootDir>/tests/**/*.test.ts'],
+  setupFiles: ['<rootDir>/tests/setupEnv.ts'],
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.eslint.json' }],
   },
