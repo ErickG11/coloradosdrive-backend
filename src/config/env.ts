@@ -19,6 +19,9 @@ export const env = {
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
   PORT: Number(optionalEnv('PORT', '3000')),
   FRONTEND_URL: requireEnv('FRONTEND_URL'),
+  SUPABASE_URL: requireEnv('SUPABASE_URL'),
+  SUPABASE_SERVICE_ROLE_KEY: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
+  SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
 };
 
 export const isProduction = env.NODE_ENV === 'production';
