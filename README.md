@@ -13,6 +13,7 @@ API REST desacoplada, desplegada como **proceso persistente** (no serverless) en
 - **Helmet 7.1** — cabeceras de seguridad HTTP
 - **express-validator** — validación de entradas
 - **jsonwebtoken** — verificación de JWT emitidos por Supabase Auth
+- **Nodemailer** — envío de correo (SMTP genérico; en este proyecto vía Resend)
 - **ESLint** (flat config, ESLint 9) + **Prettier**
 - **Jest** + **Supertest** — testing
 - Migraciones SQL versionadas (sin cambios manuales en el dashboard de Supabase)
@@ -42,6 +43,7 @@ docs/
 
 - Node.js 18.x
 - Un proyecto de Supabase (URL, anon key, service role key y JWT secret — en Project Settings → API)
+- Una cuenta SMTP para el correo de bienvenida (host, puerto, usuario y contraseña) — en este proyecto, [Resend vía SMTP](https://resend.com/docs/send-with-smtp)
 
 ### Pasos
 
@@ -92,7 +94,19 @@ npm run test:watch    # modo watch
 npm run test:coverage # con reporte de cobertura
 ```
 
-Los tests no requieren un proyecto de Supabase real: `tests/setupEnv.ts` provee variables de entorno de prueba, y los middlewares de autenticación/RBAC se testean con mocks (`jest.mock`) de `jsonwebtoken` y de la configuración de entorno.
+Los tests no requieren un proyecto de Supabase real ni una cuenta SMTP real: `tests/setupEnv.ts` provee variables de entorno de prueba, y `config/supabase.ts`/`config/mailer.ts` se mockean con `jest.mock` en los tests que los necesitan.
+
+## Endpoints
+
+Todos los endpoints de negocio (todo excepto `GET /health`) requieren `Authorization: Bearer <jwt de Supabase Auth>` y rol `admin` (RF-01: solo el administrador puede crear y editar matrículas).
+
+| Método  | Ruta           | Descripción                                                                                                                                            |
+| ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`   | `/health`      | Estado del servidor (sin auth)                                                                                                                         |
+| `POST`  | `/cohorts`     | Crea una cohorte                                                                                                                                       |
+| `GET`   | `/cohorts`     | Lista las cohortes                                                                                                                                     |
+| `PATCH` | `/cohorts/:id` | Edita una cohorte                                                                                                                                      |
+| `POST`  | `/enrollments` | Matricula un estudiante: crea su cuenta (Supabase Auth + `users`), lo inscribe en una cohorte, y le envía el correo de bienvenida con sus credenciales |
 
 ## Frontend
 
