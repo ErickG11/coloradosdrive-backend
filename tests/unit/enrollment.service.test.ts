@@ -4,7 +4,7 @@ import type { Database } from '../../src/config/database.types';
 import type { CreateEnrollmentInput } from '../../src/models/enrollment.model';
 import type { EmailService } from '../../src/services/email.service';
 import { EnrollmentService } from '../../src/services/enrollment.service';
-import { createSupabaseFromMock, type ChainResult } from './helpers/supabaseMock';
+import { createSupabaseFromMock, type ChainResult } from '../helpers/supabaseMock';
 
 const validInput: CreateEnrollmentInput = {
   cedula: '1234567890',
