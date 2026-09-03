@@ -22,7 +22,6 @@ export const env = {
   SUPABASE_URL: requireEnv('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
-  SUPABASE_JWT_SECRET: requireEnv('SUPABASE_JWT_SECRET'),
   SMTP_HOST: requireEnv('SMTP_HOST'),
   SMTP_PORT: Number(requireEnv('SMTP_PORT')),
   SMTP_USER: requireEnv('SMTP_USER'),
