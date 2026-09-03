@@ -10,7 +10,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const cohortRouter = Router();
 
 // RF-01: solo el administrador puede crear y editar matrículas/cohortes.
-cohortRouter.use(authenticate, requireRole('admin'));
+cohortRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 const createValidators = [
   body('courseId').isUUID().withMessage('courseId debe ser un UUID válido'),

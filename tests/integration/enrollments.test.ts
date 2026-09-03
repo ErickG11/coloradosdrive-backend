@@ -12,16 +12,23 @@ jest.mock('../../src/config/mailer', () => ({
   mailer: { sendMail: jest.fn().mockResolvedValue({}) },
 }));
 
+jest.mock('../../src/config/jwks', () => ({
+  verifySupabaseJwt: jest.fn(),
+}));
+
+import { verifySupabaseJwt } from '../../src/config/jwks';
+
 import { createApp } from '../../src/app';
 import { mailer } from '../../src/config/mailer';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
-import { signToken } from '../helpers/tokens';
+import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
 const mockedCreateUser = supabaseAdmin.auth.admin.createUser as jest.Mock;
 const mockedDeleteUser = supabaseAdmin.auth.admin.deleteUser as jest.Mock;
 const mockedSendMail = mailer.sendMail as jest.Mock;
+const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
 const validEnrollmentBody = {
   cedula: '1234567890',
@@ -51,6 +58,7 @@ describe('POST /enrollments', () => {
     mockedCreateUser.mockReset();
     mockedDeleteUser.mockReset().mockResolvedValue({ data: {}, error: null });
     mockedSendMail.mockReset().mockResolvedValue({});
+    mockedVerifySupabaseJwt.mockReset();
   });
 
   describe('protección por autenticación y rol (RNF-03)', () => {
@@ -62,7 +70,7 @@ describe('POST /enrollments', () => {
     it('con rol no-admin responde 403', async () => {
       const res = await request(app)
         .post('/enrollments')
-        .set('Authorization', `Bearer ${signToken('instructor')}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`)
         .send(validEnrollmentBody);
       expect(res.status).toBe(403);
       expect(mockedFrom).not.toHaveBeenCalled();
@@ -72,7 +80,7 @@ describe('POST /enrollments', () => {
   it('responde 400 si la cédula no tiene 10 dígitos', async () => {
     const res = await request(app)
       .post('/enrollments')
-      .set('Authorization', `Bearer ${signToken('admin')}`)
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
       .send({ ...validEnrollmentBody, cedula: '123' });
 
     expect(res.status).toBe(400);
@@ -86,7 +94,7 @@ describe('POST /enrollments', () => {
 
     const res = await request(app)
       .post('/enrollments')
-      .set('Authorization', `Bearer ${signToken('admin')}`)
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
       .send(validEnrollmentBody);
 
     expect(res.status).toBe(409);
@@ -125,7 +133,7 @@ describe('POST /enrollments', () => {
 
     const res = await request(app)
       .post('/enrollments')
-      .set('Authorization', `Bearer ${signToken('admin')}`)
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
       .send(validEnrollmentBody);
 
     expect(res.status).toBe(201);
