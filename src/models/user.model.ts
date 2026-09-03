@@ -11,3 +11,14 @@ export interface AuthenticatedUser {
   email: string | undefined;
   role: Role;
 }
+
+// Perfil completo de la tabla `users`, reflejando migrations/001_init.sql.
+export interface UserProfile {
+  id: string;
+  cedula: string;
+  nombreCompleto: string;
+  telefono: string | null;
+  rol: Role;
+  createdAt: string;
+  updatedAt: string;
+}
