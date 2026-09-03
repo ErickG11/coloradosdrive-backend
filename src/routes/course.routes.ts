@@ -7,6 +7,6 @@ import { asyncHandler } from '../utils/asyncHandler';
 
 export const courseRouter = Router();
 
-courseRouter.use(authenticate, requireRole('admin'));
+courseRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 courseRouter.get('/', asyncHandler(listCourses));

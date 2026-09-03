@@ -10,7 +10,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const enrollmentRouter = Router();
 
 // RF-01: solo el administrador puede crear matrículas.
-enrollmentRouter.use(authenticate, requireRole('admin'));
+enrollmentRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 const enrollValidators = [
   body('cedula')
