@@ -5,18 +5,26 @@ jest.mock('../../src/config/supabase', () => ({
   supabaseAnon: {},
 }));
 
+jest.mock('../../src/config/jwks', () => ({
+  verifySupabaseJwt: jest.fn(),
+}));
+
+import { verifySupabaseJwt } from '../../src/config/jwks';
+
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
-import { signToken } from '../helpers/tokens';
+import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
+const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
 describe('GET /courses', () => {
   const app = createApp();
 
   beforeEach(() => {
     mockedFrom.mockReset();
+    mockedVerifySupabaseJwt.mockReset();
   });
 
   describe('protección por autenticación y rol (RNF-03)', () => {
@@ -28,7 +36,7 @@ describe('GET /courses', () => {
     it('con rol no-admin responde 403', async () => {
       const res = await request(app)
         .get('/courses')
-        .set('Authorization', `Bearer ${signToken('instructor')}`);
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
       expect(res.status).toBe(403);
       expect(mockedFrom).not.toHaveBeenCalled();
     });
@@ -57,7 +65,7 @@ describe('GET /courses', () => {
 
     const res = await request(app)
       .get('/courses')
-      .set('Authorization', `Bearer ${signToken('admin')}`);
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual([

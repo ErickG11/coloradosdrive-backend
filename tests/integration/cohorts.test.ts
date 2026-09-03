@@ -5,12 +5,19 @@ jest.mock('../../src/config/supabase', () => ({
   supabaseAnon: {},
 }));
 
+jest.mock('../../src/config/jwks', () => ({
+  verifySupabaseJwt: jest.fn(),
+}));
+
+import { verifySupabaseJwt } from '../../src/config/jwks';
+
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
-import { signToken } from '../helpers/tokens';
+import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
+const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
 const validCohortBody = {
   courseId: '11111111-1111-4111-8111-111111111111',
@@ -26,6 +33,7 @@ describe('cohorts endpoints', () => {
 
   beforeEach(() => {
     mockedFrom.mockReset();
+    mockedVerifySupabaseJwt.mockReset();
   });
 
   describe('protección por autenticación y rol (RNF-03)', () => {
@@ -37,7 +45,7 @@ describe('cohorts endpoints', () => {
     it('POST /cohorts con rol no-admin responde 403', async () => {
       const res = await request(app)
         .post('/cohorts')
-        .set('Authorization', `Bearer ${signToken('estudiante')}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send(validCohortBody);
       expect(res.status).toBe(403);
     });
@@ -45,14 +53,14 @@ describe('cohorts endpoints', () => {
     it('GET /cohorts con rol no-admin responde 403', async () => {
       const res = await request(app)
         .get('/cohorts')
-        .set('Authorization', `Bearer ${signToken('instructor')}`);
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
       expect(res.status).toBe(403);
     });
 
     it('PATCH /cohorts/:id con rol no-admin responde 403', async () => {
       const res = await request(app)
         .patch('/cohorts/11111111-1111-4111-8111-111111111111')
-        .set('Authorization', `Bearer ${signToken('estudiante')}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send({ nombre: 'Nuevo nombre' });
       expect(res.status).toBe(403);
     });
@@ -62,7 +70,7 @@ describe('cohorts endpoints', () => {
     it('responde 400 si falta un campo requerido', async () => {
       const res = await request(app)
         .post('/cohorts')
-        .set('Authorization', `Bearer ${signToken('admin')}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
         .send({ ...validCohortBody, courseId: undefined });
 
       expect(res.status).toBe(400);
@@ -74,7 +82,7 @@ describe('cohorts endpoints', () => {
 
       const res = await request(app)
         .post('/cohorts')
-        .set('Authorization', `Bearer ${signToken('admin')}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
         .send(validCohortBody);
 
       expect(res.status).toBe(404);
@@ -99,7 +107,7 @@ describe('cohorts endpoints', () => {
 
       const res = await request(app)
         .post('/cohorts')
-        .set('Authorization', `Bearer ${signToken('admin')}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
         .send(validCohortBody);
 
       expect(res.status).toBe(201);
@@ -117,7 +125,7 @@ describe('cohorts endpoints', () => {
 
       const res = await request(app)
         .get('/cohorts')
-        .set('Authorization', `Bearer ${signToken('admin')}`);
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
