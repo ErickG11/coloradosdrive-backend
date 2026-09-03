@@ -23,6 +23,11 @@ export const env = {
   SUPABASE_SERVICE_ROLE_KEY: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
   SUPABASE_JWT_SECRET: requireEnv('SUPABASE_JWT_SECRET'),
+  SMTP_HOST: requireEnv('SMTP_HOST'),
+  SMTP_PORT: Number(requireEnv('SMTP_PORT')),
+  SMTP_USER: requireEnv('SMTP_USER'),
+  SMTP_PASSWORD: requireEnv('SMTP_PASSWORD'),
+  SMTP_FROM: requireEnv('SMTP_FROM'),
 };
 
 export const isProduction = env.NODE_ENV === 'production';
