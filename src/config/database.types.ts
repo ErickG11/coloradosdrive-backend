@@ -10,6 +10,9 @@
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
 export type CourseType = 'A' | 'B';
 export type EnrollmentStatus = 'activo' | 'finalizado' | 'retirado';
+export type ExamType = 'practica' | 'definitivo';
+export type QuestionType = 'opcion_multiple' | 'texto_abierto';
+export type AttemptStatus = 'en_progreso' | 'completado';
 
 export interface Database {
   public: {
@@ -114,6 +117,143 @@ export interface Database {
         };
         Update: Partial<{
           status: EnrollmentStatus;
+        }>;
+        Relationships: [];
+      };
+      exams: {
+        Row: {
+          id: string;
+          course_id: string;
+          title: string;
+          type: ExamType;
+          time_limit_minutes: number;
+          passing_score_percent: string;
+          is_published: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          course_id: string;
+          title: string;
+          type: ExamType;
+          time_limit_minutes: number;
+          passing_score_percent: number;
+          is_published?: boolean;
+        };
+        Update: Partial<{
+          title: string;
+          time_limit_minutes: number;
+          passing_score_percent: number;
+          is_published: boolean;
+        }>;
+        Relationships: [];
+      };
+      questions: {
+        Row: {
+          id: string;
+          exam_id: string;
+          type: QuestionType;
+          prompt: string;
+          order_index: number;
+          points: string;
+          correct_answer_text: string | null;
+          synonyms: string[] | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          exam_id: string;
+          type: QuestionType;
+          prompt: string;
+          order_index: number;
+          points: number;
+          correct_answer_text?: string | null;
+          synonyms?: string[] | null;
+        };
+        Update: Partial<{
+          type: QuestionType;
+          prompt: string;
+          order_index: number;
+          points: number;
+          correct_answer_text: string | null;
+          synonyms: string[] | null;
+        }>;
+        Relationships: [];
+      };
+      question_options: {
+        Row: {
+          id: string;
+          question_id: string;
+          option_text: string;
+          is_correct: boolean;
+          order_index: number;
+        };
+        Insert: {
+          id?: string;
+          question_id: string;
+          option_text: string;
+          is_correct?: boolean;
+          order_index: number;
+        };
+        Update: Partial<{
+          option_text: string;
+          is_correct: boolean;
+          order_index: number;
+        }>;
+        Relationships: [];
+      };
+      exam_attempts: {
+        Row: {
+          id: string;
+          exam_id: string;
+          student_id: string;
+          status: AttemptStatus;
+          score_percent: string | null;
+          passed: boolean | null;
+          started_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          exam_id: string;
+          student_id: string;
+          status?: AttemptStatus;
+          score_percent?: number | null;
+          passed?: boolean | null;
+          started_at?: string;
+          completed_at?: string | null;
+        };
+        Update: Partial<{
+          status: AttemptStatus;
+          score_percent: number | null;
+          passed: boolean | null;
+          completed_at: string | null;
+        }>;
+        Relationships: [];
+      };
+      attempt_answers: {
+        Row: {
+          id: string;
+          attempt_id: string;
+          question_id: string;
+          selected_option_id: string | null;
+          text_answer: string | null;
+          is_correct: boolean;
+          similarity_score: string | null;
+        };
+        Insert: {
+          id?: string;
+          attempt_id: string;
+          question_id: string;
+          selected_option_id?: string | null;
+          text_answer?: string | null;
+          is_correct: boolean;
+          similarity_score?: number | null;
+        };
+        Update: Partial<{
+          is_correct: boolean;
+          similarity_score: number | null;
         }>;
         Relationships: [];
       };
