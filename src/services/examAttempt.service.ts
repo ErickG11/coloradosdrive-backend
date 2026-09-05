@@ -5,6 +5,7 @@ import type { ExamForStudent, QuestionOption } from '../models/exam.model';
 import type {
   AttemptAnswerDetail,
   AttemptResult,
+  ExamAttempt,
   StartAttemptResult,
   SubmitAttemptInput,
 } from '../models/examAttempt.model';
@@ -60,6 +61,19 @@ function toExamForStudent(examRow: ExamRow, questions: QuestionWithOptions[]): E
           .sort((a, b) => a.order_index - b.order_index)
           .map(toQuestionOptionForStudent),
       })),
+  };
+}
+
+function toExamAttempt(row: ExamAttemptRow): ExamAttempt {
+  return {
+    id: row.id,
+    examId: row.exam_id,
+    studentId: row.student_id,
+    status: row.status,
+    scorePercent: row.score_percent !== null ? Number(row.score_percent) : null,
+    passed: row.passed,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
   };
 }
 
@@ -124,6 +138,27 @@ export class ExamAttemptService {
 
     const questions = await this.getQuestionsWithOptions(examRow.id);
     return this.gradeAndComplete(attemptRow, examRow, questions, input);
+  }
+
+  // RF-02, salida "actualización del historial académico del estudiante":
+  // sus propios intentos sobre este examen (para saber si ya aprobó, si
+  // agotó su intento único de un definitivo, o para revisar un resultado
+  // pasado). Nunca recibe un studentId del cliente - siempre el de su
+  // propio JWT (ver examAttempt.controller.ts), así que no hay forma de
+  // consultar los intentos de otro estudiante a través de este endpoint.
+  async listMyAttempts(examId: string, studentId: string): Promise<ExamAttempt[]> {
+    const { data, error } = await this.supabase
+      .from('exam_attempts')
+      .select()
+      .eq('exam_id', examId)
+      .eq('student_id', studentId)
+      .order('started_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return data.map(toExamAttempt);
   }
 
   private async buildStartAttemptResult(
