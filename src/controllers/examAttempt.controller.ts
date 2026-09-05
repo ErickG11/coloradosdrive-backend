@@ -1,15 +1,17 @@
 import type { Request, Response } from 'express';
 
+import { mailer } from '../config/mailer';
 import { supabaseAdmin } from '../config/supabase';
 import type {
   AttemptResult,
   StartAttemptResult,
   SubmitAttemptInput,
 } from '../models/examAttempt.model';
+import { EmailService } from '../services/email.service';
 import { ExamAttemptService } from '../services/examAttempt.service';
 import { AppError } from '../utils/AppError';
 
-const examAttemptService = new ExamAttemptService(supabaseAdmin);
+const examAttemptService = new ExamAttemptService(supabaseAdmin, new EmailService(mailer));
 
 function requireStudentId(req: Request): string {
   if (!req.user) {

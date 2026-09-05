@@ -8,6 +8,14 @@ export interface WelcomeEmailParams {
   temporaryPassword: string;
 }
 
+export interface ExamResultEmailParams {
+  to: string;
+  nombreCompleto: string;
+  examTitle: string;
+  scorePercent: number;
+  passed: boolean;
+}
+
 // Recibe el transporter por constructor (no usa el singleton de
 // config/mailer.ts directamente) para poder mockearlo en tests.
 export class EmailService {
@@ -38,6 +46,34 @@ export class EmailService {
         '<p>Tu cuenta en ColoradosDrive fue creada. Estos son tus datos de acceso:</p>',
         `<p>Correo: ${to}<br>Contraseña temporal: <strong>${temporaryPassword}</strong></p>`,
         '<p>Te recomendamos cambiar tu contraseña después de iniciar sesión por primera vez.</p>',
+      ].join('\n'),
+    });
+  }
+
+  // RF-02: solo se llama para examenes definitivos (decision explicita,
+  // los de practica no notifican por correo) - la condicion vive en
+  // ExamAttemptService, este metodo solo compone y envia el mensaje.
+  async sendExamResultEmail(params: ExamResultEmailParams): Promise<void> {
+    const { to, nombreCompleto, examTitle, scorePercent, passed } = params;
+    const resultado = passed ? 'Aprobado' : 'Reprobado';
+    const scoreFormatted = scorePercent.toFixed(2);
+
+    await this.transporter.sendMail({
+      from: env.SMTP_FROM,
+      to,
+      subject: `Resultado de tu examen: ${examTitle}`,
+      text: [
+        `Hola ${nombreCompleto},`,
+        '',
+        `Ya tenemos el resultado de tu examen "${examTitle}":`,
+        '',
+        `Puntaje: ${scoreFormatted}%`,
+        `Resultado: ${resultado}`,
+      ].join('\n'),
+      html: [
+        `<p>Hola ${nombreCompleto},</p>`,
+        `<p>Ya tenemos el resultado de tu examen "${examTitle}":</p>`,
+        `<p>Puntaje: <strong>${scoreFormatted}%</strong><br>Resultado: <strong>${resultado}</strong></p>`,
       ].join('\n'),
     });
   }
