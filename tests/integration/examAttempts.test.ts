@@ -46,6 +46,40 @@ const openTextQuestionRow = {
   created_at: '2026-01-01T00:00:00Z',
 };
 
+// Segunda pregunta, de opción múltiple, para los tests que necesitan
+// verificar que is_correct nunca se filtra al estudiante (una pregunta
+// de texto_abierto no tiene opciones, así que sola no sirve para probar
+// esa regla: el arreglo de opciones estaría vacío y la aserción no
+// revisaría nada).
+const multipleChoiceQuestionRow = {
+  id: 'question-2',
+  exam_id: examId,
+  type: 'opcion_multiple',
+  prompt: '¿Qué significa una señal triangular roja?',
+  order_index: 2,
+  points: '10.00',
+  correct_answer_text: null,
+  synonyms: null,
+  created_at: '2026-01-01T00:00:00Z',
+};
+
+const optionRows = [
+  {
+    id: 'option-1',
+    question_id: 'question-2',
+    option_text: 'Precaución',
+    is_correct: true,
+    order_index: 1,
+  },
+  {
+    id: 'option-2',
+    question_id: 'question-2',
+    option_text: 'Prohibido',
+    is_correct: false,
+    order_index: 2,
+  },
+];
+
 function buildExamRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: examId,
@@ -57,6 +91,20 @@ function buildExamRow(overrides: Partial<Record<string, unknown>> = {}) {
     is_published: true,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function buildAttemptRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'attempt-1',
+    exam_id: examId,
+    student_id: studentId,
+    status: 'en_progreso',
+    score_percent: null,
+    passed: null,
+    started_at: '2026-01-01T00:00:00Z',
+    completed_at: null,
     ...overrides,
   };
 }
@@ -115,35 +163,8 @@ describe('exam attempts endpoints', () => {
       expect(res.status).toBe(403);
     });
 
-    it('responde 409 si el examen es definitivo y ya se usó el único intento', async () => {
-      mockedFrom
-        .mockReturnValueOnce(
-          createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
-        ) // exam
-        .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
-        .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
-        .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
-        .mockReturnValueOnce(createChain({ data: null, error: null, count: 1 })); // ya existe 1 intento
-
-      const res = await request(app)
-        .post(`/exams/${examId}/attempts`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(409);
-      expect(res.body.message).toMatch(/único intento permitido/);
-    });
-
     it('inicia el intento y devuelve el examen SIN respuesta correcta, sinónimos ni is_correct', async () => {
-      const attemptRow = {
-        id: 'attempt-1',
-        exam_id: examId,
-        student_id: studentId,
-        status: 'en_progreso',
-        score_percent: null,
-        passed: null,
-        started_at: '2026-01-01T00:00:00Z',
-        completed_at: null,
-      };
+      const attemptRow = buildAttemptRow();
 
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
@@ -151,8 +172,10 @@ describe('exam attempts endpoints', () => {
         .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
         .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
         .mockReturnValueOnce(createChain({ data: attemptRow, error: null })) // insertAttempt
-        .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
-        .mockReturnValueOnce(createChain({ data: [], error: null })); // question_options
+        .mockReturnValueOnce(
+          createChain({ data: [openTextQuestionRow, multipleChoiceQuestionRow], error: null }),
+        ) // questions
+        .mockReturnValueOnce(createChain({ data: optionRows, error: null })); // question_options
 
       const res = await request(app)
         .post(`/exams/${examId}/attempts`)
@@ -160,32 +183,116 @@ describe('exam attempts endpoints', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.attemptId).toBe('attempt-1');
-      expect(res.body.exam.questions).toHaveLength(1);
+      expect(res.body.exam.questions).toHaveLength(2);
 
-      const question = res.body.exam.questions[0] as Record<string, unknown>;
-      expect(question).not.toHaveProperty('correctAnswerText');
-      expect(question).not.toHaveProperty('synonyms');
-      const options = question.options as Record<string, unknown>[];
+      const questions = res.body.exam.questions as Record<string, unknown>[];
+      for (const question of questions) {
+        expect(question).not.toHaveProperty('correctAnswerText');
+        expect(question).not.toHaveProperty('synonyms');
+      }
+
+      const mcQuestion = questions.find((q) => q.id === 'question-2');
+      const options = mcQuestion?.options as Record<string, unknown>[];
+      // Regla explícita: nunca se debe filtrar is_correct. Esta pregunta SÍ
+      // trae opciones reales, así que la aserción de abajo revisa algo de
+      // verdad (a diferencia de usar solo una pregunta de texto_abierto,
+      // que no tiene opciones y dejaría este chequeo vacío).
+      expect(options).toHaveLength(2);
       for (const option of options) {
         expect(option).not.toHaveProperty('isCorrect');
       }
+    });
+
+    describe('reglas de número de intentos', () => {
+      it('practica: permite iniciar un intento aunque ya exista uno previo APROBADO', async () => {
+        // El intento previo ya está completado (no en_progreso), así que
+        // getInProgressAttempt no lo encuentra. Para práctica, el servicio
+        // nunca consulta el historial de intentos completados (a
+        // diferencia de definitivo) - por eso la secuencia de mocks NO
+        // incluye ninguna consulta de conteo/historial: si el código
+        // agregara ese chequeo para práctica por error, esta prueba
+        // fallaría porque sobraría un mock sin usar o faltaría uno.
+        mockedFrom
+          .mockReturnValueOnce(
+            createChain({ data: buildExamRow({ type: 'practica' }), error: null }),
+          ) // exam
+          .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
+          .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
+          .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
+          .mockReturnValueOnce(
+            createChain({ data: buildAttemptRow({ id: 'attempt-2' }), error: null }),
+          ) // insertAttempt
+          .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
+          .mockReturnValueOnce(createChain({ data: [], error: null })); // question_options
+
+        const res = await request(app)
+          .post(`/exams/${examId}/attempts`)
+          .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+        expect(res.status).toBe(201);
+        expect(res.body.attemptId).toBe('attempt-2');
+        expect(mockedFrom).toHaveBeenCalledTimes(7);
+      });
+
+      it('definitivo: permite el primer intento cuando no hay ninguno previo', async () => {
+        mockedFrom
+          .mockReturnValueOnce(
+            createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
+          ) // exam
+          .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
+          .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
+          .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
+          .mockReturnValueOnce(createChain({ data: null, error: null, count: 0 })) // hasAnyAttempt: ninguno todavía
+          .mockReturnValueOnce(createChain({ data: buildAttemptRow(), error: null })) // insertAttempt
+          .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
+          .mockReturnValueOnce(createChain({ data: [], error: null })); // question_options
+
+        const res = await request(app)
+          .post(`/exams/${examId}/attempts`)
+          .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+        expect(res.status).toBe(201);
+      });
+
+      it('definitivo: responde 409 si ya existe un intento previo, sin importar si fue aprobado o no', async () => {
+        // hasAnyAttempt solo cuenta filas - el bloqueo de definitivo NO
+        // depende de si `passed` es true o false, así que un solo intento
+        // previo (aprobado o reprobado) ya bloquea cualquier intento
+        // nuevo. Por eso no hace falta un test separado por cada valor de
+        // `passed`: el código no lo consulta para esta regla.
+        mockedFrom
+          .mockReturnValueOnce(
+            createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
+          ) // exam
+          .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
+          .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
+          .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
+          .mockReturnValueOnce(createChain({ data: null, error: null, count: 1 })); // ya existe 1 intento
+
+        const res = await request(app)
+          .post(`/exams/${examId}/attempts`)
+          .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+        expect(res.status).toBe(409);
+        expect(res.body.message).toMatch(/único intento permitido/);
+        // No se llega a insertar un intento nuevo.
+        expect(mockedFrom).toHaveBeenCalledTimes(5);
+      });
     });
   });
 
   describe('POST /attempts/:id/submit (estudiante)', () => {
     const attemptId = '33333333-3333-4333-8333-333333333333';
 
-    it('responde 409 y no acepta respuestas si el tiempo límite ya expiró', async () => {
-      const expiredAttemptRow = {
+    it('auto-finaliza en 0%/reprobado y no acepta respuestas si el tiempo límite ya expiró', async () => {
+      const expiredAttemptRow = buildAttemptRow({
         id: attemptId,
-        exam_id: examId,
-        student_id: studentId,
-        status: 'en_progreso',
-        score_percent: null,
-        passed: null,
         started_at: '2020-01-01T00:00:00Z',
-        completed_at: null,
-      };
+      });
+      const updateChain = createChain({
+        data: { ...expiredAttemptRow, status: 'completado', score_percent: 0, passed: false },
+        error: null,
+      });
 
       mockedFrom
         .mockReturnValueOnce(createChain({ data: expiredAttemptRow, error: null })) // getOwnAttemptOrThrow
@@ -193,12 +300,7 @@ describe('exam attempts endpoints', () => {
         .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
         .mockReturnValueOnce(createChain({ data: [], error: null })) // question_options
         .mockReturnValueOnce(createChain({ data: [], error: null })) // attempt_answers ya guardadas (ninguna)
-        .mockReturnValueOnce(
-          createChain({
-            data: { ...expiredAttemptRow, status: 'completado', score_percent: 0, passed: false },
-            error: null,
-          }),
-        ); // completeAttempt (update)
+        .mockReturnValueOnce(updateChain); // completeAttempt (update)
 
       const res = await request(app)
         .post(`/attempts/${attemptId}/submit`)
@@ -208,19 +310,61 @@ describe('exam attempts endpoints', () => {
       expect(res.status).toBe(409);
       expect(res.body.message).toMatch(/tiempo límite/);
       expect(mockedSendMail).not.toHaveBeenCalled();
+      // La respuesta enviada en el cuerpo de la petición (aunque hubiera
+      // sido correcta) nunca llega a calificarse: se autofinaliza con 0
+      // puntos, no con lo que el estudiante mandó tarde.
+      expect(updateChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'completado', score_percent: 0, passed: false }),
+      );
+      // Nunca se inserta en attempt_answers una respuesta tardía: solo se
+      // consultan (select) las que ya existían antes de expirar.
+      expect(mockedFrom).toHaveBeenCalledTimes(6);
+    });
+
+    it('una pregunta no respondida cuenta como incorrecta (envío normal, no expirado)', async () => {
+      const inProgressAttemptRow = buildAttemptRow({
+        id: attemptId,
+        started_at: new Date().toISOString(),
+      });
+      const completedAttemptRow = {
+        ...inProgressAttemptRow,
+        status: 'completado',
+        score_percent: 50,
+        passed: false,
+        completed_at: new Date().toISOString(),
+      };
+
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: inProgressAttemptRow, error: null })) // getOwnAttemptOrThrow
+        .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
+        .mockReturnValueOnce(
+          createChain({ data: [openTextQuestionRow, multipleChoiceQuestionRow], error: null }),
+        ) // questions
+        .mockReturnValueOnce(createChain({ data: optionRows, error: null })) // question_options
+        .mockReturnValueOnce(createChain({ data: null, error: null })) // insert attempt_answers
+        .mockReturnValueOnce(createChain({ data: completedAttemptRow, error: null })); // completeAttempt
+
+      const res = await request(app)
+        .post(`/attempts/${attemptId}/submit`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
+        // Solo responde question-1; question-2 (opción múltiple) no aparece.
+        .send({ answers: [{ questionId: 'question-1', textAnswer: 'cinturon de seguridad' }] });
+
+      expect(res.status).toBe(200);
+      const answers = res.body.answers as Record<string, unknown>[];
+      const unanswered = answers.find((a) => a.questionId === 'question-2');
+      expect(unanswered).toMatchObject({ isCorrect: false, pointsEarned: 0, pointsPossible: 10 });
+      const answered = answers.find((a) => a.questionId === 'question-1');
+      expect(answered).toMatchObject({ isCorrect: true, pointsEarned: 10 });
+      // 10 de 20 puntos totales = 50%.
+      expect(res.body.scorePercent).toBe(50);
     });
 
     it('califica de inmediato, marca aprobado, y notifica por correo (examen definitivo)', async () => {
-      const inProgressAttemptRow = {
+      const inProgressAttemptRow = buildAttemptRow({
         id: attemptId,
-        exam_id: examId,
-        student_id: studentId,
-        status: 'en_progreso',
-        score_percent: null,
-        passed: null,
         started_at: new Date().toISOString(),
-        completed_at: null,
-      };
+      });
       const definitivoExam = buildExamRow({ type: 'definitivo' });
       const completedAttemptRow = {
         ...inProgressAttemptRow,
@@ -256,16 +400,10 @@ describe('exam attempts endpoints', () => {
     });
 
     it('no envía correo cuando el examen es de práctica', async () => {
-      const inProgressAttemptRow = {
+      const inProgressAttemptRow = buildAttemptRow({
         id: attemptId,
-        exam_id: examId,
-        student_id: studentId,
-        status: 'en_progreso',
-        score_percent: null,
-        passed: null,
         started_at: new Date().toISOString(),
-        completed_at: null,
-      };
+      });
       const completedAttemptRow = {
         ...inProgressAttemptRow,
         status: 'completado',
