@@ -6,13 +6,16 @@
 export interface ChainResult {
   data: unknown;
   error: unknown;
+  count?: number | null;
 }
 
 export interface SupabaseChainMock {
   select: jest.Mock;
   insert: jest.Mock;
   update: jest.Mock;
+  delete: jest.Mock;
   eq: jest.Mock;
+  in: jest.Mock;
   order: jest.Mock;
   single: jest.Mock;
   maybeSingle: jest.Mock;
@@ -28,7 +31,9 @@ export function createChain(result: ChainResult): SupabaseChainMock {
   chain.select = jest.fn().mockReturnValue(chain);
   chain.insert = jest.fn().mockReturnValue(chain);
   chain.update = jest.fn().mockReturnValue(chain);
+  chain.delete = jest.fn().mockReturnValue(chain);
   chain.eq = jest.fn().mockReturnValue(chain);
+  chain.in = jest.fn().mockReturnValue(chain);
   chain.order = jest.fn().mockReturnValue(chain);
   chain.single = jest.fn().mockResolvedValue(result);
   chain.maybeSingle = jest.fn().mockResolvedValue(result);
