@@ -87,6 +87,9 @@ export type UpdateExamInput = Partial<{
   isPublished: boolean;
 }>;
 
-export type UpdateQuestionInput = Partial<Omit<CreateQuestionInput, 'options'>> & {
+// El tipo de pregunta (opcion_multiple/texto_abierto) no se puede cambiar
+// despues de creada: cambiarlo dejaria correct_answer_text/options en un
+// estado inconsistente con questions_open_text_has_answer (migracion 004).
+export type UpdateQuestionInput = Partial<Omit<CreateQuestionInput, 'options' | 'type'>> & {
   options?: CreateQuestionOptionInput[];
 };
