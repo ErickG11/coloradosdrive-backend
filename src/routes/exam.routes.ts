@@ -11,6 +11,7 @@ import {
   updateExam,
   updateQuestion,
 } from '../controllers/exam.controller';
+import { startAttempt } from '../controllers/examAttempt.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
@@ -246,6 +247,15 @@ examRouter.post(
   addQuestionValidators,
   validate,
   asyncHandler(addQuestion),
+);
+
+// RF-02: solo el estudiante puede iniciar un intento (nunca el admin).
+examRouter.post(
+  '/:id/attempts',
+  requireRole('estudiante'),
+  idParamValidator,
+  validate,
+  asyncHandler(startAttempt),
 );
 
 questionRouter.patch(

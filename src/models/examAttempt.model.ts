@@ -1,3 +1,5 @@
+import type { ExamForStudent } from './exam.model';
+
 export const ATTEMPT_STATUSES = ['en_progreso', 'completado'] as const;
 export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 
@@ -52,4 +54,15 @@ export interface AttemptResult {
   startedAt: string;
   completedAt: string;
   answers: AttemptAnswerDetail[];
+}
+
+// Respuesta de POST /exams/:id/attempts: el examen sanitizado (sin
+// respuesta correcta) que el estudiante debe responder, mas los metadatos
+// del intento para que el frontend pueda mostrar un cronometro - el
+// backend sigue siendo la autoridad real del tiempo (ver docs/adr/005).
+export interface StartAttemptResult {
+  attemptId: string;
+  status: AttemptStatus;
+  startedAt: string;
+  exam: ExamForStudent;
 }
