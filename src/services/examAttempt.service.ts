@@ -9,6 +9,7 @@ import type {
   SubmitAttemptInput,
 } from '../models/examAttempt.model';
 import { AppError } from '../utils/AppError';
+import type { EmailService } from './email.service';
 import { gradeOpenTextAnswer } from './grading.service';
 
 type ExamRow = Database['public']['Tables']['exams']['Row'];
@@ -70,11 +71,13 @@ function isAttemptExpired(startedAt: string, timeLimitMinutes: number): boolean 
   return Date.now() > deadline;
 }
 
-// Recibe el cliente de Supabase por constructor para poder mockearlo en
-// tests (mismo patron que CohortService/EnrollmentService). El envio de
-// correo de resultado se agrega en un commit aparte (extiende esta clase).
+// Recibe el cliente de Supabase y el EmailService por constructor para
+// poder mockearlos en tests (mismo patron que EnrollmentService).
 export class ExamAttemptService {
-  constructor(private readonly supabase: SupabaseClient<Database>) {}
+  constructor(
+    private readonly supabase: SupabaseClient<Database>,
+    private readonly emailService: EmailService,
+  ) {}
 
   async startAttempt(examId: string, studentId: string): Promise<StartAttemptResult> {
     const examRow = await this.getPublishedExamOrThrow(examId);
@@ -290,7 +293,51 @@ export class ExamAttemptService {
       throw error;
     }
 
+    if (examRow.type === 'definitivo') {
+      await this.sendResultEmailSafely(data, examRow);
+    }
+
     return data;
+  }
+
+  // RF-02: notificacion de resultado, solo para examenes definitivos
+  // (decision explicita - los de practica no notifican). Best-effort: si
+  // falla el correo, no revierte la calificacion ya guardada (mismo
+  // patron que EnrollmentService con el correo de bienvenida).
+  private async sendResultEmailSafely(attemptRow: ExamAttemptRow, examRow: ExamRow): Promise<void> {
+    try {
+      const { data: userRow, error: userError } = await this.supabase
+        .from('users')
+        .select('nombre_completo')
+        .eq('id', attemptRow.student_id)
+        .maybeSingle();
+      if (userError) {
+        throw userError;
+      }
+      if (!userRow) {
+        throw new Error('Estudiante no encontrado');
+      }
+
+      const { data: authUser, error: authError } = await this.supabase.auth.admin.getUserById(
+        attemptRow.student_id,
+      );
+      if (authError) {
+        throw authError;
+      }
+      if (!authUser.user.email) {
+        throw new Error('Correo del estudiante no disponible');
+      }
+
+      await this.emailService.sendExamResultEmail({
+        to: authUser.user.email,
+        nombreCompleto: userRow.nombre_completo,
+        examTitle: examRow.title,
+        scorePercent: Number(attemptRow.score_percent),
+        passed: attemptRow.passed ?? false,
+      });
+    } catch (err) {
+      console.error('No se pudo enviar el correo de resultado de examen:', err);
+    }
   }
 
   private async getPublishedExamOrThrow(examId: string): Promise<ExamRow> {
