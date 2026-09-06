@@ -11,7 +11,7 @@ import {
   updateExam,
   updateQuestion,
 } from '../controllers/exam.controller';
-import { startAttempt } from '../controllers/examAttempt.controller';
+import { listMyAttempts, startAttempt } from '../controllers/examAttempt.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
@@ -256,6 +256,18 @@ examRouter.post(
   idParamValidator,
   validate,
   asyncHandler(startAttempt),
+);
+
+// RF-02, "actualización del historial académico del estudiante": sus
+// propios intentos sobre este examen. Nunca un studentId por parámetro -
+// siempre el del JWT (ver requireStudentId en el controller) - así que un
+// estudiante no puede consultar los intentos de otro por esta ruta.
+examRouter.get(
+  '/:id/attempts/me',
+  requireRole('estudiante'),
+  idParamValidator,
+  validate,
+  asyncHandler(listMyAttempts),
 );
 
 questionRouter.patch(
