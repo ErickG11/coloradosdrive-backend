@@ -13,6 +13,7 @@ type EnrollmentRow = Database['public']['Tables']['enrollments']['Row'];
 type UserRow = Database['public']['Tables']['users']['Row'];
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+const AUTH_EMAIL_EXISTS = 'email_exists';
 
 function toEnrollment(row: EnrollmentRow): Enrollment {
   return {
@@ -73,6 +74,9 @@ export class EnrollmentService {
     });
 
     if (authError) {
+      if (authError.code === AUTH_EMAIL_EXISTS) {
+        throw new AppError('Ya existe un usuario registrado con este correo electrónico', 409);
+      }
       throw authError;
     }
 
