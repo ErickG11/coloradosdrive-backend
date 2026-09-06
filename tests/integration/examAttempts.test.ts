@@ -463,12 +463,43 @@ describe('exam attempts endpoints', () => {
         passed: false,
         completed_at: '2026-01-03T00:00:00Z',
       });
+      const examQuestions = [
+        { id: 'question-1', prompt: openTextQuestionRow.prompt, order_index: 1 },
+        { id: 'question-2', prompt: multipleChoiceQuestionRow.prompt, order_index: 2 },
+      ];
+      const answersForA = [
+        {
+          id: 'answer-a1',
+          attempt_id: 'attempt-a',
+          question_id: 'question-1',
+          selected_option_id: null,
+          text_answer: 'cinturon de seguridad',
+          is_correct: true,
+          similarity_score: 1,
+        },
+      ];
+      const answersForB = [
+        {
+          id: 'answer-b1',
+          attempt_id: 'attempt-b',
+          question_id: 'question-2',
+          selected_option_id: 'option-2',
+          text_answer: null,
+          is_correct: false,
+          similarity_score: null,
+        },
+      ];
 
       // Estudiante A: la ruta nunca recibe un studentId por parámetro, solo
       // usa el `sub` del JWT verificado - por eso se mockea directamente en
       // vez de usar mockAuthToken (que siempre resuelve el mismo sub fijo).
       const chainA = createChain({ data: [attemptRowA], error: null });
-      mockedFrom.mockReturnValueOnce(chainA);
+      const chainAQuestions = createChain({ data: examQuestions, error: null });
+      const chainAAnswers = createChain({ data: answersForA, error: null });
+      mockedFrom
+        .mockReturnValueOnce(chainA)
+        .mockReturnValueOnce(chainAQuestions)
+        .mockReturnValueOnce(chainAAnswers);
       mockedVerifySupabaseJwt.mockResolvedValueOnce({
         sub: 'student-a',
         email: 'a@example.com',
@@ -482,14 +513,33 @@ describe('exam attempts endpoints', () => {
       expect(resA.status).toBe(200);
       expect(resA.body).toHaveLength(1);
       expect(resA.body[0]).toMatchObject({ id: 'attempt-a', studentId: 'student-a' });
+      // Detalle por pregunta: la respuesta propia y si acertó, nunca la
+      // respuesta correcta.
+      expect(resA.body[0].answers).toEqual([
+        {
+          questionId: 'question-1',
+          prompt: openTextQuestionRow.prompt,
+          selectedOptionId: null,
+          textAnswer: 'cinturon de seguridad',
+          isCorrect: true,
+        },
+      ]);
       // La query siempre se filtra por el sub del propio token, nunca por
       // algo que pudiera venir del cliente.
       expect(chainA.eq).toHaveBeenCalledWith('student_id', 'student-a');
+      // El detalle de respuestas solo se pide para los intentos propios de
+      // A (attempt-a) - nunca incluye el id del intento de B.
+      expect(chainAAnswers.in).toHaveBeenCalledWith('attempt_id', ['attempt-a']);
 
       // Estudiante B, en una petición completamente separada: debe ver
-      // únicamente su propio intento, no el de A.
+      // únicamente su propio intento y su propio detalle, no el de A.
       const chainB = createChain({ data: [attemptRowB], error: null });
-      mockedFrom.mockReturnValueOnce(chainB);
+      const chainBQuestions = createChain({ data: examQuestions, error: null });
+      const chainBAnswers = createChain({ data: answersForB, error: null });
+      mockedFrom
+        .mockReturnValueOnce(chainB)
+        .mockReturnValueOnce(chainBQuestions)
+        .mockReturnValueOnce(chainBAnswers);
       mockedVerifySupabaseJwt.mockResolvedValueOnce({
         sub: 'student-b',
         email: 'b@example.com',
@@ -503,7 +553,17 @@ describe('exam attempts endpoints', () => {
       expect(resB.status).toBe(200);
       expect(resB.body).toHaveLength(1);
       expect(resB.body[0]).toMatchObject({ id: 'attempt-b', studentId: 'student-b' });
+      expect(resB.body[0].answers).toEqual([
+        {
+          questionId: 'question-2',
+          prompt: multipleChoiceQuestionRow.prompt,
+          selectedOptionId: 'option-2',
+          textAnswer: null,
+          isCorrect: false,
+        },
+      ]);
       expect(chainB.eq).toHaveBeenCalledWith('student_id', 'student-b');
+      expect(chainBAnswers.in).toHaveBeenCalledWith('attempt_id', ['attempt-b']);
     });
   });
 });
