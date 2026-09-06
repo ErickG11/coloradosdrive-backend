@@ -4,6 +4,7 @@ import type { Database } from '../config/database.types';
 import type { ExamForStudent, QuestionOption } from '../models/exam.model';
 import type {
   AttemptAnswerDetail,
+  AttemptOwnAnswer,
   AttemptResult,
   ExamAttempt,
   StartAttemptResult,
@@ -158,7 +159,78 @@ export class ExamAttemptService {
       throw error;
     }
 
-    return data.map(toExamAttempt);
+    const completedAttemptIds = data
+      .filter((row) => row.status === 'completado')
+      .map((row) => row.id);
+    const answersByAttemptId = await this.getOwnAnswersByAttemptId(examId, completedAttemptIds);
+
+    return data.map((row) => ({
+      ...toExamAttempt(row),
+      answers: row.status === 'completado' ? (answersByAttemptId.get(row.id) ?? []) : undefined,
+    }));
+  }
+
+  // Detalle por pregunta de cada intento ya completado (nunca la
+  // respuesta correcta, ver AttemptOwnAnswer). Una sola consulta de
+  // preguntas del examen (compartidas por todos los intentos, ya que
+  // examId es el mismo) + una sola consulta de attempt_answers con
+  // attempt_id IN (...), en vez de una por intento - evita N+1 aunque el
+  // estudiante tenga muchos intentos de práctica acumulados.
+  private async getOwnAnswersByAttemptId(
+    examId: string,
+    attemptIds: string[],
+  ): Promise<Map<string, AttemptOwnAnswer[]>> {
+    const result = new Map<string, AttemptOwnAnswer[]>();
+    if (attemptIds.length === 0) {
+      return result;
+    }
+
+    const { data: questionRows, error: questionsError } = await this.supabase
+      .from('questions')
+      .select('id, prompt, order_index')
+      .eq('exam_id', examId);
+    if (questionsError) {
+      throw questionsError;
+    }
+    const questionMetaById = new Map(
+      questionRows.map((q) => [q.id, { prompt: q.prompt, orderIndex: q.order_index }]),
+    );
+
+    const { data: answerRows, error: answersError } = await this.supabase
+      .from('attempt_answers')
+      .select()
+      .in('attempt_id', attemptIds);
+    if (answersError) {
+      throw answersError;
+    }
+
+    for (const row of answerRows) {
+      const meta = questionMetaById.get(row.question_id);
+      const detail: AttemptOwnAnswer = {
+        questionId: row.question_id,
+        prompt: meta?.prompt ?? '',
+        selectedOptionId: row.selected_option_id,
+        textAnswer: row.text_answer,
+        isCorrect: row.is_correct,
+      };
+
+      const existing = result.get(row.attempt_id);
+      if (existing) {
+        existing.push(detail);
+      } else {
+        result.set(row.attempt_id, [detail]);
+      }
+    }
+
+    for (const details of result.values()) {
+      details.sort(
+        (a, b) =>
+          (questionMetaById.get(a.questionId)?.orderIndex ?? 0) -
+          (questionMetaById.get(b.questionId)?.orderIndex ?? 0),
+      );
+    }
+
+    return result;
   }
 
   private async buildStartAttemptResult(

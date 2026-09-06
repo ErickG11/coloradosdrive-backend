@@ -3,6 +3,20 @@ import type { ExamForStudent } from './exam.model';
 export const ATTEMPT_STATUSES = ['en_progreso', 'completado'] as const;
 export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 
+// RF-02, salida "detalle de respuestas" del historial (GET
+// /exams/:id/attempts/me): la pregunta, la respuesta propia del
+// estudiante, y si acertó. Nunca la respuesta correcta ni la opción/
+// texto correcto - mismo criterio que AttemptAnswerDetail (la respuesta
+// inmediata de submit), por consistencia y para no exponer el banco de
+// respuestas de examenes reutilizables (ver docs/adr/006).
+export interface AttemptOwnAnswer {
+  questionId: string;
+  prompt: string;
+  selectedOptionId: string | null;
+  textAnswer: string | null;
+  isCorrect: boolean;
+}
+
 export interface ExamAttempt {
   id: string;
   examId: string;
@@ -12,6 +26,9 @@ export interface ExamAttempt {
   passed: boolean | null;
   startedAt: string;
   completedAt: string | null;
+  // Presente solo cuando status = 'completado'; un intento en_progreso
+  // todavia no tiene nada que mostrar.
+  answers?: AttemptOwnAnswer[];
 }
 
 export interface AttemptAnswer {
