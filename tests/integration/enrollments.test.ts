@@ -102,6 +102,31 @@ describe('POST /enrollments', () => {
     expect(mockedCreateUser).not.toHaveBeenCalled();
   });
 
+  it('responde 409 (no 500) si el correo ya existe en Supabase Auth', async () => {
+    mockedFrom
+      .mockReturnValueOnce(createChain({ data: cohortRow, error: null })) // getCohortOrThrow
+      .mockReturnValueOnce(createChain({ data: null, error: null })); // assertCedulaAvailable: libre
+    mockedCreateUser.mockResolvedValue({
+      data: { user: null },
+      error: {
+        name: 'AuthApiError',
+        message: 'A user with this email address has already been registered',
+        code: 'email_exists',
+        status: 422,
+      },
+    });
+
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(validEnrollmentBody);
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('Ya existe un usuario registrado con este correo electrónico');
+    // No se creó ningún usuario que haya que compensar/borrar.
+    expect(mockedDeleteUser).not.toHaveBeenCalled();
+  });
+
   it('matricula al estudiante, envía el correo, y responde 201', async () => {
     const studentId = 'new-student-id';
     const userRow = {
