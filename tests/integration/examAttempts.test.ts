@@ -430,4 +430,80 @@ describe('exam attempts endpoints', () => {
       expect(mockedSendMail).not.toHaveBeenCalled();
     });
   });
+
+  describe('GET /exams/:id/attempts/me (estudiante)', () => {
+    it('responde 401 sin token', async () => {
+      const res = await request(app).get(`/exams/${examId}/attempts/me`);
+      expect(res.status).toBe(401);
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('responde 403 con rol admin', async () => {
+      const res = await request(app)
+        .get(`/exams/${examId}/attempts/me`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+      expect(res.status).toBe(403);
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('devuelve los intentos del estudiante autenticado, nunca los de otro estudiante', async () => {
+      const attemptRowA = buildAttemptRow({
+        id: 'attempt-a',
+        student_id: 'student-a',
+        status: 'completado',
+        score_percent: 90,
+        passed: true,
+        completed_at: '2026-01-02T00:00:00Z',
+      });
+      const attemptRowB = buildAttemptRow({
+        id: 'attempt-b',
+        student_id: 'student-b',
+        status: 'completado',
+        score_percent: 40,
+        passed: false,
+        completed_at: '2026-01-03T00:00:00Z',
+      });
+
+      // Estudiante A: la ruta nunca recibe un studentId por parámetro, solo
+      // usa el `sub` del JWT verificado - por eso se mockea directamente en
+      // vez de usar mockAuthToken (que siempre resuelve el mismo sub fijo).
+      const chainA = createChain({ data: [attemptRowA], error: null });
+      mockedFrom.mockReturnValueOnce(chainA);
+      mockedVerifySupabaseJwt.mockResolvedValueOnce({
+        sub: 'student-a',
+        email: 'a@example.com',
+        app_metadata: { role: 'estudiante' },
+      });
+
+      const resA = await request(app)
+        .get(`/exams/${examId}/attempts/me`)
+        .set('Authorization', 'Bearer token-a');
+
+      expect(resA.status).toBe(200);
+      expect(resA.body).toHaveLength(1);
+      expect(resA.body[0]).toMatchObject({ id: 'attempt-a', studentId: 'student-a' });
+      // La query siempre se filtra por el sub del propio token, nunca por
+      // algo que pudiera venir del cliente.
+      expect(chainA.eq).toHaveBeenCalledWith('student_id', 'student-a');
+
+      // Estudiante B, en una petición completamente separada: debe ver
+      // únicamente su propio intento, no el de A.
+      const chainB = createChain({ data: [attemptRowB], error: null });
+      mockedFrom.mockReturnValueOnce(chainB);
+      mockedVerifySupabaseJwt.mockResolvedValueOnce({
+        sub: 'student-b',
+        email: 'b@example.com',
+        app_metadata: { role: 'estudiante' },
+      });
+
+      const resB = await request(app)
+        .get(`/exams/${examId}/attempts/me`)
+        .set('Authorization', 'Bearer token-b');
+
+      expect(resB.status).toBe(200);
+      expect(resB.body).toHaveLength(1);
+      expect(resB.body[0]).toMatchObject({ id: 'attempt-b', studentId: 'student-b' });
+      expect(chainB.eq).toHaveBeenCalledWith('student_id', 'student-b');
+    });
+  });
 });

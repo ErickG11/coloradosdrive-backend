@@ -4,6 +4,7 @@ import { mailer } from '../config/mailer';
 import { supabaseAdmin } from '../config/supabase';
 import type {
   AttemptResult,
+  ExamAttempt,
   StartAttemptResult,
   SubmitAttemptInput,
 } from '../models/examAttempt.model';
@@ -24,6 +25,12 @@ export async function startAttempt(req: Request, res: Response<StartAttemptResul
   const studentId = requireStudentId(req);
   const result = await examAttemptService.startAttempt(req.params.id, studentId);
   res.status(201).json(result);
+}
+
+export async function listMyAttempts(req: Request, res: Response<ExamAttempt[]>): Promise<void> {
+  const studentId = requireStudentId(req);
+  const result = await examAttemptService.listMyAttempts(req.params.id, studentId);
+  res.status(200).json(result);
 }
 
 export async function submitAttempt(req: Request, res: Response<AttemptResult>): Promise<void> {
