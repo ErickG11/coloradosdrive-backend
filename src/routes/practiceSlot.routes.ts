@@ -7,6 +7,11 @@ import {
   listPracticeSlots,
   updatePracticeSlot,
 } from '../controllers/practiceSlot.controller';
+import {
+  cancelPracticeSlot,
+  claimPracticeSlot,
+  confirmPracticeSlot,
+} from '../controllers/practiceSlotAction.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
@@ -83,4 +88,28 @@ practiceSlotRouter.delete(
   idParamValidator,
   validate,
   asyncHandler(deletePracticeSlot),
+);
+
+// RF-03: solo el estudiante reclama/confirma/cancela, y solo sobre sus
+// propias franjas (verificado en PracticeSlotActionService).
+practiceSlotRouter.post(
+  '/:id/claim',
+  requireRole('estudiante'),
+  idParamValidator,
+  validate,
+  asyncHandler(claimPracticeSlot),
+);
+practiceSlotRouter.post(
+  '/:id/confirm',
+  requireRole('estudiante'),
+  idParamValidator,
+  validate,
+  asyncHandler(confirmPracticeSlot),
+);
+practiceSlotRouter.post(
+  '/:id/cancel',
+  requireRole('estudiante'),
+  idParamValidator,
+  validate,
+  asyncHandler(cancelPracticeSlot),
 );
