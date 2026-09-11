@@ -16,6 +16,25 @@ export interface ExamResultEmailParams {
   passed: boolean;
 }
 
+export interface PracticeConfirmationRequestEmailParams {
+  to: string;
+  nombreCompleto: string;
+  scheduledAt: string;
+}
+
+export interface NoPracticeEmailParams {
+  to: string;
+  nombreCompleto: string;
+  scheduledAt: string;
+}
+
+function formatScheduledAt(scheduledAt: string): string {
+  return new Date(scheduledAt).toLocaleString('es-EC', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
 // Recibe el transporter por constructor (no usa el singleton de
 // config/mailer.ts directamente) para poder mockearlo en tests.
 export class EmailService {
@@ -74,6 +93,60 @@ export class EmailService {
         `<p>Hola ${nombreCompleto},</p>`,
         `<p>Ya tenemos el resultado de tu examen "${examTitle}":</p>`,
         `<p>Puntaje: <strong>${scoreFormatted}%</strong><br>Resultado: <strong>${resultado}</strong></p>`,
+      ].join('\n'),
+    });
+  }
+
+  // RF-03: notificación 20 minutos antes de la práctica, pidiendo
+  // confirmación de asistencia. Se envía junto con la notificación en
+  // plataforma (Realtime) - ver practiceSlotScheduler.service.ts.
+  async sendPracticeConfirmationRequestEmail(
+    params: PracticeConfirmationRequestEmailParams,
+  ): Promise<void> {
+    const { to, nombreCompleto, scheduledAt } = params;
+    const fecha = formatScheduledAt(scheduledAt);
+
+    await this.transporter.sendMail({
+      from: env.SMTP_FROM,
+      to,
+      subject: 'Confirma tu práctica de conducción',
+      text: [
+        `Hola ${nombreCompleto},`,
+        '',
+        `Tu práctica de conducción es a las ${fecha}, en 20 minutos.`,
+        'Confirma tu asistencia en la plataforma antes de que cierre la ventana de confirmación (5 minutos antes de la práctica).',
+        '',
+        'Si no puedes asistir, cancela desde la plataforma para liberar el cupo y que otro estudiante de tu cohorte pueda tomarlo.',
+      ].join('\n'),
+      html: [
+        `<p>Hola ${nombreCompleto},</p>`,
+        `<p>Tu práctica de conducción es a las <strong>${fecha}</strong>, en 20 minutos.</p>`,
+        '<p>Confirma tu asistencia en la plataforma antes de que cierre la ventana de confirmación (5 minutos antes de la práctica).</p>',
+        '<p>Si no puedes asistir, cancela desde la plataforma para liberar el cupo y que otro estudiante de tu cohorte pueda tomarlo.</p>',
+      ].join('\n'),
+    });
+  }
+
+  // RF-03: se envía al instructor únicamente si ningún estudiante
+  // confirmó asistencia en la ventana definida (ver practiceSlot.service.ts).
+  async sendNoPracticeEmail(params: NoPracticeEmailParams): Promise<void> {
+    const { to, nombreCompleto, scheduledAt } = params;
+    const fecha = formatScheduledAt(scheduledAt);
+
+    await this.transporter.sendMail({
+      from: env.SMTP_FROM,
+      to,
+      subject: 'No habrá práctica en tu próximo bloque',
+      text: [
+        `Hola ${nombreCompleto},`,
+        '',
+        `Ningún estudiante confirmó asistencia para la práctica programada a las ${fecha}.`,
+        'Ese bloque queda sin práctica.',
+      ].join('\n'),
+      html: [
+        `<p>Hola ${nombreCompleto},</p>`,
+        `<p>Ningún estudiante confirmó asistencia para la práctica programada a las <strong>${fecha}</strong>.</p>`,
+        '<p>Ese bloque queda sin práctica.</p>',
       ].join('\n'),
     });
   }
