@@ -17,6 +17,9 @@ export interface SupabaseChainMock {
   eq: jest.Mock;
   in: jest.Mock;
   or: jest.Mock;
+  is: jest.Mock;
+  lte: jest.Mock;
+  gt: jest.Mock;
   order: jest.Mock;
   single: jest.Mock;
   maybeSingle: jest.Mock;
@@ -36,6 +39,9 @@ export function createChain(result: ChainResult): SupabaseChainMock {
   chain.eq = jest.fn().mockReturnValue(chain);
   chain.in = jest.fn().mockReturnValue(chain);
   chain.or = jest.fn().mockReturnValue(chain);
+  chain.is = jest.fn().mockReturnValue(chain);
+  chain.lte = jest.fn().mockReturnValue(chain);
+  chain.gt = jest.fn().mockReturnValue(chain);
   chain.order = jest.fn().mockReturnValue(chain);
   chain.single = jest.fn().mockResolvedValue(result);
   chain.maybeSingle = jest.fn().mockResolvedValue(result);
