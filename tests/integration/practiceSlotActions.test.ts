@@ -231,7 +231,7 @@ describe('practice-slots student actions', () => {
   });
 
   describe('POST /practice-slots/:id/cancel (estudiante)', () => {
-    it('responde 409 si el turno no se puede cancelar (ej. ya liberado)', async () => {
+    it('responde 409 si el turno ya está liberado', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({
           data: buildSlotRow({ student_id: studentId, status: 'liberado' }),
@@ -246,8 +246,25 @@ describe('practice-slots student actions', () => {
       expect(res.status).toBe(409);
     });
 
-    it('cancela, libera el cupo, y notifica a la cohorte por Realtime', async () => {
+    it('responde 409 si el turno ya está completado (no se puede cancelar una práctica que ya pasó)', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({
+          data: buildSlotRow({ student_id: studentId, status: 'completado' }),
+          error: null,
+        }),
+      );
+
+      const res = await request(app)
+        .post(`/practice-slots/${slotId}/cancel`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.message).toBe('Este turno no se puede cancelar');
+    });
+
+    it('cancela, libera el cupo, resetea el ciclo de confirmación, y notifica a la cohorte por Realtime', async () => {
       const httpSend = mockHttpSendSuccess();
+      const updateChain = createChain({ data: buildSlotRow({ status: 'liberado' }), error: null });
       mockedFrom
         .mockReturnValueOnce(
           createChain({
@@ -255,9 +272,7 @@ describe('practice-slots student actions', () => {
             error: null,
           }),
         )
-        .mockReturnValueOnce(
-          createChain({ data: buildSlotRow({ status: 'liberado' }), error: null }),
-        );
+        .mockReturnValueOnce(updateChain);
 
       const res = await request(app)
         .post(`/practice-slots/${slotId}/cancel`)
@@ -266,8 +281,53 @@ describe('practice-slots student actions', () => {
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('liberado');
       expect(res.body.studentId).toBeNull();
+      // No basta con lo que el mock "devuelve" (buildSlotRow ya trae estos
+      // campos en null por defecto, eso no prueba nada por sí solo) - se
+      // verifica el payload real que el servicio le manda a .update(): sin
+      // este reset, un segundo estudiante que reclame esta misma franja
+      // después heredaría confirmation_notified_at ya puesto y nunca
+      // recibiría su propia notificación de 20 minutos (ver docs/adr/007).
+      expect(updateChain.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          student_id: null,
+          status: 'liberado',
+          confirmed_at: null,
+          confirmation_notified_at: null,
+        }),
+      );
       expect(mockedChannel).toHaveBeenCalledWith(`cohort-${cohortId}-practice-slots`);
       expect(httpSend).toHaveBeenCalledWith('slot-released', expect.objectContaining({ slotId }));
+    });
+
+    it('un segundo estudiante que reclama la franja liberada no hereda campos del ciclo anterior', async () => {
+      // Complementa el test anterior: cancelSlot() ya prueba que RESETEA
+      // los campos; este prueba que claimSlot() no los TOCA (no los
+      // sobrescribe con algo distinto de null) - juntos confirman que la
+      // franja llega "limpia" al segundo estudiante.
+      const releasedSlotId = '44444444-4444-4444-8444-444444444444';
+      const claimChain = createChain({
+        data: buildSlotRow({ id: releasedSlotId, student_id: studentId, status: 'asignado' }),
+        error: null,
+      });
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({ id: releasedSlotId, status: 'liberado' }),
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
+        .mockReturnValueOnce(claimChain);
+
+      const res = await request(app)
+        .post(`/practice-slots/${releasedSlotId}/claim`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+      expect(res.status).toBe(200);
+      expect(claimChain.update).toHaveBeenCalledWith({
+        student_id: 'test-user-id',
+        status: 'asignado',
+      });
     });
 
     it('si la notificación Realtime falla, la cancelación igual se confirma (best-effort)', async () => {
@@ -360,6 +420,70 @@ describe('practice-slots student actions', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.attended).toBe(true);
+    });
+
+    it('dos instructores distintos: cada uno solo puede marcar asistencia en sus propias franjas, nunca en las del otro', async () => {
+      // mockAuthToken siempre resuelve el mismo sub fijo; para probar dos
+      // identidades autenticadas reales (no solo un instructor_id ajeno
+      // en la fila) se mockea el JWT verificado directamente, mismo
+      // patrón que tests/integration/examAttempts.test.ts.
+      const instructorA = 'instructor-a';
+      const instructorB = 'instructor-b';
+      const slotOfA = '55555555-5555-4555-8555-555555555555';
+      const slotOfB = '66666666-6666-4666-8666-666666666666';
+
+      // Instructor A marca asistencia en SU propia franja: funciona.
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({ id: slotOfA, instructor_id: instructorA, status: 'completado' }),
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({
+              id: slotOfA,
+              instructor_id: instructorA,
+              status: 'completado',
+              attended: true,
+            }),
+            error: null,
+          }),
+        );
+      mockedVerifySupabaseJwt.mockResolvedValueOnce({
+        sub: instructorA,
+        email: 'a@example.com',
+        app_metadata: { role: 'instructor' },
+      });
+
+      const resOwn = await request(app)
+        .patch(`/practice-slots/${slotOfA}/attendance`)
+        .set('Authorization', 'Bearer token-a')
+        .send({ attended: true });
+
+      expect(resOwn.status).toBe(200);
+
+      // El mismo instructor A intenta marcar asistencia en una franja de
+      // B: 404, nunca ve ni toca la franja ajena.
+      mockedFrom.mockReturnValueOnce(
+        createChain({
+          data: buildSlotRow({ id: slotOfB, instructor_id: instructorB, status: 'completado' }),
+          error: null,
+        }),
+      );
+      mockedVerifySupabaseJwt.mockResolvedValueOnce({
+        sub: instructorA,
+        email: 'a@example.com',
+        app_metadata: { role: 'instructor' },
+      });
+
+      const resOther = await request(app)
+        .patch(`/practice-slots/${slotOfB}/attendance`)
+        .set('Authorization', 'Bearer token-a')
+        .send({ attended: true });
+
+      expect(resOther.status).toBe(404);
     });
   });
 });

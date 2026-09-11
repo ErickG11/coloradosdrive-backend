@@ -60,6 +60,19 @@ function buildHarness(fromResults: ChainResult[]) {
 // sola consulta cada una, sin filas que procesar).
 const EMPTY: ChainResult = { data: [], error: null };
 
+// El mock no filtra de verdad (devuelve lo que se le configure sin
+// importar los argumentos de .eq/.lte/.gt) - la única forma real de
+// probar que el cálculo del umbral de tiempo es correcto (no solo que
+// "se llamó con algún string") es capturar el valor exacto que el
+// servicio construyó y compararlo contra la hora real, con una
+// tolerancia chica por el tiempo que tarda en correr el test.
+function expectIsoCloseTo(value: unknown, offsetMs: number, toleranceMs = 2000): void {
+  expect(typeof value).toBe('string');
+  const actual = new Date(value as string).getTime();
+  const expected = Date.now() + offsetMs;
+  expect(Math.abs(actual - expected)).toBeLessThan(toleranceMs);
+}
+
 describe('PracticeSlotSchedulerService', () => {
   describe('notificación de confirmación (20 minutos antes)', () => {
     it('notifica al estudiante por correo y Realtime, y marca confirmation_notified_at', async () => {
@@ -116,29 +129,61 @@ describe('PracticeSlotSchedulerService', () => {
       expect(selectChain.lte).toHaveBeenCalledWith('scheduled_at', expect.any(String));
       expect(selectChain.gt).toHaveBeenCalledWith('scheduled_at', expect.any(String));
     });
-  });
 
-  describe('cierre de franjas sin práctica (5 minutos antes)', () => {
-    it('cambia a sin_practica, limpia student_id, y notifica al instructor', async () => {
-      const closedRow = buildSlotRow({ status: 'sin_practica', student_id: null });
-      const { service, emailService, realtimeService } = buildHarness([
-        EMPTY, // notifyUpcomingConfirmations: nada que recordar
-        { data: [buildSlotRow({ status: 'asignado' })], error: null }, // select a cerrar
-        { data: closedRow, error: null }, // update -> sin_practica
-        { data: { nombre_completo: 'Instructor Uno' }, error: null }, // users (instructor)
-        EMPTY, // completeFinishedSlots
-      ]);
+    it('el umbral es exactamente 20 minutos antes de ahora, no otro valor', async () => {
+      const { service, from } = buildHarness([EMPTY, EMPTY, EMPTY]);
 
       await service.runOnce();
 
-      expect(emailService.sendNoPracticeEmail).toHaveBeenCalledWith(
-        expect.objectContaining({ to: 'user@example.com', nombreCompleto: 'Instructor Uno' }),
-      );
-      expect(realtimeService.broadcast).toHaveBeenCalledWith(
-        `user-${instructorId}-practice-slots`,
-        'no-practice',
-        expect.any(Object),
-      );
+      const selectChain = from.mock.results[0].value as ReturnType<typeof createChain>;
+      const lteArg = (selectChain.lte.mock.calls[0] as unknown[])[1];
+      const gtArg = (selectChain.gt.mock.calls[0] as unknown[])[1];
+      // scheduled_at <= ahora + 20 min (el límite superior de la ventana)
+      expectIsoCloseTo(lteArg, 20 * 60_000);
+      // scheduled_at > ahora (todavía no empezó)
+      expectIsoCloseTo(gtArg, 0);
+    });
+  });
+
+  describe('cierre de franjas sin práctica (5 minutos antes)', () => {
+    // Los 3 estados que la tarea original (y el ADR 007) tratan igual:
+    // "nadie va a estar ahí". El test anterior solo probaba 'asignado' -
+    // 'disponible' y 'liberado' solo aparecían en el test de argumentos
+    // de la consulta (que no prueba el comportamiento, solo que la
+    // consulta los incluye).
+    it.each(['disponible', 'liberado', 'asignado'] as const)(
+      'cambia %s a sin_practica, limpia student_id, y notifica al instructor',
+      async (status) => {
+        const closedRow = buildSlotRow({ status: 'sin_practica', student_id: null });
+        const { service, emailService, realtimeService } = buildHarness([
+          EMPTY, // notifyUpcomingConfirmations: nada que recordar
+          { data: [buildSlotRow({ status })], error: null }, // select a cerrar
+          { data: closedRow, error: null }, // update -> sin_practica
+          { data: { nombre_completo: 'Instructor Uno' }, error: null }, // users (instructor)
+          EMPTY, // completeFinishedSlots
+        ]);
+
+        await service.runOnce();
+
+        expect(emailService.sendNoPracticeEmail).toHaveBeenCalledWith(
+          expect.objectContaining({ to: 'user@example.com', nombreCompleto: 'Instructor Uno' }),
+        );
+        expect(realtimeService.broadcast).toHaveBeenCalledWith(
+          `user-${instructorId}-practice-slots`,
+          'no-practice',
+          expect.any(Object),
+        );
+      },
+    );
+
+    it('el umbral es exactamente 5 minutos antes de ahora, no otro valor', async () => {
+      const { service, from } = buildHarness([EMPTY, EMPTY, EMPTY]);
+
+      await service.runOnce();
+
+      const closeChain = from.mock.results[1].value as ReturnType<typeof createChain>;
+      const lteArg = (closeChain.lte.mock.calls[0] as unknown[])[1];
+      expectIsoCloseTo(lteArg, 5 * 60_000);
     });
 
     it('consulta con los 3 estados que cuentan como "nadie va a estar ahí"', async () => {
