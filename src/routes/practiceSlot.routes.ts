@@ -11,6 +11,7 @@ import {
   cancelPracticeSlot,
   claimPracticeSlot,
   confirmPracticeSlot,
+  markPracticeSlotAttendance,
 } from '../controllers/practiceSlotAction.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
@@ -112,4 +113,14 @@ practiceSlotRouter.post(
   idParamValidator,
   validate,
   asyncHandler(cancelPracticeSlot),
+);
+
+// RF-03 (alcance agregado en Sprint 4, ver docs/adr/007): el instructor
+// marca asistencia solo sobre sus propias franjas ya completadas.
+practiceSlotRouter.patch(
+  '/:id/attendance',
+  requireRole('instructor'),
+  [idParamValidator, body('attended').isBoolean().withMessage('attended debe ser boolean')],
+  validate,
+  asyncHandler(markPracticeSlotAttendance),
 );

@@ -131,6 +131,42 @@ export class PracticeSlotActionService {
     return released;
   }
 
+  // Alcance agregado en Sprint 4 (ver docs/adr/007): el instructor
+  // registra asistencia sobre sus propias franjas, solo una vez que ya
+  // pasaron (status = 'completado' - lo marca el scheduler, próximo
+  // commit). El documento de tesis todavía dice "solo lectura" para el
+  // instructor; esto es un cambio de alcance consciente.
+  async markAttendance(
+    slotId: string,
+    instructorId: string,
+    attended: boolean,
+  ): Promise<PracticeSlot> {
+    const row = await this.getSlotRowOrThrow(slotId);
+    if (row.instructor_id !== instructorId) {
+      throw new AppError('Franja no encontrada', 404);
+    }
+    if (row.status !== 'completado') {
+      throw new AppError('Solo se puede marcar asistencia sobre una franja completada', 409);
+    }
+
+    const { data, error } = await this.supabase
+      .from('practice_slots')
+      .update({ attended })
+      .eq('id', slotId)
+      .eq('status', 'completado')
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new AppError('Solo se puede marcar asistencia sobre una franja completada', 409);
+    }
+
+    return toPracticeSlot(data);
+  }
+
   // Best-effort, mismo patrón que EnrollmentService con el correo de
   // bienvenida: si falla la notificación, no se revierte la liberación
   // del cupo (ya es válida), solo se loguea.
