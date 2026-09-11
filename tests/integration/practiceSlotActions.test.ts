@@ -293,4 +293,73 @@ describe('practice-slots student actions', () => {
       expect(res.status).toBe(200);
     });
   });
+
+  describe('PATCH /practice-slots/:id/attendance (instructor)', () => {
+    it('con rol estudiante responde 403', async () => {
+      const res = await request(app)
+        .patch(`/practice-slots/${slotId}/attendance`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
+        .send({ attended: true });
+      expect(res.status).toBe(403);
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('responde 404 si la franja no es del instructor autenticado', async () => {
+      // mockAuthToken resuelve sub: 'test-user-id'; la franja pertenece a
+      // otro instructor (instructorId).
+      mockedFrom.mockReturnValueOnce(
+        createChain({
+          data: buildSlotRow({ instructor_id: instructorId, status: 'completado' }),
+          error: null,
+        }),
+      );
+
+      const res = await request(app)
+        .patch(`/practice-slots/${slotId}/attendance`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`)
+        .send({ attended: true });
+
+      expect(res.status).toBe(404);
+    });
+
+    it('responde 409 si la franja todavía no está completado', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({
+          data: buildSlotRow({ instructor_id: studentId, status: 'confirmado' }),
+          error: null,
+        }),
+      );
+
+      const res = await request(app)
+        .patch(`/practice-slots/${slotId}/attendance`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`)
+        .send({ attended: true });
+
+      expect(res.status).toBe(409);
+    });
+
+    it('marca asistencia sobre una franja completada propia y responde 200', async () => {
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({ instructor_id: studentId, status: 'completado' }),
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({ instructor_id: studentId, status: 'completado', attended: true }),
+            error: null,
+          }),
+        );
+
+      const res = await request(app)
+        .patch(`/practice-slots/${slotId}/attendance`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`)
+        .send({ attended: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body.attended).toBe(true);
+    });
+  });
 });
