@@ -7,6 +7,7 @@ import { attemptRouter } from './examAttempt.routes';
 import { examRouter, questionRouter } from './exam.routes';
 import { healthRouter } from './health.routes';
 import { practiceSlotRouter } from './practiceSlot.routes';
+import { userRouter } from './user.routes';
 
 export const apiRouter = Router();
 
@@ -18,3 +19,4 @@ apiRouter.use('/exams', examRouter);
 apiRouter.use('/questions', questionRouter);
 apiRouter.use('/attempts', attemptRouter);
 apiRouter.use('/practice-slots', practiceSlotRouter);
+apiRouter.use('/users', userRouter);
