@@ -13,6 +13,8 @@ export type EnrollmentStatus = 'activo' | 'finalizado' | 'retirado';
 export type ExamType = 'practica' | 'definitivo';
 export type QuestionType = 'opcion_multiple' | 'texto_abierto';
 export type AttemptStatus = 'en_progreso' | 'completado';
+export type PracticeSlotStatus =
+  'disponible' | 'asignado' | 'confirmado' | 'liberado' | 'sin_practica' | 'completado';
 
 export interface Database {
   public: {
@@ -254,6 +256,48 @@ export interface Database {
         Update: Partial<{
           is_correct: boolean;
           similarity_score: number | null;
+        }>;
+        Relationships: [];
+      };
+      practice_slots: {
+        Row: {
+          id: string;
+          cohort_id: string;
+          instructor_id: string;
+          student_id: string | null;
+          scheduled_at: string;
+          duration_minutes: number;
+          status: PracticeSlotStatus;
+          confirmation_notified_at: string | null;
+          release_notified_at: string | null;
+          confirmed_at: string | null;
+          attended: boolean | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          cohort_id: string;
+          instructor_id: string;
+          student_id?: string | null;
+          scheduled_at: string;
+          duration_minutes: number;
+          status?: PracticeSlotStatus;
+          confirmation_notified_at?: string | null;
+          release_notified_at?: string | null;
+          confirmed_at?: string | null;
+          attended?: boolean | null;
+        };
+        Update: Partial<{
+          instructor_id: string;
+          scheduled_at: string;
+          duration_minutes: number;
+          student_id: string | null;
+          status: PracticeSlotStatus;
+          confirmation_notified_at: string | null;
+          release_notified_at: string | null;
+          confirmed_at: string | null;
+          attended: boolean | null;
         }>;
         Relationships: [];
       };
