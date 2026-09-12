@@ -151,13 +151,25 @@ describe('PracticeSlotSchedulerService', () => {
     // 'disponible' y 'liberado' solo aparecían en el test de argumentos
     // de la consulta (que no prueba el comportamiento, solo que la
     // consulta los incluye).
-    it.each(['disponible', 'liberado', 'asignado'] as const)(
-      'cambia %s a sin_practica, limpia student_id, y notifica al instructor',
-      async (status) => {
+    // disponible/liberado nunca tienen student_id (restricción de la BD);
+    // solo 'asignado' llega con un estudiante que pierde su cupo por no
+    // haber confirmado a tiempo - es el único de los 3 casos donde
+    // también hay que notificarlo a él, no solo al instructor.
+    it.each([
+      { status: 'disponible', hadStudent: false },
+      { status: 'liberado', hadStudent: false },
+      { status: 'asignado', hadStudent: true },
+    ] as const)(
+      'cambia $status a sin_practica, limpia student_id, y notifica al instructor',
+      async ({ status, hadStudent }) => {
+        const rowBeforeClose = buildSlotRow({
+          status,
+          student_id: hadStudent ? studentId : null,
+        });
         const closedRow = buildSlotRow({ status: 'sin_practica', student_id: null });
         const { service, emailService, realtimeService } = buildHarness([
           EMPTY, // notifyUpcomingConfirmations: nada que recordar
-          { data: [buildSlotRow({ status })], error: null }, // select a cerrar
+          { data: [rowBeforeClose], error: null }, // select a cerrar
           { data: closedRow, error: null }, // update -> sin_practica
           { data: { nombre_completo: 'Instructor Uno' }, error: null }, // users (instructor)
           EMPTY, // completeFinishedSlots
@@ -173,6 +185,20 @@ describe('PracticeSlotSchedulerService', () => {
           'no-practice',
           expect.any(Object),
         );
+
+        if (hadStudent) {
+          expect(realtimeService.broadcast).toHaveBeenCalledWith(
+            `user-${studentId}-practice-slots`,
+            'no-practice',
+            expect.any(Object),
+          );
+        } else {
+          expect(realtimeService.broadcast).not.toHaveBeenCalledWith(
+            `user-${studentId}-practice-slots`,
+            expect.anything(),
+            expect.anything(),
+          );
+        }
       },
     );
 
