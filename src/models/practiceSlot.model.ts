@@ -27,6 +27,16 @@ export interface PracticeSlot {
   updatedAt: string;
 }
 
+// Forma que devuelven los 3 listados (admin/estudiante/instructor, ver
+// PracticeSlotService): instructorName siempre presente (instructorId es
+// NOT NULL), studentName null cuando no hay estudiante asignado. Evita
+// que cada rol tenga que resolver nombres ajenos por su cuenta contra
+// /users (ver docs/adr/008).
+export interface PracticeSlotWithNames extends PracticeSlot {
+  instructorName: string;
+  studentName: string | null;
+}
+
 // RF-03: el admin crea la franja sin estudiante (status inicial
 // 'disponible' se aplica en el service, no se acepta por input).
 export interface CreatePracticeSlotInput {

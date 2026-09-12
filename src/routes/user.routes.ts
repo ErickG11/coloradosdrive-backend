@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import type { NextFunction, Request, Response } from 'express';
 import { query } from 'express-validator';
 
 import { listUsers } from '../controllers/user.controller';
@@ -11,24 +10,19 @@ import { asyncHandler } from '../utils/asyncHandler';
 
 export const userRouter = Router();
 
-userRouter.use(asyncHandler(authenticate));
-
-// rol=instructor es accesible para cualquier usuario autenticado (RF-03:
-// el estudiante necesita ver el instructor de sus franjas de práctica; la
-// lista de instructores no es información sensible). rol=estudiante y
-// rol=admin siguen siendo admin-only.
-function requireAdminUnlessListingInstructors(req: Request, res: Response, next: NextFunction): void {
-  if (req.query.rol === 'instructor') {
-    next();
-    return;
-  }
-  requireRole('admin')(req, res, next);
-}
+// admin-only otra vez (ver docs/adr/008): la ampliación de rol=instructor
+// a cualquier autenticado (PR #11) se revierte porque los listados de
+// practice_slots ahora embeben instructorName/studentName directamente -
+// ya nadie fuera de admin necesita listar usuarios por rol.
+userRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 userRouter.get(
   '/',
-  [query('rol').isIn(ROLES).withMessage('rol debe ser uno de: ' + ROLES.join(', '))],
+  [
+    query('rol')
+      .isIn(ROLES)
+      .withMessage('rol debe ser uno de: ' + ROLES.join(', ')),
+  ],
   validate,
-  requireAdminUnlessListingInstructors,
   asyncHandler(listUsers),
 );

@@ -5,11 +5,26 @@ import type {
   CreatePracticeSlotInput,
   PracticeSlot,
   PracticeSlotStatus,
+  PracticeSlotWithNames,
   UpdatePracticeSlotInput,
 } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
 
 type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
+
+// Fila con instructor/estudiante embebidos vía PostgREST (ver
+// docs/adr/008): instructor nunca es null (instructor_id es NOT NULL),
+// student sí lo es cuando la franja no tiene estudiante asignado.
+type PracticeSlotRowWithNames = PracticeSlotRow & {
+  instructor: { nombre_completo: string } | null;
+  student: { nombre_completo: string } | null;
+};
+
+const SELECT_WITH_NAMES = `
+  *,
+  instructor:users!practice_slots_instructor_id_fkey(nombre_completo),
+  student:users!practice_slots_student_id_fkey(nombre_completo)
+`;
 
 function toPracticeSlot(row: PracticeSlotRow): PracticeSlot {
   return {
@@ -26,6 +41,19 @@ function toPracticeSlot(row: PracticeSlotRow): PracticeSlot {
     attended: row.attended,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+// instructorName cae de nuevo a un texto genérico solo como defensa ante
+// un embed inesperadamente vacío (el NOT NULL + el trigger de rol en
+// instructor_id garantizan que esto no debería pasar nunca en la
+// práctica) - no se lanza un error por esto porque el resto de la franja
+// sigue siendo información válida y útil para quien la pidió.
+function toPracticeSlotWithNames(row: PracticeSlotRowWithNames): PracticeSlotWithNames {
+  return {
+    ...toPracticeSlot(row),
+    instructorName: row.instructor?.nombre_completo ?? 'Instructor',
+    studentName: row.student?.nombre_completo ?? null,
   };
 }
 
@@ -65,10 +93,11 @@ export class PracticeSlotService {
     return toPracticeSlot(data);
   }
 
-  async listSlotsForAdmin(filters: AdminSlotFilters): Promise<PracticeSlot[]> {
-    let query = this.supabase.from('practice_slots').select().order('scheduled_at', {
-      ascending: true,
-    });
+  async listSlotsForAdmin(filters: AdminSlotFilters): Promise<PracticeSlotWithNames[]> {
+    let query = this.supabase
+      .from('practice_slots')
+      .select(SELECT_WITH_NAMES)
+      .order('scheduled_at', { ascending: true });
     if (filters.cohortId !== undefined) {
       query = query.eq('cohort_id', filters.cohortId);
     }
@@ -79,12 +108,19 @@ export class PracticeSlotService {
       query = query.eq('status', filters.status);
     }
 
-    const { data, error } = await query;
+    // .overrideTypes() al final de la cadena (no antes): en postgrest-js
+    // los filtros (.eq/.or/...) viven en PostgrestFilterBuilder, que
+    // .overrideTypes() no conserva en su tipo de retorno - encadenar un
+    // .eq() después no tipa correctamente.
+    const { data, error } = await query.overrideTypes<
+      PracticeSlotRowWithNames[],
+      { merge: false }
+    >();
     if (error) {
       throw error;
     }
 
-    return data.map(toPracticeSlot);
+    return data.map(toPracticeSlotWithNames);
   }
 
   // RF-03: el estudiante ve las franjas disponibles de su propia cohorte
@@ -101,7 +137,7 @@ export class PracticeSlotService {
   // 'liberado', con student_id ya en NULL) dejaría de matchear las dos
   // condiciones de este filtro y se volvería invisible para reclamarla de
   // nuevo, incluso después del broadcast slot-released.
-  async listSlotsForStudent(studentId: string): Promise<PracticeSlot[]> {
+  async listSlotsForStudent(studentId: string): Promise<PracticeSlotWithNames[]> {
     const cohortId = await this.getActiveCohortIdForStudent(studentId);
     if (!cohortId) {
       return [];
@@ -109,33 +145,35 @@ export class PracticeSlotService {
 
     const { data, error } = await this.supabase
       .from('practice_slots')
-      .select()
+      .select(SELECT_WITH_NAMES)
       .eq('cohort_id', cohortId)
       .or(`status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`)
-      .order('scheduled_at', { ascending: true });
+      .order('scheduled_at', { ascending: true })
+      .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
 
     if (error) {
       throw error;
     }
 
-    return data.map(toPracticeSlot);
+    return data.map(toPracticeSlotWithNames);
   }
 
   // RF-03: "acceso de solo lectura a su disponibilidad semanal y a los
   // estudiantes asignados" - todas sus franjas, en cualquier estado, no
   // solo asignado/confirmado.
-  async listSlotsForInstructor(instructorId: string): Promise<PracticeSlot[]> {
+  async listSlotsForInstructor(instructorId: string): Promise<PracticeSlotWithNames[]> {
     const { data, error } = await this.supabase
       .from('practice_slots')
-      .select()
+      .select(SELECT_WITH_NAMES)
       .eq('instructor_id', instructorId)
-      .order('scheduled_at', { ascending: true });
+      .order('scheduled_at', { ascending: true })
+      .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
 
     if (error) {
       throw error;
     }
 
-    return data.map(toPracticeSlot);
+    return data.map(toPracticeSlotWithNames);
   }
 
   // Editar solo se permite si status = 'disponible' (confirmado
