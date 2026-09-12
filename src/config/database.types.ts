@@ -4,8 +4,10 @@
 // columna resuelve a `any`).
 //
 // `Relationships: []` es obligatorio en cada tabla (lo exige el tipo
-// GenericTable de @supabase/postgrest-js); queda vacío porque no hacemos
-// selects anidados/embebidos vía foreign keys en este proyecto.
+// GenericTable de @supabase/postgrest-js); queda vacío en todas salvo en
+// practice_slots, que sí declara sus 2 FKs hacia users (ver docs/adr/008)
+// para poder embeber instructor/estudiante tipado en el listado, en vez
+// de exponer un endpoint más amplio para resolver nombres por rol.
 
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
 export type CourseType = 'A' | 'B';
@@ -299,7 +301,27 @@ export interface Database {
           confirmed_at: string | null;
           attended: boolean | null;
         }>;
-        Relationships: [];
+        // Nombres de constraint por defecto de Postgres para `references
+        // users (id)` inline en la migración 005 (`<tabla>_<columna>_fkey`,
+        // sin nombre explícito) - necesarios para desambiguar cuál FK usar
+        // al embeber (`users!practice_slots_instructor_id_fkey(...)`),
+        // porque hay 2 FKs de esta tabla hacia la misma `users`.
+        Relationships: [
+          {
+            foreignKeyName: 'practice_slots_instructor_id_fkey';
+            columns: ['instructor_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'practice_slots_student_id_fkey';
+            columns: ['student_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
   };

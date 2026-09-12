@@ -50,6 +50,18 @@ function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+// Los 3 listados (GET /practice-slots) embeben instructor/estudiante vía
+// PostgREST (ver docs/adr/008) - a diferencia de buildSlotRow, que refleja
+// la fila cruda que usan create/update/delete (sin embed).
+function buildSlotRowWithNames(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    ...buildSlotRow(),
+    instructor: { nombre_completo: 'Bruno Salas' },
+    student: null,
+    ...overrides,
+  };
+}
+
 describe('practice-slots endpoints', () => {
   const app = createApp();
 
@@ -157,16 +169,40 @@ describe('practice-slots endpoints', () => {
   });
 
   describe('GET /practice-slots', () => {
-    it('admin: lista todas las franjas', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: [buildSlotRow()], error: null }));
+    it('admin: lista todas las franjas, con instructor/estudiante embebidos', async () => {
+      const chain = createChain({
+        data: [buildSlotRowWithNames({ student: { nombre_completo: 'Ana Torres' } })],
+        error: null,
+      });
+      mockedFrom.mockReturnValueOnce(chain);
 
       const res = await request(app)
         .get('/practice-slots')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
+      expect(res.body).toEqual([
+        expect.objectContaining({ instructorName: 'Bruno Salas', studentName: 'Ana Torres' }),
+      ]);
       expect(mockedFrom).toHaveBeenCalledTimes(1);
+      // El select pide el embed vía las FK desambiguadas (hay 2 FKs de
+      // practice_slots hacia users) - sin esto, instructorName/studentName
+      // nunca llegarían resueltos.
+      expect(chain.select).toHaveBeenCalledWith(expect.stringContaining('instructor:users!'));
+      expect(chain.select).toHaveBeenCalledWith(expect.stringContaining('student:users!'));
+    });
+
+    it('admin: una franja sin estudiante asignado trae studentName null', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: [buildSlotRowWithNames({ student: null })], error: null }),
+      );
+
+      const res = await request(app)
+        .get('/practice-slots')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([expect.objectContaining({ studentName: null })]);
     });
 
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
@@ -183,8 +219,13 @@ describe('practice-slots endpoints', () => {
     it('estudiante con inscripción activa: ve disponibles de su cohorte + las propias', async () => {
       const chain = createChain({
         data: [
-          buildSlotRow(),
-          buildSlotRow({ id: 'slot-2', student_id: studentId, status: 'asignado' }),
+          buildSlotRowWithNames(),
+          buildSlotRowWithNames({
+            id: 'slot-2',
+            student_id: studentId,
+            status: 'asignado',
+            student: { nombre_completo: 'Ana Torres' },
+          }),
         ],
         error: null,
       });
@@ -198,6 +239,9 @@ describe('practice-slots endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(2);
+      expect(res.body[1]).toEqual(
+        expect.objectContaining({ instructorName: 'Bruno Salas', studentName: 'Ana Torres' }),
+      );
       expect(chain.or).toHaveBeenCalledWith(
         `status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`,
       );
@@ -209,7 +253,7 @@ describe('practice-slots endpoints', () => {
       // Sin 'status.eq.liberado' en el filtro, esta fila no matchearía
       // ninguna condición del .or() para el estudiante B y se volvería
       // invisible para reclamarla de nuevo.
-      const releasedByStudentA = buildSlotRow({
+      const releasedByStudentA = buildSlotRowWithNames({
         id: 'slot-released',
         status: 'liberado',
         student_id: null,
@@ -224,12 +268,20 @@ describe('practice-slots endpoints', () => {
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual([expect.objectContaining({ id: 'slot-released', status: 'liberado' })]);
+      expect(res.body).toEqual([
+        expect.objectContaining({ id: 'slot-released', status: 'liberado', studentName: null }),
+      ]);
     });
 
-    it('instructor: ve todas sus franjas, en cualquier estado', async () => {
+    it('instructor: ve todas sus franjas, en cualquier estado, con el nombre del estudiante si tiene', async () => {
       const chain = createChain({
-        data: [buildSlotRow({ status: 'completado', student_id: studentId })],
+        data: [
+          buildSlotRowWithNames({
+            status: 'completado',
+            student_id: studentId,
+            student: { nombre_completo: 'Ana Torres' },
+          }),
+        ],
         error: null,
       });
       mockedFrom.mockReturnValueOnce(chain);
@@ -239,7 +291,7 @@ describe('practice-slots endpoints', () => {
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveLength(1);
+      expect(res.body).toEqual([expect.objectContaining({ studentName: 'Ana Torres' })]);
       // mockAuthToken siempre resuelve sub: 'test-user-id' - la query se
       // filtra por el id del propio token, no por un instructorId ajeno.
       expect(chain.eq).toHaveBeenCalledWith('instructor_id', studentId);
