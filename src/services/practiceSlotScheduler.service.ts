@@ -120,6 +120,16 @@ export class PracticeSlotSchedulerService {
       return;
     }
 
+    // row.student_id (antes del UPDATE, que ya lo limpió a NULL) es
+    // no-nulo únicamente si la franja venía de 'asignado' - el estudiante
+    // que la tenía asignada también debe enterarse de que perdió el cupo
+    // por no confirmar a tiempo, no solo el instructor.
+    if (row.student_id) {
+      await this.broadcastToUserSafely(row.student_id, 'no-practice', {
+        scheduledAt: data.scheduled_at,
+      });
+    }
+
     await this.notifyInstructorNoPracticeSafely(data.instructor_id, data.scheduled_at);
   }
 
