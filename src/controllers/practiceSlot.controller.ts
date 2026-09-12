@@ -5,6 +5,7 @@ import type {
   CreatePracticeSlotInput,
   PracticeSlot,
   PracticeSlotStatus,
+  PracticeSlotWithNames,
   UpdatePracticeSlotInput,
 } from '../models/practiceSlot.model';
 import { PracticeSlotService } from '../services/practiceSlot.service';
@@ -22,7 +23,7 @@ export async function createPracticeSlot(req: Request, res: Response<PracticeSlo
 // instructor ve todas las suyas (cualquier estado).
 export async function listPracticeSlots(
   req: Request,
-  res: Response<PracticeSlot[]>,
+  res: Response<PracticeSlotWithNames[]>,
 ): Promise<void> {
   if (!req.user) {
     throw new AppError('Authentication required', 401);
