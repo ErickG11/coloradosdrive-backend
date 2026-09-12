@@ -22,3 +22,11 @@ export interface UserProfile {
   createdAt: string;
   updatedAt: string;
 }
+
+// Proyección mínima para poblar selectores de usuario por rol (ej. el
+// instructor de una franja de práctica) - no expone cedula/telefono,
+// que no hacen falta para ese caso de uso.
+export interface UserSummary {
+  id: string;
+  nombreCompleto: string;
+}
