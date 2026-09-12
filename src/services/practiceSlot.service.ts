@@ -93,6 +93,14 @@ export class PracticeSlotService {
   // del JWT ya verificado (ver practiceSlot.controller.ts), nunca de un
   // parámetro del cliente, así que interpolarlo en el filtro .or() es
   // seguro (un UUID de sesión, no un valor arbitrario del request).
+  //
+  // 'liberado' se incluye junto a 'disponible': claimSlot acepta reclamar
+  // una franja en cualquiera de esos dos estados (status IN ('disponible',
+  // 'liberado')), así que el listado tiene que mostrar ambos - de lo
+  // contrario, una franja cancelada por un estudiante (que queda en
+  // 'liberado', con student_id ya en NULL) dejaría de matchear las dos
+  // condiciones de este filtro y se volvería invisible para reclamarla de
+  // nuevo, incluso después del broadcast slot-released.
   async listSlotsForStudent(studentId: string): Promise<PracticeSlot[]> {
     const cohortId = await this.getActiveCohortIdForStudent(studentId);
     if (!cohortId) {
@@ -103,7 +111,7 @@ export class PracticeSlotService {
       .from('practice_slots')
       .select()
       .eq('cohort_id', cohortId)
-      .or(`status.eq.disponible,student_id.eq.${studentId}`)
+      .or(`status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`)
       .order('scheduled_at', { ascending: true });
 
     if (error) {
