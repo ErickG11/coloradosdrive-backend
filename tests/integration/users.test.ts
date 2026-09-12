@@ -27,17 +27,45 @@ describe('GET /users', () => {
     mockedVerifySupabaseJwt.mockReset();
   });
 
-  describe('protección por autenticación y rol (RNF-03)', () => {
+  describe('protección por autenticación y rol', () => {
     it('sin token responde 401', async () => {
       const res = await request(app).get('/users').query({ rol: 'instructor' });
       expect(res.status).toBe(401);
     });
 
-    it('con rol no-admin responde 403', async () => {
+    it.each(['estudiante', 'instructor', 'admin'] as const)(
+      'rol=instructor: cualquier usuario autenticado (%s) puede consultarlo',
+      async (callerRole) => {
+        mockedFrom.mockReturnValueOnce(createChain({ data: [], error: null }));
+
+        const res = await request(app)
+          .get('/users')
+          .query({ rol: 'instructor' })
+          .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, callerRole)}`);
+
+        expect(res.status).toBe(200);
+      },
+    );
+
+    it.each(['estudiante', 'admin'] as const)(
+      'rol=%s: solo admin puede consultarlo (RNF-03)',
+      async (queriedRole) => {
+        const res = await request(app)
+          .get('/users')
+          .query({ rol: queriedRole })
+          .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+        expect(res.status).toBe(403);
+        expect(mockedFrom).not.toHaveBeenCalled();
+      },
+    );
+
+    it('instructor no puede consultar rol=estudiante', async () => {
       const res = await request(app)
         .get('/users')
-        .query({ rol: 'instructor' })
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+        .query({ rol: 'estudiante' })
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
+
       expect(res.status).toBe(403);
       expect(mockedFrom).not.toHaveBeenCalled();
     });
