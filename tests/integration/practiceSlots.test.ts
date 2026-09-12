@@ -198,7 +198,33 @@ describe('practice-slots endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(2);
-      expect(chain.or).toHaveBeenCalledWith(`status.eq.disponible,student_id.eq.${studentId}`);
+      expect(chain.or).toHaveBeenCalledWith(
+        `status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`,
+      );
+    });
+
+    it('estudiante B ve la franja que el estudiante A acaba de liberar (cancelar)', async () => {
+      // El estudiante A cancela: la franja queda en 'liberado' con
+      // student_id ya en NULL (ver PracticeSlotActionService.cancelSlot).
+      // Sin 'status.eq.liberado' en el filtro, esta fila no matchearía
+      // ninguna condición del .or() para el estudiante B y se volvería
+      // invisible para reclamarla de nuevo.
+      const releasedByStudentA = buildSlotRow({
+        id: 'slot-released',
+        status: 'liberado',
+        student_id: null,
+      });
+      const chain = createChain({ data: [releasedByStudentA], error: null });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { cohort_id: cohortId }, error: null }))
+        .mockReturnValueOnce(chain);
+
+      const res = await request(app)
+        .get('/practice-slots')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([expect.objectContaining({ id: 'slot-released', status: 'liberado' })]);
     });
 
     it('instructor: ve todas sus franjas, en cualquier estado', async () => {
