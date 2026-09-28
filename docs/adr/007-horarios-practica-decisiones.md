@@ -79,16 +79,19 @@ separado para reflejarlo, fuera de este sprint de código.
 
 ### 6. Notificaciones en tiempo real: Broadcast, no `postgres_changes`
 
-Este proyecto no usa Row Level Security en ninguna tabla -
-`supabaseAdmin` (el único cliente que escribe en todo el backend) la
-ignora por diseño (`SupabaseClient` con `service_role`). Suscribirse a
-`postgres_changes` sobre `practice_slots` sin RLS transmitiría a
-cualquier suscriptor los cambios de cualquier fila - de cualquier
-cohorte, de cualquier estudiante - porque `postgres_changes` no filtra
-por quién debería poder ver qué, solo por la tabla completa. Con
-Broadcast, el backend decide explícitamente qué payload ya sanitizado
-envía y a qué canal, consistente con ADR 001 ("el frontend nunca accede
-directo a la base de datos").
+RLS está activo en toda tabla de dominio desde
+`009_enable_rls.sql` (`supabaseAdmin`, el único cliente que escribe en
+todo el backend, la ignora por diseño - `SupabaseClient` con
+`service_role`), pero `postgres_changes` sobre `practice_slots` seguiría
+sin ser una opción segura para este caso: expondría a cualquier
+suscriptor los cambios de cualquier fila - de cualquier cohorte, de
+cualquier estudiante - porque `postgres_changes` no filtra por quién
+debería poder ver qué, solo por la tabla completa. Con Broadcast, el
+backend decide explícitamente qué payload ya sanitizado envía y a qué
+canal, consistente con ADR 001 ("el frontend nunca accede directo a la
+base de datos"); los canales en sí se marcaron como privados, con su
+propia autorización sobre `realtime.messages` (ver
+`011_realtime_broadcast_authorization.sql`).
 
 Se usa `channel.httpSend()` (REST) en vez de `channel.send()` +
 `subscribe()` (WebSocket): no hace falta mantener una conexión
