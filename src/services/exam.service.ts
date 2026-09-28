@@ -444,7 +444,9 @@ export class ExamService {
     if (enrollmentError) {
       throw enrollmentError;
     }
-    if (!enrollment) {
+    // Sin inscripción activa, o activa pero pendiente de cohorte (sin
+    // cohort_id todavía): en ambos casos no hay curso que resolver.
+    if (!enrollment?.cohort_id) {
       return null;
     }
 

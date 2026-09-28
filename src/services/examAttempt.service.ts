@@ -570,7 +570,9 @@ export class ExamAttemptService {
     if (enrollmentError) {
       throw enrollmentError;
     }
-    if (!enrollment) {
+    // Sin inscripción activa, o activa pero pendiente de cohorte (sin
+    // cohort_id todavía): en ambos casos no hay curso que verificar.
+    if (!enrollment?.cohort_id) {
       throw new AppError('No tienes una inscripción activa en el curso de este examen', 403);
     }
 
