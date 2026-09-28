@@ -13,8 +13,14 @@ function toCohort(row: CohortRow): Cohort {
     nombre: row.nombre,
     precio: Number(row.precio),
     cupoMaximo: row.cupo_maximo,
-    fechaInicio: row.fecha_inicio,
-    fechaFin: row.fecha_fin,
+    fechaInicioMatricula: row.fecha_inicio_matricula,
+    fechaFinMatricula: row.fecha_fin_matricula,
+    fechaInicioCurso: row.fecha_inicio_curso,
+    fechaFinCurso: row.fecha_fin_curso,
+    tipoModalidad: row.tipo_modalidad,
+    horariosCapacitacionTeoria: row.horarios_capacitacion_teoria,
+    numeroVehiculos: row.numero_vehiculos,
+    numeroAulas: row.numero_aulas,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -45,8 +51,14 @@ export class CohortService {
         nombre: input.nombre,
         precio: input.precio,
         cupo_maximo: input.cupoMaximo,
-        fecha_inicio: input.fechaInicio,
-        fecha_fin: input.fechaFin,
+        fecha_inicio_matricula: input.fechaInicioMatricula,
+        fecha_fin_matricula: input.fechaFinMatricula,
+        fecha_inicio_curso: input.fechaInicioCurso,
+        fecha_fin_curso: input.fechaFinCurso,
+        tipo_modalidad: input.tipoModalidad ?? null,
+        horarios_capacitacion_teoria: input.horariosCapacitacionTeoria ?? null,
+        numero_vehiculos: input.numeroVehiculos ?? null,
+        numero_aulas: input.numeroAulas ?? null,
       })
       .select()
       .single();
@@ -62,7 +74,7 @@ export class CohortService {
     const { data, error } = await this.supabase
       .from('cohorts')
       .select()
-      .order('fecha_inicio', { ascending: false });
+      .order('fecha_inicio_curso', { ascending: false });
 
     if (error) {
       throw error;
@@ -77,8 +89,26 @@ export class CohortService {
     if (input.nombre !== undefined) updatePayload.nombre = input.nombre;
     if (input.precio !== undefined) updatePayload.precio = input.precio;
     if (input.cupoMaximo !== undefined) updatePayload.cupo_maximo = input.cupoMaximo;
-    if (input.fechaInicio !== undefined) updatePayload.fecha_inicio = input.fechaInicio;
-    if (input.fechaFin !== undefined) updatePayload.fecha_fin = input.fechaFin;
+    if (input.fechaInicioMatricula !== undefined) {
+      updatePayload.fecha_inicio_matricula = input.fechaInicioMatricula;
+    }
+    if (input.fechaFinMatricula !== undefined) {
+      updatePayload.fecha_fin_matricula = input.fechaFinMatricula;
+    }
+    if (input.fechaInicioCurso !== undefined) {
+      updatePayload.fecha_inicio_curso = input.fechaInicioCurso;
+    }
+    if (input.fechaFinCurso !== undefined) {
+      updatePayload.fecha_fin_curso = input.fechaFinCurso;
+    }
+    if (input.tipoModalidad !== undefined) updatePayload.tipo_modalidad = input.tipoModalidad;
+    if (input.horariosCapacitacionTeoria !== undefined) {
+      updatePayload.horarios_capacitacion_teoria = input.horariosCapacitacionTeoria;
+    }
+    if (input.numeroVehiculos !== undefined) {
+      updatePayload.numero_vehiculos = input.numeroVehiculos;
+    }
+    if (input.numeroAulas !== undefined) updatePayload.numero_aulas = input.numeroAulas;
 
     const { data, error } = await this.supabase
       .from('cohorts')

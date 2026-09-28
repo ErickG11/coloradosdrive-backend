@@ -17,8 +17,22 @@ const createValidators = [
   body('nombre').isString().trim().notEmpty().withMessage('nombre es obligatorio'),
   body('precio').isFloat({ min: 0 }).withMessage('precio debe ser un número mayor o igual a 0'),
   body('cupoMaximo').isInt({ min: 1 }).withMessage('cupoMaximo debe ser un entero mayor a 0'),
-  body('fechaInicio').isISO8601().withMessage('fechaInicio debe ser una fecha válida (ISO 8601)'),
-  body('fechaFin').isISO8601().withMessage('fechaFin debe ser una fecha válida (ISO 8601)'),
+  body('fechaInicioMatricula')
+    .isISO8601()
+    .withMessage('fechaInicioMatricula debe ser una fecha válida (ISO 8601)'),
+  body('fechaFinMatricula')
+    .isISO8601()
+    .withMessage('fechaFinMatricula debe ser una fecha válida (ISO 8601)'),
+  body('fechaInicioCurso')
+    .isISO8601()
+    .withMessage('fechaInicioCurso debe ser una fecha válida (ISO 8601)'),
+  body('fechaFinCurso')
+    .isISO8601()
+    .withMessage('fechaFinCurso debe ser una fecha válida (ISO 8601)'),
+  body('tipoModalidad').optional({ values: 'null' }).isString(),
+  body('horariosCapacitacionTeoria').optional({ values: 'null' }).isString(),
+  body('numeroVehiculos').optional({ values: 'null' }).isInt({ min: 0 }),
+  body('numeroAulas').optional({ values: 'null' }).isInt({ min: 0 }),
 ];
 
 const updateValidators = [
@@ -33,14 +47,26 @@ const updateValidators = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('cupoMaximo debe ser un entero mayor a 0'),
-  body('fechaInicio')
+  body('fechaInicioMatricula')
     .optional()
     .isISO8601()
-    .withMessage('fechaInicio debe ser una fecha válida (ISO 8601)'),
-  body('fechaFin')
+    .withMessage('fechaInicioMatricula debe ser una fecha válida (ISO 8601)'),
+  body('fechaFinMatricula')
     .optional()
     .isISO8601()
-    .withMessage('fechaFin debe ser una fecha válida (ISO 8601)'),
+    .withMessage('fechaFinMatricula debe ser una fecha válida (ISO 8601)'),
+  body('fechaInicioCurso')
+    .optional()
+    .isISO8601()
+    .withMessage('fechaInicioCurso debe ser una fecha válida (ISO 8601)'),
+  body('fechaFinCurso')
+    .optional()
+    .isISO8601()
+    .withMessage('fechaFinCurso debe ser una fecha válida (ISO 8601)'),
+  body('tipoModalidad').optional({ values: 'null' }).isString(),
+  body('horariosCapacitacionTeoria').optional({ values: 'null' }).isString(),
+  body('numeroVehiculos').optional({ values: 'null' }).isInt({ min: 0 }),
+  body('numeroAulas').optional({ values: 'null' }).isInt({ min: 0 }),
 ];
 
 cohortRouter.post('/', createValidators, validate, asyncHandler(createCohort));
