@@ -119,12 +119,15 @@ describe('exams endpoints', () => {
     });
 
     it('POST /exams con rol estudiante responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .post('/exams')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send(validExamBody);
       expect(res.status).toBe(403);
-      expect(mockedFrom).not.toHaveBeenCalled();
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
     });
 
     it('GET /exams con rol instructor responde 403 (solo admin/estudiante)', async () => {
@@ -135,14 +138,20 @@ describe('exams endpoints', () => {
     });
 
     it('GET /exams/:id (detalle completo) con rol estudiante responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .get(`/exams/${examId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
       expect(res.status).toBe(403);
-      expect(mockedFrom).not.toHaveBeenCalled();
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
     });
 
     it('DELETE /exams/:id con rol estudiante responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .delete(`/exams/${examId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
@@ -221,7 +230,9 @@ describe('exams endpoints', () => {
     });
 
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null })); // sin enrollment activo
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null })); // sin enrollment activo
 
       const res = await request(app)
         .get('/exams')
@@ -233,6 +244,7 @@ describe('exams endpoints', () => {
 
     it('estudiante con inscripción activa: solo ve examenes publicados de su curso', async () => {
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null }))
         .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null }))
         .mockReturnValueOnce(
@@ -245,7 +257,7 @@ describe('exams endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
-      expect(mockedFrom).toHaveBeenCalledTimes(3);
+      expect(mockedFrom).toHaveBeenCalledTimes(4);
     });
   });
 

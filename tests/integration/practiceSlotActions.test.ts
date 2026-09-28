@@ -93,7 +93,9 @@ describe('practice-slots student actions', () => {
 
   describe('POST /practice-slots/:id/claim (estudiante)', () => {
     it('responde 404 si la franja no existe', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }));
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
 
       const res = await request(app)
         .post(`/practice-slots/${slotId}/claim`)
@@ -104,6 +106,7 @@ describe('practice-slots student actions', () => {
 
     it('responde 403 si el estudiante no está en la cohorte de la franja', async () => {
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
         .mockReturnValueOnce(createChain({ data: null, error: null }));
 
@@ -116,6 +119,7 @@ describe('practice-slots student actions', () => {
 
     it('reclama la franja disponible y responde 200', async () => {
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
         .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
         .mockReturnValueOnce(
@@ -145,6 +149,7 @@ describe('practice-slots student actions', () => {
       // peticiones reales llegara primero al servidor.
       mockedFrom
         // Solicitud A: gana.
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
         .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
         .mockReturnValueOnce(
@@ -154,6 +159,7 @@ describe('practice-slots student actions', () => {
           }),
         )
         // Solicitud B: pierde (el UPDATE no matchea ninguna fila).
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
         .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
         .mockReturnValueOnce(createChain({ data: null, error: null }));
@@ -173,9 +179,11 @@ describe('practice-slots student actions', () => {
 
   describe('POST /practice-slots/:id/confirm (estudiante)', () => {
     it('responde 404 si la franja no es del estudiante', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: buildSlotRow({ student_id: 'otro-estudiante' }), error: null }),
-      );
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(
+          createChain({ data: buildSlotRow({ student_id: 'otro-estudiante' }), error: null }),
+        );
 
       const res = await request(app)
         .post(`/practice-slots/${slotId}/confirm`)
@@ -186,12 +194,14 @@ describe('practice-slots student actions', () => {
 
     it('responde 409 si la ventana de confirmación ya cerró (menos de 5 min antes)', async () => {
       const soon = new Date(Date.now() + 2 * 60_000).toISOString();
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: buildSlotRow({ student_id: studentId, status: 'asignado', scheduled_at: soon }),
-          error: null,
-        }),
-      );
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({ student_id: studentId, status: 'asignado', scheduled_at: soon }),
+            error: null,
+          }),
+        );
 
       const res = await request(app)
         .post(`/practice-slots/${slotId}/confirm`)
@@ -204,6 +214,7 @@ describe('practice-slots student actions', () => {
     it('confirma dentro de la ventana y responde 200', async () => {
       const later = new Date(Date.now() + 15 * 60_000).toISOString();
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ student_id: studentId, status: 'asignado', scheduled_at: later }),
@@ -232,12 +243,14 @@ describe('practice-slots student actions', () => {
 
   describe('POST /practice-slots/:id/cancel (estudiante)', () => {
     it('responde 409 si el turno ya está liberado', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: buildSlotRow({ student_id: studentId, status: 'liberado' }),
-          error: null,
-        }),
-      );
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({ student_id: studentId, status: 'liberado' }),
+            error: null,
+          }),
+        );
 
       const res = await request(app)
         .post(`/practice-slots/${slotId}/cancel`)
@@ -247,12 +260,14 @@ describe('practice-slots student actions', () => {
     });
 
     it('responde 409 si el turno ya está completado (no se puede cancelar una práctica que ya pasó)', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: buildSlotRow({ student_id: studentId, status: 'completado' }),
-          error: null,
-        }),
-      );
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(
+          createChain({
+            data: buildSlotRow({ student_id: studentId, status: 'completado' }),
+            error: null,
+          }),
+        );
 
       const res = await request(app)
         .post(`/practice-slots/${slotId}/cancel`)
@@ -266,6 +281,7 @@ describe('practice-slots student actions', () => {
       const httpSend = mockHttpSendSuccess();
       const updateChain = createChain({ data: buildSlotRow({ status: 'liberado' }), error: null });
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ student_id: studentId, status: 'confirmado' }),
@@ -295,7 +311,9 @@ describe('practice-slots student actions', () => {
           confirmation_notified_at: null,
         }),
       );
-      expect(mockedChannel).toHaveBeenCalledWith(`cohort-${cohortId}-practice-slots`);
+      expect(mockedChannel).toHaveBeenCalledWith(`cohort-${cohortId}-practice-slots`, {
+        config: { private: true },
+      });
       expect(httpSend).toHaveBeenCalledWith('slot-released', expect.objectContaining({ slotId }));
     });
 
@@ -310,6 +328,7 @@ describe('practice-slots student actions', () => {
         error: null,
       });
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ id: releasedSlotId, status: 'liberado' }),
@@ -336,6 +355,7 @@ describe('practice-slots student actions', () => {
       mockedRemoveChannel.mockResolvedValue(undefined);
 
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ student_id: studentId, status: 'asignado' }),
@@ -356,12 +376,15 @@ describe('practice-slots student actions', () => {
 
   describe('PATCH /practice-slots/:id/attendance (instructor)', () => {
     it('con rol estudiante responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .patch(`/practice-slots/${slotId}/attendance`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send({ attended: true });
       expect(res.status).toBe(403);
-      expect(mockedFrom).not.toHaveBeenCalled();
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
     });
 
     it('responde 404 si la franja no es del instructor autenticado', async () => {
