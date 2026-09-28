@@ -37,6 +37,21 @@ export interface PracticeSlotWithNames extends PracticeSlot {
   studentName: string | null;
 }
 
+// 'verde': sin estudiante asignado (disponible/liberado), o estados fuera
+// del ciclo activo (sin_practica/completado). 'rojo'/'amarillo'/'neutro':
+// posición de esta franja dentro del rango completo de franjas
+// asignadas/confirmadas de su propio estudiante en esta cohorte (ver
+// PracticeSlotService.attachColorSemana) - calculado al vuelo en cada
+// respuesta, nunca persistido, para que no quede desactualizado.
+export const COLORES_SEMANA = ['verde', 'rojo', 'amarillo', 'neutro'] as const;
+export type ColorSemana = (typeof COLORES_SEMANA)[number];
+
+// Forma que devuelve específicamente el listado de admin (GET
+// /practice-slots con rol admin) - el único que necesita colorSemana.
+export interface PracticeSlotWithColor extends PracticeSlotWithNames {
+  colorSemana: ColorSemana;
+}
+
 // RF-03: el admin crea la franja sin estudiante (status inicial
 // 'disponible' se aplica en el service, no se acepta por input).
 export interface CreatePracticeSlotInput {

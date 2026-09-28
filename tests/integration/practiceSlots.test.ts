@@ -205,6 +205,109 @@ describe('practice-slots endpoints', () => {
       expect(res.body).toEqual([expect.objectContaining({ studentName: null })]);
     });
 
+    it('admin: franjas disponible/liberado siempre traen colorSemana verde, sin consultar nada extra', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({
+          data: [
+            buildSlotRowWithNames({
+              id: 'a',
+              status: 'disponible',
+              student: null,
+              student_id: null,
+            }),
+            buildSlotRowWithNames({ id: 'b', status: 'liberado', student: null, student_id: null }),
+          ],
+          error: null,
+        }),
+      );
+
+      const res = await request(app)
+        .get('/practice-slots')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+
+      expect(res.status).toBe(200);
+      expect((res.body as { colorSemana: string }[]).map((s) => s.colorSemana)).toEqual([
+        'verde',
+        'verde',
+      ]);
+      // Ningún par (estudiante, cohorte) que resolver -> nunca consulta el rango.
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
+    });
+
+    it('admin: colorSemana refleja el rango completo de franjas del estudiante en la cohorte, no solo lo que trae este listado filtrado', async () => {
+      const anaId = 'ana-1';
+      // Este listado (filtrado por instructor, por ejemplo) solo trae DOS
+      // franjas de Ana, pero su rango real (siguiente query) abarca desde
+      // el día 1 hasta el día 30 - la del medio debe salir 'neutro', no
+      // 'amarillo' como saldría si el rango se calculara solo con estas dos.
+      const rangoChain = createChain({
+        data: [
+          { student_id: anaId, cohort_id: cohortId, scheduled_at: '2026-03-01T15:00:00Z' },
+          { student_id: anaId, cohort_id: cohortId, scheduled_at: '2026-03-30T15:00:00Z' },
+        ],
+        error: null,
+      });
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({
+            data: [
+              buildSlotRowWithNames({
+                id: 'mid',
+                status: 'confirmado',
+                student_id: anaId,
+                student: { nombre_completo: 'Ana Torres' },
+                scheduled_at: '2026-03-15T15:00:00Z',
+              }),
+            ],
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(rangoChain);
+
+      const res = await request(app)
+        .get('/practice-slots')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([expect.objectContaining({ colorSemana: 'neutro' })]);
+      expect(rangoChain.in).toHaveBeenCalledWith('student_id', [anaId]);
+      expect(rangoChain.in).toHaveBeenCalledWith('status', ['asignado', 'confirmado']);
+    });
+
+    it('admin: rango corto (<= 14 días) siempre da amarillo para asignado/confirmado', async () => {
+      const anaId = 'ana-2';
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({
+            data: [
+              buildSlotRowWithNames({
+                id: 'unica',
+                status: 'asignado',
+                student_id: anaId,
+                student: { nombre_completo: 'Ana Torres' },
+                scheduled_at: '2026-03-05T15:00:00Z',
+              }),
+            ],
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(
+          createChain({
+            data: [
+              { student_id: anaId, cohort_id: cohortId, scheduled_at: '2026-03-05T15:00:00Z' },
+            ],
+            error: null,
+          }),
+        );
+
+      const res = await request(app)
+        .get('/practice-slots')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([expect.objectContaining({ colorSemana: 'amarillo' })]);
+    });
+
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
       mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }));
 
