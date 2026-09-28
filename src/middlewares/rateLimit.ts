@@ -31,3 +31,10 @@ export const verificationRateLimiter = buildRateLimiter(5, skipInTests);
 // documentos con reintentos (foto borrosa), así que el límite es más
 // generoso (20 cada 15 minutos) que el de verificación.
 export const applicationRateLimiter = buildRateLimiter(20, skipInTests);
+
+// Listado público de cursos para la landing (GET /public/courses): es la
+// primera ruta 100% pública sin ningún otro gate de por medio (ni auth ni
+// token de solicitud), así que necesita su propio límite aunque sea de
+// solo lectura. Más generoso que los de arriba porque un solo request
+// trae todo el catálogo (no es un flujo de varios pasos).
+export const publicReadRateLimiter = buildRateLimiter(60, skipInTests);

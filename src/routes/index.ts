@@ -9,6 +9,7 @@ import { examRouter, questionRouter } from './exam.routes';
 import { healthRouter } from './health.routes';
 import { practiceSlotRouter } from './practiceSlot.routes';
 import { practiceSlotGenerationRouter } from './practiceSlotGeneration.routes';
+import { publicCourseRouter } from './publicCourse.routes';
 import { solicitudAdminRouter, solicitudRouter } from './solicitud.routes';
 import { userRouter } from './user.routes';
 
@@ -16,6 +17,7 @@ export const apiRouter = Router();
 
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/courses', courseRouter);
+apiRouter.use('/public/courses', publicCourseRouter);
 apiRouter.use('/cohorts', cohortRouter);
 apiRouter.use('/enrollments', enrollmentRouter);
 apiRouter.use('/estudiantes', estudianteRouter);
