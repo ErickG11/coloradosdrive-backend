@@ -28,6 +28,20 @@ export interface NoPracticeEmailParams {
   scheduledAt: string;
 }
 
+export interface VerificationCodeEmailParams {
+  to: string;
+  code: string;
+  expiresInMinutes: number;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function formatScheduledAt(scheduledAt: string): string {
   return new Date(scheduledAt).toLocaleString('es-EC', {
     dateStyle: 'medium',
@@ -44,7 +58,7 @@ export class EmailService {
     const { to, nombreCompleto, temporaryPassword } = params;
 
     await this.transporter.sendMail({
-      from: env.SMTP_FROM,
+      from: env.EMAIL_FROM,
       to,
       subject: 'Bienvenido a ColoradosDrive',
       text: [
@@ -78,7 +92,7 @@ export class EmailService {
     const scoreFormatted = scorePercent.toFixed(2);
 
     await this.transporter.sendMail({
-      from: env.SMTP_FROM,
+      from: env.EMAIL_FROM,
       to,
       subject: `Resultado de tu examen: ${examTitle}`,
       text: [
@@ -107,7 +121,7 @@ export class EmailService {
     const fecha = formatScheduledAt(scheduledAt);
 
     await this.transporter.sendMail({
-      from: env.SMTP_FROM,
+      from: env.EMAIL_FROM,
       to,
       subject: 'Confirma tu práctica de conducción',
       text: [
@@ -134,7 +148,7 @@ export class EmailService {
     const fecha = formatScheduledAt(scheduledAt);
 
     await this.transporter.sendMail({
-      from: env.SMTP_FROM,
+      from: env.EMAIL_FROM,
       to,
       subject: 'No habrá práctica en tu próximo bloque',
       text: [
@@ -147,6 +161,56 @@ export class EmailService {
         `<p>Hola ${nombreCompleto},</p>`,
         `<p>Ningún estudiante confirmó asistencia para la práctica programada a las <strong>${fecha}</strong>.</p>`,
         '<p>Ese bloque queda sin práctica.</p>',
+      ].join('\n'),
+    });
+  }
+
+  // Solicitudes de inscripción online: código de un solo uso para verificar
+  // la propiedad del correo antes de permitir subir documentos.
+  async sendVerificationCodeEmail(params: VerificationCodeEmailParams): Promise<void> {
+    const { to, code, expiresInMinutes } = params;
+
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to,
+      subject: 'Tu código de verificación de ColoradosDrive',
+      text: [
+        `Tu código de verificación es: ${code}`,
+        '',
+        `Vence en ${String(expiresInMinutes)} minutos. Si no lo solicitaste, ignora este correo.`,
+      ].join('\n'),
+      html: [
+        `<p>Tu código de verificación es: <strong>${code}</strong></p>`,
+        `<p>Vence en ${String(expiresInMinutes)} minutos. Si no lo solicitaste, ignora este correo.</p>`,
+      ].join('\n'),
+    });
+  }
+
+  // Se envía cuando el admin aprueba una solicitud y se crea la cuenta. La
+  // contraseña es temporal: el sistema obliga a cambiarla en el primer uso.
+  async sendApplicationApprovedEmail(params: WelcomeEmailParams): Promise<void> {
+    const { to, temporaryPassword } = params;
+    const nombre = escapeHtml(params.nombreCompleto);
+
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to,
+      subject: 'Tu solicitud de inscripción fue aprobada',
+      text: [
+        `Hola ${params.nombreCompleto},`,
+        '',
+        'Tu solicitud de inscripción en ColoradosDrive fue aprobada. Estos son tus datos de acceso:',
+        '',
+        `Correo: ${to}`,
+        `Contraseña temporal: ${temporaryPassword}`,
+        '',
+        'Deberás cambiar esta contraseña la primera vez que ingreses a la plataforma.',
+      ].join('\n'),
+      html: [
+        `<p>Hola ${nombre},</p>`,
+        '<p>Tu solicitud de inscripción en ColoradosDrive fue aprobada. Estos son tus datos de acceso:</p>',
+        `<p>Correo: ${escapeHtml(to)}<br>Contraseña temporal: <strong>${temporaryPassword}</strong></p>`,
+        '<p>Deberás cambiar esta contraseña la primera vez que ingreses a la plataforma.</p>',
       ].join('\n'),
     });
   }
