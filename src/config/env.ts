@@ -22,11 +22,16 @@ export const env = {
   SUPABASE_URL: requireEnv('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
-  SMTP_HOST: requireEnv('SMTP_HOST'),
-  SMTP_PORT: Number(requireEnv('SMTP_PORT')),
-  SMTP_USER: requireEnv('SMTP_USER'),
-  SMTP_PASSWORD: requireEnv('SMTP_PASSWORD'),
-  SMTP_FROM: requireEnv('SMTP_FROM'),
+  EMAIL_USER: requireEnv('EMAIL_USER'),
+  EMAIL_APP_PASSWORD: requireEnv('EMAIL_APP_PASSWORD'),
+  // Gmail reescribe el remitente a la cuenta autenticada, así que el
+  // "from" es siempre EMAIL_USER.
+  EMAIL_FROM: requireEnv('EMAIL_USER'),
+  SOLICITUD_TOKEN_SECRET: requireEnv('SOLICITUD_TOKEN_SECRET'),
 };
+
+if (env.SOLICITUD_TOKEN_SECRET.length < 32) {
+  throw new Error('SOLICITUD_TOKEN_SECRET must be at least 32 characters long');
+}
 
 export const isProduction = env.NODE_ENV === 'production';

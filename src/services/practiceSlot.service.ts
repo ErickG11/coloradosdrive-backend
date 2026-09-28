@@ -5,10 +5,17 @@ import type {
   CreatePracticeSlotInput,
   PracticeSlot,
   PracticeSlotStatus,
+  PracticeSlotWithColor,
   PracticeSlotWithNames,
   UpdatePracticeSlotInput,
 } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
+import { computeColorSemana } from '../utils/colorSemana';
+
+// colorSemana solo tiene sentido para franjas con estudiante asignado
+// dentro de su ciclo activo; el resto siempre es 'verde' (ver
+// models/practiceSlot.model.ts).
+const ESTADOS_CON_COLOR_POR_RANGO: PracticeSlotStatus[] = ['asignado', 'confirmado'];
 
 type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
 
@@ -93,7 +100,7 @@ export class PracticeSlotService {
     return toPracticeSlot(data);
   }
 
-  async listSlotsForAdmin(filters: AdminSlotFilters): Promise<PracticeSlotWithNames[]> {
+  async listSlotsForAdmin(filters: AdminSlotFilters): Promise<PracticeSlotWithColor[]> {
     let query = this.supabase
       .from('practice_slots')
       .select(SELECT_WITH_NAMES)
@@ -120,7 +127,73 @@ export class PracticeSlotService {
       throw error;
     }
 
-    return data.map(toPracticeSlotWithNames);
+    return this.attachColorSemana(data.map(toPracticeSlotWithNames));
+  }
+
+  // colorSemana se calcula al vuelo (nunca se guarda) a partir del rango
+  // completo de franjas asignadas/confirmadas del propio estudiante EN
+  // ESTA COHORTE - no hay una tabla de "curso"/"programa" que agrupe esto
+  // explícitamente, así que se infiere directamente de las filas de
+  // practice_slots (student_id + cohort_id), no de una nueva consulta a
+  // enrollments.
+  private async attachColorSemana(
+    slots: PracticeSlotWithNames[],
+  ): Promise<PracticeSlotWithColor[]> {
+    const pares = new Set<string>();
+    for (const s of slots) {
+      if (ESTADOS_CON_COLOR_POR_RANGO.includes(s.status) && s.studentId) {
+        pares.add(`${s.studentId}:${s.cohortId}`);
+      }
+    }
+    if (pares.size === 0) {
+      return slots.map((slot) => ({ ...slot, colorSemana: 'verde' }));
+    }
+
+    const studentIds = [...new Set([...pares].map((p) => p.split(':')[0]))];
+    const { data, error } = await this.supabase
+      .from('practice_slots')
+      .select('student_id, cohort_id, scheduled_at')
+      .in('student_id', studentIds)
+      .in('status', ESTADOS_CON_COLOR_POR_RANGO);
+    if (error) {
+      throw error;
+    }
+
+    const rangos = new Map<string, { min: Date; max: Date }>();
+    for (const row of data) {
+      // status IN (asignado, confirmado) implica student_id NOT NULL
+      // (practice_slots_student_status_consistency, migración 005) -
+      // se descarta explícitamente en vez de asertar el tipo.
+      if (row.student_id === null) {
+        continue;
+      }
+      const clave = `${row.student_id}:${row.cohort_id}`;
+      if (!pares.has(clave)) {
+        continue;
+      }
+      const fecha = new Date(row.scheduled_at);
+      const actual = rangos.get(clave);
+      if (!actual) {
+        rangos.set(clave, { min: fecha, max: fecha });
+      } else {
+        if (fecha < actual.min) actual.min = fecha;
+        if (fecha > actual.max) actual.max = fecha;
+      }
+    }
+
+    return slots.map((slot) => {
+      if (!ESTADOS_CON_COLOR_POR_RANGO.includes(slot.status) || !slot.studentId) {
+        return { ...slot, colorSemana: 'verde' };
+      }
+      const rango = rangos.get(`${slot.studentId}:${slot.cohortId}`);
+      if (!rango) {
+        return { ...slot, colorSemana: 'verde' };
+      }
+      return {
+        ...slot,
+        colorSemana: computeColorSemana(new Date(slot.scheduledAt), rango.min, rango.max),
+      };
+    });
   }
 
   // RF-03: el estudiante ve las franjas disponibles de su propia cohorte

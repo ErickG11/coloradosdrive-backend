@@ -10,6 +10,10 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  // Railway termina TLS en un proxy: sin esto req.ip sería siempre el del
+  // proxy y el rate limit por IP (routes/solicitud.routes.ts) limitaría a
+  // todos los usuarios juntos.
+  app.set('trust proxy', 1);
   app.use(helmet());
   app.use(
     cors({

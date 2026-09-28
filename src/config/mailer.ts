@@ -2,15 +2,15 @@ import nodemailer from 'nodemailer';
 
 import { env } from './env';
 
-// Transporte SMTP genérico (no atado a ningún SDK propietario). En este
-// proyecto apunta a Resend vía SMTP, pero funciona igual con cualquier
-// proveedor SMTP estándar.
+// Gmail SMTP con contraseña de aplicación (requiere verificación en 2
+// pasos en la cuenta; ver EMAIL_APP_PASSWORD en .env.example). Nodemailer
+// sigue siendo el transporte: cambiar de proveedor solo toca este archivo.
 export const mailer = nodemailer.createTransport({
-  host: env.SMTP_HOST,
-  port: env.SMTP_PORT,
-  secure: env.SMTP_PORT === 465,
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
   auth: {
-    user: env.SMTP_USER,
-    pass: env.SMTP_PASSWORD,
+    user: env.EMAIL_USER,
+    pass: env.EMAIL_APP_PASSWORD,
   },
 });

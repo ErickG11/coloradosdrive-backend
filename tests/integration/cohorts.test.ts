@@ -24,8 +24,10 @@ const validCohortBody = {
   nombre: 'Cohorte Marzo 2026',
   precio: 150,
   cupoMaximo: 20,
-  fechaInicio: '2026-03-01',
-  fechaFin: '2026-06-01',
+  fechaInicioMatricula: '2026-02-01',
+  fechaFinMatricula: '2026-02-25',
+  fechaInicioCurso: '2026-03-01',
+  fechaFinCurso: '2026-06-01',
 };
 
 describe('cohorts endpoints', () => {
@@ -43,6 +45,9 @@ describe('cohorts endpoints', () => {
     });
 
     it('POST /cohorts con rol no-admin responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .post('/cohorts')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
@@ -58,6 +63,9 @@ describe('cohorts endpoints', () => {
     });
 
     it('PATCH /cohorts/:id con rol no-admin responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .patch('/cohorts/11111111-1111-4111-8111-111111111111')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
@@ -95,8 +103,14 @@ describe('cohorts endpoints', () => {
         nombre: validCohortBody.nombre,
         precio: '150.00',
         cupo_maximo: validCohortBody.cupoMaximo,
-        fecha_inicio: validCohortBody.fechaInicio,
-        fecha_fin: validCohortBody.fechaFin,
+        fecha_inicio_matricula: validCohortBody.fechaInicioMatricula,
+        fecha_fin_matricula: validCohortBody.fechaFinMatricula,
+        fecha_inicio_curso: validCohortBody.fechaInicioCurso,
+        fecha_fin_curso: validCohortBody.fechaFinCurso,
+        tipo_modalidad: null,
+        horarios_capacitacion_teoria: null,
+        numero_vehiculos: null,
+        numero_aulas: null,
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
       };

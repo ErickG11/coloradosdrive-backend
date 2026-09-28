@@ -1,7 +1,7 @@
-// Tipos manuales del esquema public, reflejando migrations/001_init.sql y
-// 002_enrollments_monto.sql. Se pasan a createClient<Database>() para que
-// el cliente de Supabase tipe correctamente cada query (sin esto, cada
-// columna resuelve a `any`).
+// Tipos manuales del esquema public, reflejando migrations/001_init.sql,
+// 002_enrollments_monto.sql y 006_matricula_v2_schema.sql. Se pasan a
+// createClient<Database>() para que el cliente de Supabase tipe
+// correctamente cada query (sin esto, cada columna resuelve a `any`).
 //
 // `Relationships: []` es obligatorio en cada tabla (lo exige el tipo
 // GenericTable de @supabase/postgrest-js); queda vacío en todas salvo en
@@ -10,8 +10,19 @@
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
+export type StudentStatus =
+  | 'pendiente_verificacion'
+  | 'verificado'
+  | 'pagado_esperando_cohorte'
+  | 'activo'
+  | 'rechazado'
+  | 'expirado';
+export type SolicitudEstado = 'pendiente_revision' | 'aprobada' | 'rechazada';
+export type SolicitudTipoDocumento =
+  'cedula' | 'papeleta_votacion' | 'tipo_sangre' | 'titulo_bachiller';
+export type SolicitudDocumentoEstado = 'recibido' | 'aprobado' | 'rechazado';
 export type CourseType = 'A' | 'B';
-export type EnrollmentStatus = 'activo' | 'finalizado' | 'retirado';
+export type EnrollmentStatus = 'activo' | 'finalizado' | 'retirado' | 'pendiente_cohorte';
 export type ExamType = 'practica' | 'definitivo';
 export type QuestionType = 'opcion_multiple' | 'texto_abierto';
 export type AttemptStatus = 'en_progreso' | 'completado';
@@ -30,6 +41,8 @@ export interface Database {
           nombre_completo: string;
           telefono: string | null;
           rol: UserRole;
+          status: StudentStatus | null;
+          debe_cambiar_password: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -39,12 +52,16 @@ export interface Database {
           nombre_completo: string;
           telefono?: string | null;
           rol: UserRole;
+          status?: StudentStatus | null;
+          debe_cambiar_password?: boolean;
         };
         Update: Partial<{
           cedula: string;
           nombre_completo: string;
           telefono: string | null;
           rol: UserRole;
+          status: StudentStatus | null;
+          debe_cambiar_password: boolean;
         }>;
         Relationships: [];
       };
@@ -54,6 +71,7 @@ export interface Database {
           nombre: string;
           tipo: CourseType;
           descripcion: string | null;
+          horas_requeridas: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -62,11 +80,13 @@ export interface Database {
           nombre: string;
           tipo: CourseType;
           descripcion?: string | null;
+          horas_requeridas?: number | null;
         };
         Update: Partial<{
           nombre: string;
           tipo: CourseType;
           descripcion: string | null;
+          horas_requeridas: number | null;
         }>;
         Relationships: [];
       };
@@ -77,8 +97,14 @@ export interface Database {
           nombre: string;
           precio: string;
           cupo_maximo: number;
-          fecha_inicio: string;
-          fecha_fin: string;
+          fecha_inicio_matricula: string;
+          fecha_fin_matricula: string;
+          fecha_inicio_curso: string;
+          fecha_fin_curso: string;
+          tipo_modalidad: string | null;
+          horarios_capacitacion_teoria: string | null;
+          numero_vehiculos: number | null;
+          numero_aulas: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -88,16 +114,28 @@ export interface Database {
           nombre: string;
           precio: number;
           cupo_maximo: number;
-          fecha_inicio: string;
-          fecha_fin: string;
+          fecha_inicio_matricula: string;
+          fecha_fin_matricula: string;
+          fecha_inicio_curso: string;
+          fecha_fin_curso: string;
+          tipo_modalidad?: string | null;
+          horarios_capacitacion_teoria?: string | null;
+          numero_vehiculos?: number | null;
+          numero_aulas?: number | null;
         };
         Update: Partial<{
           course_id: string;
           nombre: string;
           precio: number;
           cupo_maximo: number;
-          fecha_inicio: string;
-          fecha_fin: string;
+          fecha_inicio_matricula: string;
+          fecha_fin_matricula: string;
+          fecha_inicio_curso: string;
+          fecha_fin_curso: string;
+          tipo_modalidad: string | null;
+          horarios_capacitacion_teoria: string | null;
+          numero_vehiculos: number | null;
+          numero_aulas: number | null;
         }>;
         Relationships: [];
       };
@@ -105,9 +143,10 @@ export interface Database {
         Row: {
           id: string;
           student_id: string;
-          cohort_id: string;
+          cohort_id: string | null;
           status: EnrollmentStatus;
-          monto_total: string;
+          monto_total: string | null;
+          horas_practica_objetivo: number | null;
           fecha_inscripcion: string;
           created_at: string;
           updated_at: string;
@@ -115,12 +154,16 @@ export interface Database {
         Insert: {
           id?: string;
           student_id: string;
-          cohort_id: string;
+          cohort_id: string | null;
           status?: EnrollmentStatus;
-          monto_total: number;
+          monto_total: number | null;
+          horas_practica_objetivo?: number | null;
         };
         Update: Partial<{
+          cohort_id: string | null;
           status: EnrollmentStatus;
+          monto_total: number | null;
+          horas_practica_objetivo: number | null;
         }>;
         Relationships: [];
       };
@@ -322,6 +365,87 @@ export interface Database {
             referencedColumns: ['id'];
           },
         ];
+      };
+      solicitudes_inscripcion: {
+        Row: {
+          id: string;
+          course_id: string;
+          cedula: string | null;
+          nombre_completo: string | null;
+          telefono: string | null;
+          correo: string;
+          fecha_nacimiento: string | null;
+          correo_verificado: boolean;
+          codigo_verificacion: string | null;
+          codigo_expira_at: string | null;
+          intentos_codigo: number;
+          estado: SolicitudEstado;
+          motivo_rechazo: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          student_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          course_id: string;
+          cedula?: string | null;
+          nombre_completo?: string | null;
+          telefono?: string | null;
+          correo: string;
+          fecha_nacimiento?: string | null;
+          correo_verificado?: boolean;
+          codigo_verificacion?: string | null;
+          codigo_expira_at?: string | null;
+          intentos_codigo?: number;
+          estado?: SolicitudEstado;
+        };
+        Update: Partial<{
+          course_id: string;
+          cedula: string | null;
+          nombre_completo: string | null;
+          telefono: string | null;
+          correo: string;
+          fecha_nacimiento: string | null;
+          correo_verificado: boolean;
+          codigo_verificacion: string | null;
+          codigo_expira_at: string | null;
+          intentos_codigo: number;
+          estado: SolicitudEstado;
+          motivo_rechazo: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          student_id: string | null;
+          created_at: string;
+        }>;
+        Relationships: [];
+      };
+      solicitud_documentos: {
+        Row: {
+          id: string;
+          solicitud_id: string;
+          tipo_documento: SolicitudTipoDocumento;
+          storage_path: string;
+          estado: SolicitudDocumentoEstado;
+          motivo_rechazo: string | null;
+          uploaded_at: string;
+          reviewed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          solicitud_id: string;
+          tipo_documento: SolicitudTipoDocumento;
+          storage_path: string;
+          estado?: SolicitudDocumentoEstado;
+        };
+        Update: Partial<{
+          storage_path: string;
+          estado: SolicitudDocumentoEstado;
+          motivo_rechazo: string | null;
+          uploaded_at: string;
+          reviewed_at: string | null;
+        }>;
+        Relationships: [];
       };
     };
   };

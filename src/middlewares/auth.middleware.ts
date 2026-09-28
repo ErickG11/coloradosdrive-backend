@@ -2,8 +2,41 @@ import type { NextFunction, Request, Response } from 'express';
 import type { JWTPayload } from 'jose';
 
 import { verifySupabaseJwt } from '../config/jwks';
+import { supabaseAdmin } from '../config/supabase';
 import { isRole, type AuthenticatedUser } from '../models/user.model';
 import { AppError } from '../utils/AppError';
+
+// Única ruta que un estudiante con debe_cambiar_password=true puede seguir
+// usando; cualquier otra ruta de estudiante queda bloqueada por
+// assertPasswordNotPendingChange. Se compara contra baseUrl+path (no solo
+// path) para que el chequeo sea correcto sin importar bajo qué router se
+// esté ejecutando authenticate.
+const CHANGE_PASSWORD_PATH = '/estudiantes/cambiar-password';
+
+// Solo aplica a rol='estudiante' (ver toAuthenticatedUser): admin/instructor
+// nunca disparan esta consulta. debe_cambiar_password no viaja en el JWT
+// (vive en public.users, no en los claims de Supabase Auth), así que hace
+// falta una consulta por request de estudiante.
+async function assertPasswordNotPendingChange(req: Request, studentId: string): Promise<void> {
+  const isChangePasswordRequest =
+    req.method === 'POST' && `${req.baseUrl}${req.path}` === CHANGE_PASSWORD_PATH;
+  if (isChangePasswordRequest) {
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('debe_cambiar_password')
+    .eq('id', studentId)
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError('No se pudo verificar el estado de la cuenta', 500);
+  }
+  if (data?.debe_cambiar_password) {
+    throw new AppError('Debes cambiar tu contraseña temporal antes de continuar', 403);
+  }
+}
 
 function extractBearerToken(header: string | undefined): string | null {
   if (!header) {
@@ -60,7 +93,13 @@ export async function authenticate(
     }
 
     const payload = await verifySupabaseJwt(token);
-    req.user = toAuthenticatedUser(payload);
+    const user = toAuthenticatedUser(payload);
+
+    if (user.role === 'estudiante') {
+      await assertPasswordNotPendingChange(req, user.id);
+    }
+
+    req.user = user;
     next();
   } catch (err) {
     if (err instanceof AppError) {
