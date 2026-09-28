@@ -29,4 +29,25 @@ export class UserService {
 
     return data.map(toUserSummary);
   }
+
+  // Cambio de contraseña forzado (ver auth.middleware.ts): actualiza la
+  // contraseña real en Supabase Auth y libera el flag debe_cambiar_password
+  // para que el middleware deje de bloquear al estudiante.
+  async changeOwnPassword(studentId: string, newPassword: string): Promise<void> {
+    const { error: authError } = await this.supabase.auth.admin.updateUserById(studentId, {
+      password: newPassword,
+    });
+    if (authError) {
+      throw authError;
+    }
+
+    const { error } = await this.supabase
+      .from('users')
+      .update({ debe_cambiar_password: false })
+      .eq('id', studentId);
+
+    if (error) {
+      throw error;
+    }
+  }
 }

@@ -30,3 +30,8 @@ export interface UserSummary {
   id: string;
   nombreCompleto: string;
 }
+
+// Body de POST /estudiantes/cambiar-password.
+export interface ChangePasswordInput {
+  nuevaPassword: string;
+}
