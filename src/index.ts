@@ -1,6 +1,7 @@
 import { createApp } from './app';
 import { env } from './config/env';
 import { startPracticeSlotCron } from './jobs/practiceSlotCron';
+import { startSolicitudCleanupCron } from './jobs/solicitudCleanupCron';
 
 const app = createApp();
 
@@ -9,3 +10,4 @@ app.listen(env.PORT, () => {
 });
 
 startPracticeSlotCron();
+startSolicitudCleanupCron();
