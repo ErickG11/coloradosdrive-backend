@@ -77,12 +77,15 @@ describe('practice-slots endpoints', () => {
     });
 
     it('POST con rol estudiante responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .post('/practice-slots')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send(validCreateBody);
       expect(res.status).toBe(403);
-      expect(mockedFrom).not.toHaveBeenCalled();
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
     });
 
     it('PATCH con rol instructor responde 403', async () => {
@@ -94,6 +97,9 @@ describe('practice-slots endpoints', () => {
     });
 
     it('DELETE con rol estudiante responde 403', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { debe_cambiar_password: false }, error: null }),
+      );
       const res = await request(app)
         .delete(`/practice-slots/${slotId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
@@ -309,7 +315,9 @@ describe('practice-slots endpoints', () => {
     });
 
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }));
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
 
       const res = await request(app)
         .get('/practice-slots')
@@ -333,6 +341,7 @@ describe('practice-slots endpoints', () => {
         error: null,
       });
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: { cohort_id: cohortId }, error: null }))
         .mockReturnValueOnce(chain);
 
@@ -363,6 +372,7 @@ describe('practice-slots endpoints', () => {
       });
       const chain = createChain({ data: [releasedByStudentA], error: null });
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: { cohort_id: cohortId }, error: null }))
         .mockReturnValueOnce(chain);
 

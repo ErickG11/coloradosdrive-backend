@@ -40,12 +40,19 @@ describe('GET /users', () => {
     it.each(['estudiante', 'instructor'] as const)(
       'con rol no-admin (%s) responde 403, sin importar qué rol se consulte',
       async (callerRole) => {
+        if (callerRole === 'estudiante') {
+          mockedFrom.mockReturnValueOnce(
+            createChain({ data: { debe_cambiar_password: false }, error: null }),
+          );
+        }
         const res = await request(app)
           .get('/users')
           .query({ rol: 'instructor' })
           .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, callerRole)}`);
         expect(res.status).toBe(403);
-        expect(mockedFrom).not.toHaveBeenCalled();
+        // estudiante dispara la consulta de debe_cambiar_password en
+        // auth.middleware.ts antes de llegar a RBAC; instructor no.
+        expect(mockedFrom).toHaveBeenCalledTimes(callerRole === 'estudiante' ? 1 : 0);
       },
     );
   });

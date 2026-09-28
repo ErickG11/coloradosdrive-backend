@@ -19,6 +19,9 @@ export interface SupabaseChainMock {
   or: jest.Mock;
   is: jest.Mock;
   lte: jest.Mock;
+  lt: jest.Mock;
+  neq: jest.Mock;
+  not: jest.Mock;
   gt: jest.Mock;
   order: jest.Mock;
   overrideTypes: jest.Mock;
@@ -42,6 +45,9 @@ export function createChain(result: ChainResult): SupabaseChainMock {
   chain.or = jest.fn().mockReturnValue(chain);
   chain.is = jest.fn().mockReturnValue(chain);
   chain.lte = jest.fn().mockReturnValue(chain);
+  chain.lt = jest.fn().mockReturnValue(chain);
+  chain.neq = jest.fn().mockReturnValue(chain);
+  chain.not = jest.fn().mockReturnValue(chain);
   chain.gt = jest.fn().mockReturnValue(chain);
   chain.order = jest.fn().mockReturnValue(chain);
   // No-op en el mock (solo re-tipa en tiempo de compilación, no cambia

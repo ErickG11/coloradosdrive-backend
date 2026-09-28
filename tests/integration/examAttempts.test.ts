@@ -140,9 +140,11 @@ describe('exam attempts endpoints', () => {
 
   describe('POST /exams/:id/attempts (estudiante)', () => {
     it('responde 404 si el examen no está publicado', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: buildExamRow({ is_published: false }), error: null }),
-      );
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(
+          createChain({ data: buildExamRow({ is_published: false }), error: null }),
+        );
 
       const res = await request(app)
         .post(`/exams/${examId}/attempts`)
@@ -153,6 +155,7 @@ describe('exam attempts endpoints', () => {
 
     it('responde 403 si el estudiante no tiene inscripción activa en el curso del examen', async () => {
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(createChain({ data: null, error: null })); // sin enrollment activo
 
@@ -167,6 +170,7 @@ describe('exam attempts endpoints', () => {
       const attemptRow = buildAttemptRow();
 
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
         .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
@@ -213,6 +217,7 @@ describe('exam attempts endpoints', () => {
         // agregara ese chequeo para práctica por error, esta prueba
         // fallaría porque sobraría un mock sin usar o faltaría uno.
         mockedFrom
+          .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'practica' }), error: null }),
           ) // exam
@@ -231,11 +236,12 @@ describe('exam attempts endpoints', () => {
 
         expect(res.status).toBe(201);
         expect(res.body.attemptId).toBe('attempt-2');
-        expect(mockedFrom).toHaveBeenCalledTimes(7);
+        expect(mockedFrom).toHaveBeenCalledTimes(8);
       });
 
       it('definitivo: permite el primer intento cuando no hay ninguno previo', async () => {
         mockedFrom
+          .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
           ) // exam
@@ -261,6 +267,7 @@ describe('exam attempts endpoints', () => {
         // nuevo. Por eso no hace falta un test separado por cada valor de
         // `passed`: el código no lo consulta para esta regla.
         mockedFrom
+          .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
           ) // exam
@@ -276,7 +283,7 @@ describe('exam attempts endpoints', () => {
         expect(res.status).toBe(409);
         expect(res.body.message).toMatch(/único intento permitido/);
         // No se llega a insertar un intento nuevo.
-        expect(mockedFrom).toHaveBeenCalledTimes(5);
+        expect(mockedFrom).toHaveBeenCalledTimes(6);
       });
     });
   });
@@ -295,6 +302,7 @@ describe('exam attempts endpoints', () => {
       });
 
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: expiredAttemptRow, error: null })) // getOwnAttemptOrThrow
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
@@ -318,7 +326,7 @@ describe('exam attempts endpoints', () => {
       );
       // Nunca se inserta en attempt_answers una respuesta tardía: solo se
       // consultan (select) las que ya existían antes de expirar.
-      expect(mockedFrom).toHaveBeenCalledTimes(6);
+      expect(mockedFrom).toHaveBeenCalledTimes(7);
     });
 
     it('una pregunta no respondida cuenta como incorrecta (envío normal, no expirado)', async () => {
@@ -335,6 +343,7 @@ describe('exam attempts endpoints', () => {
       };
 
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: inProgressAttemptRow, error: null })) // getOwnAttemptOrThrow
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(
@@ -375,6 +384,7 @@ describe('exam attempts endpoints', () => {
       };
 
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: inProgressAttemptRow, error: null })) // getOwnAttemptOrThrow
         .mockReturnValueOnce(createChain({ data: definitivoExam, error: null })) // exam
         .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
@@ -413,6 +423,7 @@ describe('exam attempts endpoints', () => {
       };
 
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: inProgressAttemptRow, error: null }))
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // practica
         .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null }))
@@ -497,6 +508,7 @@ describe('exam attempts endpoints', () => {
       const chainAQuestions = createChain({ data: examQuestions, error: null });
       const chainAAnswers = createChain({ data: answersForA, error: null });
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(chainA)
         .mockReturnValueOnce(chainAQuestions)
         .mockReturnValueOnce(chainAAnswers);
@@ -537,6 +549,7 @@ describe('exam attempts endpoints', () => {
       const chainBQuestions = createChain({ data: examQuestions, error: null });
       const chainBAnswers = createChain({ data: answersForB, error: null });
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(chainB)
         .mockReturnValueOnce(chainBQuestions)
         .mockReturnValueOnce(chainBAnswers);
