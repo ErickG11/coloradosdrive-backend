@@ -4,8 +4,14 @@ export interface Cohort {
   nombre: string;
   precio: number;
   cupoMaximo: number;
-  fechaInicio: string;
-  fechaFin: string;
+  fechaInicioMatricula: string;
+  fechaFinMatricula: string;
+  fechaInicioCurso: string;
+  fechaFinCurso: string;
+  tipoModalidad: string | null;
+  horariosCapacitacionTeoria: string | null;
+  numeroVehiculos: number | null;
+  numeroAulas: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -15,8 +21,14 @@ export interface CreateCohortInput {
   nombre: string;
   precio: number;
   cupoMaximo: number;
-  fechaInicio: string;
-  fechaFin: string;
+  fechaInicioMatricula: string;
+  fechaFinMatricula: string;
+  fechaInicioCurso: string;
+  fechaFinCurso: string;
+  tipoModalidad?: string | null;
+  horariosCapacitacionTeoria?: string | null;
+  numeroVehiculos?: number | null;
+  numeroAulas?: number | null;
 }
 
 export type UpdateCohortInput = Partial<CreateCohortInput>;

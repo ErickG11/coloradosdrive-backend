@@ -20,8 +20,14 @@ const cohortRow = {
   nombre: 'Cohorte Marzo',
   precio: '150.00',
   cupo_maximo: 20,
-  fecha_inicio: '2026-03-01',
-  fecha_fin: '2026-06-01',
+  fecha_inicio_matricula: '2026-02-01',
+  fecha_fin_matricula: '2026-02-25',
+  fecha_inicio_curso: '2026-03-01',
+  fecha_fin_curso: '2026-06-01',
+  tipo_modalidad: null,
+  horarios_capacitacion_teoria: null,
+  numero_vehiculos: null,
+  numero_aulas: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 };
@@ -102,6 +108,41 @@ describe('EnrollmentService.enrollStudent', () => {
     await expect(service.enrollStudent(validInput)).rejects.toMatchObject({
       statusCode: 409,
       message: 'El estudiante ya está activo en otra cohorte',
+    });
+    expect(deleteUser).toHaveBeenCalledWith(studentId);
+    expect(sendWelcomeEmail).not.toHaveBeenCalled();
+  });
+
+  it('rechaza con 409 y compensa si la cohorte ya alcanzó su cupo máximo (enforce_cohort_cupo)', async () => {
+    const studentId = 'new-student-id';
+    const { supabase, createUser, deleteUser } = buildSupabaseMock([
+      { data: cohortRow, error: null }, // getCohortOrThrow
+      { data: null, error: null }, // assertCedulaAvailable: libre
+      {
+        data: {
+          id: studentId,
+          cedula: validInput.cedula,
+          nombre_completo: validInput.nombreCompleto,
+          telefono: validInput.telefono,
+          rol: 'estudiante',
+          created_at: '2026-01-02T00:00:00Z',
+          updated_at: '2026-01-02T00:00:00Z',
+        },
+        error: null,
+      }, // createUserRow
+      {
+        data: null,
+        error: { code: 'CD001', message: 'La cohorte ya alcanzó su cupo máximo (20)' },
+      }, // createEnrollmentRow: trigger enforce_cohort_cupo
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService, sendWelcomeEmail } = buildEmailService();
+    const service = new EnrollmentService(supabase, emailService);
+
+    await expect(service.enrollStudent(validInput)).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'La cohorte ya alcanzó su cupo máximo',
     });
     expect(deleteUser).toHaveBeenCalledWith(studentId);
     expect(sendWelcomeEmail).not.toHaveBeenCalled();

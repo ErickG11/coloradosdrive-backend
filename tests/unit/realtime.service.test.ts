@@ -29,7 +29,9 @@ describe('RealtimeService.broadcast', () => {
 
     await service.broadcast('cohort-1-practice-slots', 'slot-released', { slotId: 'slot-1' });
 
-    expect(channelFn).toHaveBeenCalledWith('cohort-1-practice-slots');
+    expect(channelFn).toHaveBeenCalledWith('cohort-1-practice-slots', {
+      config: { private: true },
+    });
     expect(httpSend).toHaveBeenCalledWith('slot-released', { slotId: 'slot-1' });
     expect(removeChannel).toHaveBeenCalledWith(channel);
   });
