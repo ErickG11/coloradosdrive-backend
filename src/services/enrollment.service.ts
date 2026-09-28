@@ -6,6 +6,7 @@ import type { Database } from '../config/database.types';
 import type { CreateEnrollmentInput, Enrollment } from '../models/enrollment.model';
 import type { UserProfile } from '../models/user.model';
 import { AppError } from '../utils/AppError';
+import { isCupoExceededError } from './cohortAssignment.service';
 import type { EmailService } from './email.service';
 
 type CohortRow = Database['public']['Tables']['cohorts']['Row'];
@@ -21,7 +22,7 @@ function toEnrollment(row: EnrollmentRow): Enrollment {
     studentId: row.student_id,
     cohortId: row.cohort_id,
     status: row.status,
-    montoTotal: Number(row.monto_total),
+    montoTotal: row.monto_total === null ? null : Number(row.monto_total),
     fechaInscripcion: row.fecha_inscripcion,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -163,7 +164,10 @@ export class EnrollmentService {
       .single();
 
     if (error) {
-      throw this.translateUniqueViolation(error, 'El estudiante ya está activo en otra cohorte');
+      throw this.translateEnrollmentInsertError(
+        error,
+        'El estudiante ya está activo en otra cohorte',
+      );
     }
 
     return data;
@@ -172,6 +176,16 @@ export class EnrollmentService {
   private translateUniqueViolation(error: PostgrestError, message: string): Error {
     if (error.code === POSTGRES_UNIQUE_VIOLATION) {
       return new AppError(message, 409);
+    }
+    return error;
+  }
+
+  private translateEnrollmentInsertError(error: PostgrestError, uniqueMessage: string): Error {
+    if (error.code === POSTGRES_UNIQUE_VIOLATION) {
+      return new AppError(uniqueMessage, 409);
+    }
+    if (isCupoExceededError(error)) {
+      return new AppError('La cohorte ya alcanzó su cupo máximo', 409);
     }
     return error;
   }
