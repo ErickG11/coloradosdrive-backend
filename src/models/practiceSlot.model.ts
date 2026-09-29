@@ -58,7 +58,7 @@ export interface CreatePracticeSlotInput {
   cohortId: string;
   instructorId: string;
   scheduledAt: string;
-  durationMinutes: number;
+  durationMinutes?: 60;
 }
 
 // Solo los datos de programación de la franja - nunca studentId ni
@@ -69,7 +69,7 @@ export interface CreatePracticeSlotInput {
 export type UpdatePracticeSlotInput = Partial<{
   instructorId: string;
   scheduledAt: string;
-  durationMinutes: number;
+  durationMinutes: 60;
 }>;
 
 export interface SubmitAttendanceInput {

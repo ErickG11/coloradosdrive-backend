@@ -28,7 +28,7 @@ const validCreateBody = {
   cohortId,
   instructorId,
   scheduledAt: '2026-03-01T10:00:00Z',
-  durationMinutes: 45,
+  durationMinutes: 60,
 };
 
 function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
@@ -38,7 +38,7 @@ function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
     instructor_id: instructorId,
     student_id: null,
     scheduled_at: validCreateBody.scheduledAt,
-    duration_minutes: 45,
+    duration_minutes: 60,
     status: 'disponible',
     confirmation_notified_at: null,
     release_notified_at: null,
@@ -469,4 +469,52 @@ describe('practice-slots endpoints', () => {
       expect(res.status).toBe(204);
     });
   });
+
+  it.each([45, 90, 0, null, '60'])('POST rechaza duración %s antes de consultar datos', async (duration) => {
+    const res = await request(app).post('/practice-slots')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ ...validCreateBody, durationMinutes: duration });
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('PATCH rechaza una duración distinta de 60', async () => {
+    const res = await request(app).patch(`/practice-slots/${slotId}`)
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ durationMinutes: 45 });
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('POST sin duración conserva el contrato y escribe 60 minutos efectivos', async () => {
+    const insert = createChain({ data: buildSlotRow(), error: null });
+    mockedFrom.mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
+      .mockReturnValueOnce(createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }))
+      .mockReturnValueOnce(insert);
+    const { durationMinutes: _duration, ...withoutDuration } = validCreateBody;
+    const res = await request(app).post('/practice-slots')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(withoutDuration);
+    expect(res.status).toBe(201);
+    expect(insert.insert).toHaveBeenCalledWith(expect.objectContaining({ duration_minutes: 60 }));
+  });
+
+  it.each(['POST', 'PATCH'])('%s traduce solapamientos de PostgreSQL a HTTP 409', async (method) => {
+    if (method === 'POST') {
+      mockedFrom.mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
+        .mockReturnValueOnce(createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }));
+    }
+    mockedFrom.mockReturnValueOnce(createChain({
+      data: null, error: { code: '23P01', message: 'constraint conflict', details: 'identificadores privados' },
+    }));
+    const route = method === 'POST' ? request(app).post('/practice-slots')
+      : request(app).patch(`/practice-slots/${slotId}`);
+    const res = await route
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(method === 'POST' ? validCreateBody : { scheduledAt: validCreateBody.scheduledAt });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('El instructor ya tiene una práctica que se solapa con este intervalo');
+    expect(JSON.stringify(res.body)).not.toContain('identificadores privados');
+  });
+
 });

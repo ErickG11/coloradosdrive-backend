@@ -3,12 +3,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import type { PracticeSlot } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
+import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import type { RealtimeService } from './realtime.service';
 
 type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
-
-// RF-03: "la ventana de confirmación cierra 5 minutos antes de la práctica".
-const CONFIRMATION_WINDOW_CLOSE_MINUTES = 5;
 
 function toPracticeSlot(row: PracticeSlotRow): PracticeSlot {
   return {
@@ -38,59 +36,14 @@ export class PracticeSlotActionService {
     private readonly realtimeService: RealtimeService,
   ) {}
 
-  // RF-03: reclamo atómico - el UPDATE trae su propia condición
-  // (status IN ('disponible','liberado')) en vez de comprobar el estado
-  // primero y actualizar después. Así, si dos estudiantes reclaman la
-  // misma franja casi al mismo tiempo, solo el primero encuentra una fila
-  // que matchea; el segundo no actualiza nada y recibe 409 - sin esto,
-  // ambos "ganarían" la condición de carrera.
+  // La RPC bloquea la fila, verifica la matrícula activa en la cohorte y
+  // decide el plazo en el UPDATE con clock_timestamp() de PostgreSQL.
   async claimSlot(slotId: string, studentId: string): Promise<PracticeSlot> {
-    const slotRow = await this.getSlotRowOrThrow(slotId);
-    await this.assertStudentInCohort(studentId, slotRow.cohort_id);
-
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .update({ student_id: studentId, status: 'asignado' })
-      .eq('id', slotId)
-      .in('status', ['disponible', 'liberado'])
-      .select()
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new AppError('Esta franja ya no está disponible', 409);
-    }
-
-    return toPracticeSlot(data);
+    return this.actOnSlot(slotId, studentId, 'claim');
   }
 
   async confirmSlot(slotId: string, studentId: string): Promise<PracticeSlot> {
-    const slotRow = await this.getOwnSlotOrThrow(slotId, studentId);
-    if (slotRow.status !== 'asignado') {
-      throw new AppError('Este turno no está pendiente de confirmación', 409);
-    }
-    if (this.isPastConfirmationWindowClose(slotRow.scheduled_at)) {
-      throw new AppError('La ventana de confirmación ya cerró', 409);
-    }
-
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .update({ status: 'confirmado', confirmed_at: new Date().toISOString() })
-      .eq('id', slotId)
-      .eq('status', 'asignado')
-      .select()
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new AppError('Este turno no está pendiente de confirmación', 409);
-    }
-
-    return toPracticeSlot(data);
+    return this.actOnSlot(slotId, studentId, 'confirm');
   }
 
   // RF-03: cancelar libera el cupo y notifica a la cohorte por Realtime.
@@ -100,35 +53,21 @@ export class PracticeSlotActionService {
   // misma franja después, necesita su propio ciclo de confirmación, no
   // arrastrar el de quien canceló.
   async cancelSlot(slotId: string, studentId: string): Promise<PracticeSlot> {
-    const slotRow = await this.getOwnSlotOrThrow(slotId, studentId);
-    if (slotRow.status !== 'asignado' && slotRow.status !== 'confirmado') {
-      throw new AppError('Este turno no se puede cancelar', 409);
-    }
-
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .update({
-        student_id: null,
-        status: 'liberado',
-        confirmed_at: null,
-        confirmation_notified_at: null,
-        release_notified_at: new Date().toISOString(),
-      })
-      .eq('id', slotId)
-      .in('status', ['asignado', 'confirmado'])
-      .select()
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new AppError('Este turno no se puede cancelar', 409);
-    }
-
-    const released = toPracticeSlot(data);
+    const released = await this.actOnSlot(slotId, studentId, 'cancel');
     await this.notifyCohortSlotReleasedSafely(released);
     return released;
+  }
+
+  private async actOnSlot(
+    slotId: string, studentId: string, action: 'claim' | 'confirm' | 'cancel',
+  ): Promise<PracticeSlot> {
+    const { data, error } = await this.supabase.rpc('act_on_practice_slot', {
+      p_slot_id: slotId, p_student_id: studentId, p_action: action,
+    }).single();
+    if (error) {
+      throwPracticeWriteError(error);
+    }
+    return toPracticeSlot(data);
   }
 
   // Alcance agregado en Sprint 4 (ver docs/adr/007): el instructor
@@ -182,30 +121,6 @@ export class PracticeSlotActionService {
     }
   }
 
-  private isPastConfirmationWindowClose(scheduledAt: string): boolean {
-    const closeAt = new Date(scheduledAt).getTime() - CONFIRMATION_WINDOW_CLOSE_MINUTES * 60_000;
-    return Date.now() > closeAt;
-  }
-
-  // RF-03: "solo los estudiantes de la misma cohorte pueden tomar un
-  // cupo liberado" - se valida contra la inscripción activa, mismo
-  // criterio que ExamAttemptService.assertStudentEnrolledInCourse.
-  private async assertStudentInCohort(studentId: string, cohortId: string): Promise<void> {
-    const { data, error } = await this.supabase
-      .from('enrollments')
-      .select('id')
-      .eq('student_id', studentId)
-      .eq('cohort_id', cohortId)
-      .eq('status', 'activo')
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new AppError('No tienes una inscripción activa en la cohorte de esta franja', 403);
-    }
-  }
-
   private async getSlotRowOrThrow(id: string): Promise<PracticeSlotRow> {
     const { data, error } = await this.supabase
       .from('practice_slots')
@@ -219,13 +134,5 @@ export class PracticeSlotActionService {
       throw new AppError('Franja no encontrada', 404);
     }
     return data;
-  }
-
-  private async getOwnSlotOrThrow(id: string, studentId: string): Promise<PracticeSlotRow> {
-    const row = await this.getSlotRowOrThrow(id);
-    if (row.student_id !== studentId) {
-      throw new AppError('Franja no encontrada', 404);
-    }
-    return row;
   }
 }

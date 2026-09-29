@@ -1,5 +1,5 @@
-import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
-import { DateTime } from 'luxon';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { DateTime } from 'luxon';
 
 import type { Database } from '../config/database.types';
 import type {
@@ -12,24 +12,18 @@ import type {
   SugerirPracticaResult,
 } from '../models/practiceSlotGeneration.model';
 import { AppError } from '../utils/AppError';
+import { effectivePracticeDuration, PRACTICE_DURATION_MINUTES, throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import {
   formatHora,
   parseFechaCivil,
   parseHora,
-  SCHOOL_TIMEZONE,
   toScheduledAtUTC,
 } from '../utils/schoolTimezone';
 import type { HoraDelDia } from '../utils/schoolTimezone';
 
 const WINDOW_START_MINUTES = 6 * 60; // 06:00
 const WINDOW_END_MINUTES = 22 * 60; // 22:00
-const SLOT_DURATION_MINUTES = 60;
-// Estos son los únicos estados que cuentan como "instructor ocupado" — los
-// mismos que cubre el índice único practice_slots_instructor_no_overlap
-// (migración 010). liberado/sin_practica/completado son estados históricos
-// que no bloquean reutilizar ese instructor+hora.
-const OCCUPIED_STATUSES = ['disponible', 'asignado', 'confirmado'] as const;
-const POSTGRES_UNIQUE_VIOLATION = '23505';
+const SLOT_DURATION_MINUTES = PRACTICE_DURATION_MINUTES;
 
 interface SessionPlan {
   fechasCiviles: DateTime[];
@@ -57,18 +51,13 @@ function isDiaQueCuenta(fecha: DateTime, modalidad: Modalidad): boolean {
   return modalidad === 'entre_semana' ? !esFinDeSemana : esFinDeSemana;
 }
 
-function displayFechaHora(iso: string): string {
-  return DateTime.fromISO(iso, { zone: 'utc' })
-    .setZone(SCHOOL_TIMEZONE)
-    .toFormat('yyyy-LL-dd HH:mm');
-}
-
 // Recibe el cliente de Supabase por constructor para poder mockearlo en
 // tests (mismo patrón que el resto de servicios de este proyecto).
 export class PracticeSlotGenerationService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
   async sugerir(enrollmentId: string, input: SugerirPracticaInput): Promise<SugerirPracticaResult> {
+    effectivePracticeDuration(input.durationMinutes);
     const horaDeseada = parseHora(input.horaDeseada);
     assertWithinDayWindow(horaDeseada, input.horasPorDia);
 
@@ -106,6 +95,7 @@ export class PracticeSlotGenerationService {
     enrollmentId: string,
     input: ConfirmarPracticaInput,
   ): Promise<ConfirmarPracticaResult> {
+    effectivePracticeDuration(input.durationMinutes);
     const horaResuelta = parseHora(input.horaResuelta);
     assertWithinDayWindow(horaResuelta, input.horasPorDia);
 
@@ -135,10 +125,7 @@ export class PracticeSlotGenerationService {
     const { data, error } = await this.supabase.from('practice_slots').insert(rows).select('id');
 
     if (error) {
-      if (error.code === POSTGRES_UNIQUE_VIOLATION) {
-        throw new AppError(this.describeUniqueViolation(error), 409);
-      }
-      throw error;
+      throwPracticeWriteError(error);
     }
 
     return {
@@ -268,66 +255,32 @@ export class PracticeSlotGenerationService {
   }
 
   private async findFreeInstructors(scheduledAts: string[]): Promise<InstructorSugerido[]> {
-    const { data: instructores, error: instructoresError } = await this.supabase
-      .from('users')
-      .select('id, nombre_completo')
-      .eq('rol', 'instructor')
-      .order('nombre_completo');
-    if (instructoresError) {
-      throw instructoresError;
+    const { data, error } = await this.supabase.rpc('practice_free_instructors', {
+      p_scheduled_ats: scheduledAts,
+    });
+    if (error) {
+      throw error;
     }
-    if (instructores.length === 0) {
-      return [];
-    }
-
-    const { data: ocupados, error: ocupadosError } = await this.supabase
-      .from('practice_slots')
-      .select('instructor_id')
-      .in('scheduled_at', scheduledAts)
-      .in('status', OCCUPIED_STATUSES);
-    if (ocupadosError) {
-      throw ocupadosError;
-    }
-
-    const instructoresOcupados = new Set(ocupados.map((row) => row.instructor_id));
-    return instructores
-      .filter((instructor) => !instructoresOcupados.has(instructor.id))
-      .map((instructor) => ({ id: instructor.id, nombreCompleto: instructor.nombre_completo }));
+    return data.map((instructor) => ({ id: instructor.id, nombreCompleto: instructor.nombre_completo }));
   }
 
   private async assertInstructorFreeFor(
     instructorId: string,
     scheduledAts: string[],
   ): Promise<void> {
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .select('scheduled_at')
-      .eq('instructor_id', instructorId)
-      .in('scheduled_at', scheduledAts)
-      .in('status', OCCUPIED_STATUSES);
+    const { data, error } = await this.supabase.rpc('practice_free_instructors', {
+      p_scheduled_ats: scheduledAts,
+      p_instructor_id: instructorId,
+    });
     if (error) {
       throw error;
     }
-    if (data.length > 0) {
-      const conflictos = data.map((row) => displayFechaHora(row.scheduled_at)).join(', ');
+    if (data.length === 0) {
       throw new AppError(
-        `El instructor elegido ya no está libre para: ${conflictos}. Vuelve a pedir una sugerencia.`,
+        'El instructor elegido ya no está libre para este rango. Vuelve a pedir una sugerencia.',
         409,
       );
     }
-  }
-
-  private describeUniqueViolation(error: PostgrestError): string {
-    // Postgres reporta el valor que chocó en `details`, ej.:
-    // 'Key (instructor_id, scheduled_at)=(uuid, 2026-03-02 20:00:00+00) already exists.'
-    // Si el formato cambia entre versiones, se cae a un mensaje genérico
-    // en vez de fallar la respuesta de error en sí.
-    const match = /scheduled_at\)=\([^,]+,\s*([^)]+)\)/.exec(error.details);
-    if (match) {
-      const iso = new Date(match[1]).toISOString();
-      return `El instructor elegido ya no está libre para ${displayFechaHora(iso)}. Vuelve a pedir una sugerencia.`;
-    }
-    return 'El instructor elegido ya no está libre para una de estas fechas (otra matriculación se adelantó). Vuelve a pedir una sugerencia.';
   }
 
   // -----------------------------------------------------------------

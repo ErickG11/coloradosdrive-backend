@@ -1,7 +1,7 @@
 import request from 'supertest';
 
 jest.mock('../../src/config/supabase', () => ({
-  supabaseAdmin: { from: jest.fn() },
+  supabaseAdmin: { from: jest.fn(), rpc: jest.fn() },
   supabaseAnon: {},
 }));
 
@@ -15,6 +15,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
 
+const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedFrom = supabaseAdmin.from as jest.Mock;
 const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
@@ -37,6 +38,7 @@ describe('generador de práctica (admin)', () => {
 
   beforeEach(() => {
     mockedFrom.mockReset();
+    mockedRpc.mockReset();
     mockedVerifySupabaseJwt.mockReset();
   });
 
@@ -66,6 +68,16 @@ describe('generador de práctica (admin)', () => {
   });
 
   describe('validación de POST .../sugerir-practica', () => {
+    it.each(['sugerir-practica', 'confirmar-practica'])('%s rechaza duración distinta de 60', async (action) => {
+      const res = await request(app)
+        .post(`/admin/enrollments/${enrollmentId}/${action}`)
+        .set('Authorization', adminAuth())
+        .send({ ...validBody, horaResuelta: '15:00',
+          instructorId: '22222222-2222-4222-8222-222222222222', durationMinutes: 45 });
+      expect(res.status).toBe(400);
+      expect(mockedFrom).not.toHaveBeenCalled();
+      expect(mockedRpc).not.toHaveBeenCalled();
+    });
     it('responde 400 si enrollmentId no es un UUID', async () => {
       const res = await request(app)
         .post('/admin/enrollments/no-es-un-uuid/sugerir-practica')
@@ -128,10 +140,8 @@ describe('generador de práctica (admin)', () => {
         )
         .mockReturnValueOnce(createChain({ data: { course_id: 'course-1' }, error: null }))
         .mockReturnValueOnce(createChain({ data: { horas_requeridas: 15 }, error: null }))
-        .mockReturnValueOnce(
-          createChain({ data: [{ id: 'ins-1', nombre_completo: 'Bruno Salas' }], error: null }),
-        )
-        .mockReturnValueOnce(createChain({ data: [], error: null }));
+;
+      mockedRpc.mockResolvedValue({ data: [{ id: 'ins-1', nombre_completo: 'Bruno Salas' }], error: null });
 
       const res = await request(app)
         .post(`/admin/enrollments/${enrollmentId}/sugerir-practica`)
@@ -149,9 +159,8 @@ describe('generador de práctica (admin)', () => {
       expect(res.body.instructoresSugeridos).toEqual([
         { id: 'ins-1', nombreCompleto: 'Bruno Salas' },
       ]);
-      // Solo lectura: exactamente las 5 consultas de lectura mockeadas
-      // arriba, ninguna llamada adicional (que sería el insert).
-      expect(mockedFrom).toHaveBeenCalledTimes(5);
+      expect(mockedFrom).toHaveBeenCalledTimes(3);
+      expect(mockedRpc).toHaveBeenCalledWith('practice_free_instructors', expect.any(Object));
     });
   });
 
@@ -192,8 +201,8 @@ describe('generador de práctica (admin)', () => {
         .mockReturnValueOnce(
           createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }),
         )
-        .mockReturnValueOnce(createChain({ data: [], error: null }))
         .mockReturnValueOnce(insertChain);
+      mockedRpc.mockResolvedValue({ data: [{ id: instructorId, nombre_completo: 'Bruno Salas' }], error: null });
 
       const res = await request(app)
         .post(`/admin/enrollments/${enrollmentId}/confirmar-practica`)

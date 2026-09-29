@@ -30,8 +30,9 @@ const createValidators = [
     .isISO8601()
     .withMessage('scheduledAt debe ser una fecha/hora válida (ISO 8601)'),
   body('durationMinutes')
-    .isInt({ min: 1 })
-    .withMessage('durationMinutes debe ser un entero mayor a 0'),
+    .optional()
+    .custom((value: unknown) => value === 60)
+    .withMessage('Las prácticas deben durar exactamente 60 minutos'),
 ];
 
 const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID válido');
@@ -45,8 +46,8 @@ const updateValidators = [
     .withMessage('scheduledAt debe ser una fecha/hora válida (ISO 8601)'),
   body('durationMinutes')
     .optional()
-    .isInt({ min: 1 })
-    .withMessage('durationMinutes debe ser un entero mayor a 0'),
+    .custom((value: unknown) => value === 60)
+    .withMessage('Las prácticas deben durar exactamente 60 minutos'),
 ];
 
 const listValidators = [
