@@ -6,7 +6,7 @@ import type { Database } from '../config/database.types';
 import type { CreateEnrollmentInput, Enrollment } from '../models/enrollment.model';
 import type { UserProfile } from '../models/user.model';
 import { AppError } from '../utils/AppError';
-import { isCupoExceededError } from './cohortAssignment.service';
+import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
 import type { EmailService } from './email.service';
 
 type CohortRow = Database['public']['Tables']['cohorts']['Row'];
@@ -15,6 +15,11 @@ type UserRow = Database['public']['Tables']['users']['Row'];
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const AUTH_EMAIL_EXISTS = 'email_exists';
+
+// Igual que en SolicitudService.crearEnrollmentConAsignacion: tope de
+// reintentos ante una condición de carrera real por el último cupo de una
+// cohorte (ver enforce_cohort_cupo, migración 014).
+const MAX_INTENTOS_ASIGNACION_COHORTE = 5;
 
 function toEnrollment(row: EnrollmentRow): Enrollment {
   return {
@@ -60,10 +65,18 @@ export class EnrollmentService {
   constructor(
     private readonly supabase: SupabaseClient<Database>,
     private readonly emailService: EmailService,
+    private readonly cohortAssignmentService: CohortAssignmentService,
   ) {}
 
   async enrollStudent(input: CreateEnrollmentInput): Promise<EnrollStudentResult> {
-    const cohort = await this.getCohortOrThrow(input.cohortId);
+    const cohortId = input.cohortId;
+
+    // cohortId explícito: el admin sobreescribe la sugerencia, se valida de
+    // una vez (fail-fast, antes de crear nada) igual que siempre. Sin
+    // cohortId, la resolución (incluyendo el caso sin cohorte elegible) se
+    // hace después de crear el usuario, igual que en la aprobación de
+    // solicitudes online (ver crearEnrollmentConAsignacion).
+    const cohort = cohortId !== undefined ? await this.getCohortOrThrow(cohortId) : null;
     await this.assertCedulaAvailable(input.cedula);
 
     const temporaryPassword = generateTemporaryPassword();
@@ -85,7 +98,13 @@ export class EnrollmentService {
 
     try {
       const userRow = await this.createUserRow(studentId, input);
-      const enrollmentRow = await this.createEnrollmentRow(studentId, input.cohortId, cohort);
+      const enrollmentRow =
+        cohortId !== undefined && cohort
+          ? await this.createEnrollmentRow(studentId, cohortId, cohort)
+          : await this.createEnrollmentWithAutoAssignment(
+              studentId,
+              this.requireCourseId(input.courseId),
+            );
 
       await this.sendWelcomeEmailSafely(input.correo, input.nombreCompleto, temporaryPassword);
 
@@ -94,6 +113,77 @@ export class EnrollmentService {
       await this.supabase.auth.admin.deleteUser(studentId).catch(() => undefined);
       throw err;
     }
+  }
+
+  // Reusa CohortAssignmentService (misma lógica que la aprobación de
+  // solicitudes online) para el flujo de matrícula manual sin cohortId
+  // explícito. Si ninguna cohorte del curso tiene matrícula abierta hoy,
+  // crea igual la inscripción como 'pendiente_cohorte' (cohort_id y
+  // monto_total null, ver migración 014) en vez de fallar.
+  private async createEnrollmentWithAutoAssignment(
+    studentId: string,
+    courseId: string,
+  ): Promise<EnrollmentRow> {
+    const excluidas: string[] = [];
+
+    for (let intento = 0; intento < MAX_INTENTOS_ASIGNACION_COHORTE; intento++) {
+      const asignacion = await this.cohortAssignmentService.assignCohortForCourse(
+        courseId,
+        undefined,
+        excluidas,
+      );
+
+      if (asignacion.cohortId === null) {
+        return this.insertEnrollmentRow({
+          student_id: studentId,
+          cohort_id: null,
+          status: 'pendiente_cohorte',
+          monto_total: null,
+        });
+      }
+
+      // Inserta sin traducir el error todavía: isCupoExceededError necesita
+      // el código crudo de Postgres (CD001) para decidir si reintenta, y
+      // insertEnrollmentRow ya lo traduce a AppError antes de propagarlo.
+      const { data, error } = await this.supabase
+        .from('enrollments')
+        .insert({
+          student_id: studentId,
+          cohort_id: asignacion.cohortId,
+          monto_total: asignacion.precio,
+        })
+        .select()
+        .single();
+
+      if (!error) {
+        return data;
+      }
+      if (isCupoExceededError(error)) {
+        excluidas.push(asignacion.cohortId);
+        continue;
+      }
+      throw this.translateEnrollmentInsertError(error, 'El estudiante ya está activo en otra cohorte');
+    }
+
+    // Se agotaron los reintentos (prácticamente imposible en la práctica,
+    // ver MAX_INTENTOS_ASIGNACION_COHORTE): cae a pendiente de cohorte en
+    // vez de fallar la matrícula completa.
+    return this.insertEnrollmentRow({
+      student_id: studentId,
+      cohort_id: null,
+      status: 'pendiente_cohorte',
+      monto_total: null,
+    });
+  }
+
+  // Defensa adicional a la validación de enrollment.routes.ts (cohortId o
+  // courseId es obligatorio): si llegara sin ninguno de los dos, falla con
+  // un 400 claro en vez de un TypeError críptico más abajo.
+  private requireCourseId(courseId: string | undefined): string {
+    if (courseId === undefined) {
+      throw new AppError('courseId es obligatorio cuando no se envía cohortId', 400);
+    }
+    return courseId;
   }
 
   private async getCohortOrThrow(cohortId: string): Promise<CohortRow> {
@@ -153,15 +243,17 @@ export class EnrollmentService {
     cohortId: string,
     cohort: CohortRow,
   ): Promise<EnrollmentRow> {
-    const { data, error } = await this.supabase
-      .from('enrollments')
-      .insert({
-        student_id: studentId,
-        cohort_id: cohortId,
-        monto_total: Number(cohort.precio),
-      })
-      .select()
-      .single();
+    return this.insertEnrollmentRow({
+      student_id: studentId,
+      cohort_id: cohortId,
+      monto_total: Number(cohort.precio),
+    });
+  }
+
+  private async insertEnrollmentRow(
+    row: Database['public']['Tables']['enrollments']['Insert'],
+  ): Promise<EnrollmentRow> {
+    const { data, error } = await this.supabase.from('enrollments').insert(row).select().single();
 
     if (error) {
       throw this.translateEnrollmentInsertError(
