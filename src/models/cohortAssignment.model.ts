@@ -11,6 +11,10 @@ export interface CandidateCohort {
   cupoOcupado: number;
   createdAt: Date;
   precio: number;
+  // Opcional: assignCohort (función pura) nunca la lee, solo la usa el
+  // wrapper con DB para exponer el nombre de la cohorte ganadora (p. ej.
+  // en la previsualización de asignación para matrícula manual).
+  nombre?: string;
 }
 
 export type AssignmentWarning = 'matricula_por_cerrar';

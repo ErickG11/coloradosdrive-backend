@@ -87,11 +87,16 @@ export interface AssignCohortForCourseResult {
   // Precio de la cohorte asignada (para copiarlo a enrollments.monto_total
   // al crear la inscripción); null cuando cohortId es null.
   precio: number | null;
+  // Nombre de la cohorte asignada, para mostrarlo en la previsualización de
+  // matrícula manual sin que el caller tenga que volver a consultarla;
+  // null cuando cohortId es null.
+  cohortNombre: string | null;
 }
 
 type CohortCandidateRow = Pick<
   Database['public']['Tables']['cohorts']['Row'],
   | 'id'
+  | 'nombre'
   | 'precio'
   | 'cupo_maximo'
   | 'fecha_inicio_matricula'
@@ -112,7 +117,7 @@ export class CohortAssignmentService {
     const result = assignCohort(today, candidates);
 
     if (result.cohortId === null) {
-      return { cohortId: null, warning: null, precio: null };
+      return { cohortId: null, warning: null, precio: null, cohortNombre: null };
     }
 
     const winner = candidates.find((c) => c.id === result.cohortId);
@@ -120,6 +125,7 @@ export class CohortAssignmentService {
       cohortId: result.cohortId,
       warning: result.warning,
       precio: winner ? winner.precio : null,
+      cohortNombre: winner?.nombre ?? null,
     };
   }
 
@@ -130,7 +136,7 @@ export class CohortAssignmentService {
     const { data, error } = await this.supabase
       .from('cohorts')
       .select(
-        'id, precio, cupo_maximo, fecha_inicio_matricula, fecha_fin_matricula, fecha_inicio_curso, created_at',
+        'id, nombre, precio, cupo_maximo, fecha_inicio_matricula, fecha_fin_matricula, fecha_inicio_curso, created_at',
       )
       .eq('course_id', courseId);
     if (error) {
@@ -147,6 +153,7 @@ export class CohortAssignmentService {
 
     return cohortRows.map((row) => ({
       id: row.id,
+      nombre: row.nombre,
       precio: Number(row.precio),
       cupoMaximo: row.cupo_maximo,
       cupoOcupado: ocupados.get(row.id) ?? 0,
