@@ -127,6 +127,7 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
   function buildCohortRow(overrides: Record<string, unknown> = {}) {
     return {
       id: 'cohort-1',
+      nombre: 'Cohorte Marzo',
       precio: '150.00',
       cupo_maximo: 20,
       fecha_inicio_matricula: '2026-01-01',
@@ -147,10 +148,10 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
 
     const result = await service.assignCohortForCourse('course-1', day('2026-01-15'));
 
-    expect(result).toEqual({ cohortId: null, warning: null, precio: null });
+    expect(result).toEqual({ cohortId: null, warning: null, precio: null, cohortNombre: null });
   });
 
-  it('asigna la cohorte elegible y devuelve su precio', async () => {
+  it('asigna la cohorte elegible y devuelve su precio y nombre', async () => {
     const service = buildService([
       { data: [buildCohortRow()], error: null }, // cohorts
       { data: [], error: null }, // enrollments activos (0 ocupados)
@@ -158,7 +159,12 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
 
     const result = await service.assignCohortForCourse('course-1', day('2026-01-15'));
 
-    expect(result).toEqual({ cohortId: 'cohort-1', warning: null, precio: 150 });
+    expect(result).toEqual({
+      cohortId: 'cohort-1',
+      warning: null,
+      precio: 150,
+      cohortNombre: 'Cohorte Marzo',
+    });
   });
 
   it('cuenta la ocupación real desde enrollments y descarta la cohorte si ya está llena', async () => {
@@ -169,7 +175,7 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
 
     const result = await service.assignCohortForCourse('course-1', day('2026-01-15'));
 
-    expect(result).toEqual({ cohortId: null, warning: null, precio: null });
+    expect(result).toEqual({ cohortId: null, warning: null, precio: null, cohortNombre: null });
   });
 
   it('excluye las cohortes indicadas en excludeCohortIds (reintento tras condición de carrera)', async () => {

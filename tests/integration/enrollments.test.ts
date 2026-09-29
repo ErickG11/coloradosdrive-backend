@@ -93,6 +93,18 @@ describe('POST /enrollments', () => {
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
+  it('responde 400 si no se manda ni cohortId ni courseId', async () => {
+    const { cohortId: _cohortId, ...bodySinCohorte } = validEnrollmentBody;
+
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(bodySinCohorte);
+
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
   it('responde 409 si la cédula ya está registrada', async () => {
     mockedFrom
       .mockReturnValueOnce(createChain({ data: cohortRow, error: null })) // getCohortOrThrow
@@ -172,5 +184,90 @@ describe('POST /enrollments', () => {
     expect(res.body.enrollment).toMatchObject({ id: 'enrollment-1', cohortId: cohortRow.id });
     expect(mockedSendMail).toHaveBeenCalledTimes(1);
     expect(mockedDeleteUser).not.toHaveBeenCalled();
+  });
+
+  describe('sin cohortId: asignación automática vía CohortAssignmentService (Fase 10)', () => {
+    const studentId = 'new-student-id';
+    const bodySinCohorte = {
+      cedula: '1234567890',
+      nombreCompleto: 'Ana Torres',
+      correo: 'ana@example.com',
+      telefono: '0999999999',
+      courseId: cohortRow.course_id,
+    };
+    const userRow = {
+      id: studentId,
+      cedula: bodySinCohorte.cedula,
+      nombre_completo: bodySinCohorte.nombreCompleto,
+      telefono: bodySinCohorte.telefono,
+      rol: 'estudiante',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    beforeEach(() => {
+      mockedCreateUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+    });
+
+    it('asigna automáticamente la cohorte elegible y responde 201', async () => {
+      const enrollmentRow = {
+        id: 'enrollment-1',
+        student_id: studentId,
+        cohort_id: cohortRow.id,
+        status: 'activo',
+        monto_total: cohortRow.precio,
+        fecha_inscripcion: '2026-01-02T00:00:00Z',
+        created_at: '2026-01-02T00:00:00Z',
+        updated_at: '2026-01-02T00:00:00Z',
+      };
+
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: null, error: null })) // assertCedulaAvailable
+        .mockReturnValueOnce(createChain({ data: userRow, error: null })) // createUserRow
+        .mockReturnValueOnce(createChain({ data: [cohortRow], error: null })) // CohortAssignmentService: cohorts
+        .mockReturnValueOnce(createChain({ data: [], error: null })) // CohortAssignmentService: ocupados
+        .mockReturnValueOnce(createChain({ data: enrollmentRow, error: null })); // insertEnrollmentRow
+
+      const res = await request(app)
+        .post('/enrollments')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+        .send(bodySinCohorte);
+
+      expect(res.status).toBe(201);
+      expect(res.body.enrollment).toMatchObject({ id: 'enrollment-1', cohortId: cohortRow.id });
+      expect(mockedSendMail).toHaveBeenCalledTimes(1);
+    });
+
+    it('sin ninguna cohorte con matrícula abierta, crea la matrícula pendiente_cohorte y responde 201', async () => {
+      const enrollmentRow = {
+        id: 'enrollment-1',
+        student_id: studentId,
+        cohort_id: null,
+        status: 'pendiente_cohorte',
+        monto_total: null,
+        fecha_inscripcion: '2026-01-02T00:00:00Z',
+        created_at: '2026-01-02T00:00:00Z',
+        updated_at: '2026-01-02T00:00:00Z',
+      };
+
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: null, error: null })) // assertCedulaAvailable
+        .mockReturnValueOnce(createChain({ data: userRow, error: null })) // createUserRow
+        .mockReturnValueOnce(createChain({ data: [], error: null })) // CohortAssignmentService: sin cohortes
+        .mockReturnValueOnce(createChain({ data: enrollmentRow, error: null })); // insertEnrollmentRow
+
+      const res = await request(app)
+        .post('/enrollments')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+        .send(bodySinCohorte);
+
+      expect(res.status).toBe(201);
+      expect(res.body.enrollment).toMatchObject({
+        id: 'enrollment-1',
+        cohortId: null,
+        status: 'pendiente_cohorte',
+        montoTotal: null,
+      });
+    });
   });
 });
