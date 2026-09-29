@@ -34,7 +34,13 @@ cero filas implica cero correos/eventos. El límite exacto se prueba con tiempo 
 el predicado SQL compartido; las RPC usan exclusivamente clock_timestamp(), sin inyectar
 relojes de prueba ni admitir tiempos suministrados por el cliente.
 
-El runner valida reversión/reaplicación y deja el fixture en esa base para inspección.
-No elimina la base ni extensiones. Para repetir, preparar otra base vacía autorizada.
+El runner prepara reversión/reaplicación para **018+019 aplicadas** y **solo 018 aplicada**
+(estado que deja una 019 abortada transaccionalmente). Usa el mismo script operativo:
+revierte 018+019, reaplica solo 018, revierte ese estado y reaplica 018→019. Compara el
+contenido completo de las filas antes/después, la permanencia de btree_gist, el índice
+anterior y la retirada de las restricciones. La ejecución real de ambos escenarios
+permanece pendiente; lectura del SQL, Jest con mocks y `node --check` no la acreditan.
+Deja el fixture en esa base para inspección. No elimina la base ni extensiones.
+Para repetir, preparar otra base vacía autorizada.
 No sustituye la prueba de migraciones 001–019 completas ni la compatibilidad real de
 Supabase/PostgREST y RLS; validar esas capas también en un entorno desechable antes de aplicar.

@@ -160,11 +160,20 @@ await race(`select id from public.practice_slots where id='${target}' for update
   `select * from public.act_on_practice_slot('${target}','${student1}','claim');`, 'CD409', true);
 assert.equal(await success(`select status from public.practice_slots where id='${target}';`), 'disponible');
 
-// Reversión y reaplicación sin pérdida de filas y sin retirar btree_gist.
-await success(await file('../../docs/operations/cd-05-07-rollback.sql'));
-assert.equal(await success('select count(*) from public.practice_slots;'), '1');
-assert.equal(await success("select count(*) from pg_extension where extname='btree_gist';"), '1');
-assert.equal(await success("select count(*) from pg_indexes where indexname='practice_slots_instructor_no_overlap';"), '1');
-await success(migration18);
+// Mismo rollback con 018+019 y con solo 018 (estado tras un aborto transaccional de 019).
+// Preparado para ejecución autorizada en PostgreSQL desechable; no es un test Jest.
+const rollback = await file('../../docs/operations/cd-05-07-rollback.sql');
+const snapshotSql = 'select jsonb_agg(to_jsonb(s) order by s.id) from public.practice_slots s;';
+const rowsBeforeRollback = await success(snapshotSql);
+for (const scenario of ['018+019', 'solo 018']) {
+  await success(rollback);
+  assert.equal(await success(snapshotSql), rowsBeforeRollback, `Contenido de filas conservado: ${scenario}`);
+  assert.equal(await success('select count(*) from public.practice_slots;'), '1');
+  assert.equal(await success("select count(*) from pg_extension where extname='btree_gist';"), '1');
+  assert.equal(await success("select count(*) from pg_indexes where schemaname='public' and indexname='practice_slots_instructor_no_overlap';"), '1');
+  assert.equal(await success(`select count(*) from pg_constraint where conrelid='public.practice_slots'::regclass
+    and conname in ('practice_slots_duration_60','practice_slots_finite_start','practice_slots_instructor_interval_excl');`), '0');
+  await success(migration18);
+}
 await success(migration19);
-console.log('PASS: precondiciones, restricciones, RPC, límites, carreras reales, reversión y reaplicación.');
+console.log('PASS: precondiciones, restricciones, RPC, límites, carreras reales, ambos escenarios de reversión y reaplicación.');
