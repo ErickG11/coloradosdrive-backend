@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { cohortAssignmentRouter } from './cohortAssignment.routes';
 import { cohortRouter } from './cohort.routes';
 import { courseRouter } from './course.routes';
 import { enrollmentRouter } from './enrollment.routes';
@@ -29,3 +30,4 @@ apiRouter.use('/users', userRouter);
 apiRouter.use('/solicitudes', solicitudRouter);
 apiRouter.use('/admin/solicitudes', solicitudAdminRouter);
 apiRouter.use('/admin/enrollments', practiceSlotGenerationRouter);
+apiRouter.use('/admin/cohort-assignment', cohortAssignmentRouter);

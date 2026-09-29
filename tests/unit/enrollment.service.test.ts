@@ -2,6 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../../src/config/database.types';
 import type { CreateEnrollmentInput } from '../../src/models/enrollment.model';
+import type {
+  AssignCohortForCourseResult,
+  CohortAssignmentService,
+} from '../../src/services/cohortAssignment.service';
 import type { EmailService } from '../../src/services/email.service';
 import { EnrollmentService } from '../../src/services/enrollment.service';
 import { createSupabaseFromMock, type ChainResult } from '../helpers/supabaseMock';
@@ -56,11 +60,21 @@ function buildEmailService() {
   };
 }
 
+function buildCohortAssignmentService(results: AssignCohortForCourseResult[] = []) {
+  const assignCohortForCourse = jest.fn();
+  results.forEach((result) => assignCohortForCourse.mockResolvedValueOnce(result));
+  return {
+    cohortAssignmentService: { assignCohortForCourse } as unknown as CohortAssignmentService,
+    assignCohortForCourse,
+  };
+}
+
 describe('EnrollmentService.enrollStudent', () => {
   it('rechaza con 404 si la cohorte no existe', async () => {
     const { supabase } = buildSupabaseMock([{ data: null, error: null }]);
     const { emailService, sendWelcomeEmail } = buildEmailService();
-    const service = new EnrollmentService(supabase, emailService);
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
 
     await expect(service.enrollStudent(validInput)).rejects.toMatchObject({ statusCode: 404 });
     expect(sendWelcomeEmail).not.toHaveBeenCalled();
@@ -72,7 +86,8 @@ describe('EnrollmentService.enrollStudent', () => {
       { data: { id: 'existing-user' }, error: null }, // assertCedulaAvailable: ya existe
     ]);
     const { emailService } = buildEmailService();
-    const service = new EnrollmentService(supabase, emailService);
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
 
     await expect(service.enrollStudent(validInput)).rejects.toMatchObject({
       statusCode: 409,
@@ -103,7 +118,8 @@ describe('EnrollmentService.enrollStudent', () => {
     createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
 
     const { emailService, sendWelcomeEmail } = buildEmailService();
-    const service = new EnrollmentService(supabase, emailService);
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
 
     await expect(service.enrollStudent(validInput)).rejects.toMatchObject({
       statusCode: 409,
@@ -138,7 +154,8 @@ describe('EnrollmentService.enrollStudent', () => {
     createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
 
     const { emailService, sendWelcomeEmail } = buildEmailService();
-    const service = new EnrollmentService(supabase, emailService);
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
 
     await expect(service.enrollStudent(validInput)).rejects.toMatchObject({
       statusCode: 409,
@@ -179,7 +196,8 @@ describe('EnrollmentService.enrollStudent', () => {
     createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
 
     const { emailService, sendWelcomeEmail } = buildEmailService();
-    const service = new EnrollmentService(supabase, emailService);
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
 
     const result = await service.enrollStudent(validInput);
 
@@ -192,5 +210,131 @@ describe('EnrollmentService.enrollStudent', () => {
       }),
     );
     expect(deleteUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('EnrollmentService.enrollStudent (sin cohortId: asignación automática, Fase 10)', () => {
+  const autoAssignInput: CreateEnrollmentInput = {
+    cedula: '1234567890',
+    nombreCompleto: 'Ana Torres',
+    correo: 'ana@example.com',
+    telefono: '0999999999',
+    courseId: 'course-uuid-1',
+  };
+
+  const studentId = 'new-student-id';
+  const userRow = {
+    id: studentId,
+    cedula: autoAssignInput.cedula,
+    nombre_completo: autoAssignInput.nombreCompleto,
+    telefono: autoAssignInput.telefono,
+    rol: 'estudiante',
+    created_at: '2026-01-02T00:00:00Z',
+    updated_at: '2026-01-02T00:00:00Z',
+  };
+
+  it('asigna la cohorte sugerida por CohortAssignmentService y crea la matrícula activa', async () => {
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: 'cohort-uuid-1',
+      status: 'activo',
+      monto_total: '150.00',
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const { supabase, createUser, deleteUser } = buildSupabaseMock([
+      { data: null, error: null }, // assertCedulaAvailable: libre (no hay getCohortOrThrow)
+      { data: userRow, error: null }, // createUserRow
+      { data: enrollmentRow, error: null }, // insertEnrollmentRow
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService, assignCohortForCourse } = buildCohortAssignmentService([
+      { cohortId: 'cohort-uuid-1', warning: null, precio: 150, cohortNombre: 'Cohorte Marzo' },
+    ]);
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent(autoAssignInput);
+
+    expect(assignCohortForCourse).toHaveBeenCalledWith('course-uuid-1', undefined, []);
+    expect(result.enrollment).toMatchObject({ id: 'enrollment-1', cohortId: 'cohort-uuid-1' });
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('sin ninguna cohorte elegible, crea la matrícula como pendiente_cohorte', async () => {
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: null,
+      status: 'pendiente_cohorte',
+      monto_total: null,
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const { supabase, createUser } = buildSupabaseMock([
+      { data: null, error: null }, // assertCedulaAvailable
+      { data: userRow, error: null }, // createUserRow
+      { data: enrollmentRow, error: null }, // insertEnrollmentRow (pendiente_cohorte)
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService([
+      { cohortId: null, warning: null, precio: null, cohortNombre: null },
+    ]);
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent(autoAssignInput);
+
+    expect(result.enrollment).toMatchObject({
+      id: 'enrollment-1',
+      cohortId: null,
+      status: 'pendiente_cohorte',
+      montoTotal: null,
+    });
+  });
+
+  it('reintenta excluyendo la cohorte si se llenó por condición de carrera (enforce_cohort_cupo)', async () => {
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: 'con-cupo',
+      status: 'activo',
+      monto_total: '150.00',
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const { supabase, createUser } = buildSupabaseMock([
+      { data: null, error: null }, // assertCedulaAvailable
+      { data: userRow, error: null }, // createUserRow
+      {
+        data: null,
+        error: { code: 'CD001', message: 'La cohorte ya alcanzó su cupo máximo (20)' },
+      }, // insertEnrollmentRow: primer intento, cae por condición de carrera
+      { data: enrollmentRow, error: null }, // insertEnrollmentRow: reintento exitoso
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService, assignCohortForCourse } = buildCohortAssignmentService([
+      { cohortId: 'llena', warning: null, precio: 150, cohortNombre: 'Cohorte Marzo' },
+      { cohortId: 'con-cupo', warning: null, precio: 150, cohortNombre: 'Cohorte Abril' },
+    ]);
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent(autoAssignInput);
+
+    // El segundo elemento del array excluidas se muta in-place entre
+    // llamadas (mismo patrón que SolicitudService.crearEnrollmentConAsignacion),
+    // así que ambas entradas de mock.calls apuntan a la misma referencia:
+    // solo la snapshot tomada en la primera llamada (antes de la segunda)
+    // refleja el estado real en ese momento.
+    expect(assignCohortForCourse).toHaveBeenCalledTimes(2);
+    expect(assignCohortForCourse.mock.calls[0][0]).toBe('course-uuid-1');
+    expect(assignCohortForCourse.mock.calls[1][2]).toEqual(['llena']);
+    expect(result.enrollment).toMatchObject({ id: 'enrollment-1', cohortId: 'con-cupo' });
   });
 });
