@@ -28,6 +28,8 @@ function toEnrollment(row: EnrollmentRow): Enrollment {
     cohortId: row.cohort_id,
     status: row.status,
     montoTotal: row.monto_total === null ? null : Number(row.monto_total),
+    descuento: Number(row.descuento),
+    montoAbonado: Number(row.monto_abonado),
     fechaInscripcion: row.fecha_inscripcion,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -41,6 +43,11 @@ function toUserProfile(row: UserRow): UserProfile {
     nombreCompleto: row.nombre_completo,
     telefono: row.telefono,
     rol: row.rol,
+    fechaNacimiento: row.fecha_nacimiento,
+    tipoSangre: row.tipo_sangre,
+    genero: row.genero,
+    ciudadania: row.ciudadania,
+    direccion: row.direccion,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -55,6 +62,14 @@ function generateTemporaryPassword(): string {
 export interface EnrollStudentResult {
   student: UserProfile;
   enrollment: Enrollment;
+}
+
+// Resultado de aplicar el descuento (si lo hay) al precio de la cohorte, y
+// de validar el abono contra ese total. Ver 017_enrollments_pago_inicial.sql.
+interface PagoInicial {
+  montoTotal: number;
+  descuento: number;
+  montoAbonado: number;
 }
 
 // RF-01: una sola operación crea la cuenta del estudiante en Supabase Auth,
@@ -77,6 +92,7 @@ export class EnrollmentService {
     // hace después de crear el usuario, igual que en la aprobación de
     // solicitudes online (ver crearEnrollmentConAsignacion).
     const cohort = cohortId !== undefined ? await this.getCohortOrThrow(cohortId) : null;
+    const pagoInicial = cohort ? this.resolvePagoInicial(Number(cohort.precio), input) : null;
     await this.assertCedulaAvailable(input.cedula);
 
     const temporaryPassword = generateTemporaryPassword();
@@ -99,11 +115,12 @@ export class EnrollmentService {
     try {
       const userRow = await this.createUserRow(studentId, input);
       const enrollmentRow =
-        cohortId !== undefined && cohort
-          ? await this.createEnrollmentRow(studentId, cohortId, cohort)
+        cohortId !== undefined && pagoInicial
+          ? await this.createEnrollmentRow(studentId, cohortId, pagoInicial)
           : await this.createEnrollmentWithAutoAssignment(
               studentId,
               this.requireCourseId(input.courseId),
+              input,
             );
 
       await this.sendWelcomeEmailSafely(input.correo, input.nombreCompleto, temporaryPassword);
@@ -123,6 +140,7 @@ export class EnrollmentService {
   private async createEnrollmentWithAutoAssignment(
     studentId: string,
     courseId: string,
+    input: CreateEnrollmentInput,
   ): Promise<EnrollmentRow> {
     const excluidas: string[] = [];
 
@@ -142,6 +160,16 @@ export class EnrollmentService {
         });
       }
 
+      if (asignacion.precio === null) {
+        // Invariante de CohortAssignmentService: precio solo es null junto
+        // con cohortId null. Si esto se dispara hay una inconsistencia
+        // real, no un caso de negocio (mismo criterio que otros 500 de
+        // invariante en el proyecto, ver practiceSlotGeneration.service.ts).
+        throw new AppError('La cohorte asignada no tiene precio definido', 500);
+      }
+
+      const pagoInicial = this.resolvePagoInicial(asignacion.precio, input);
+
       // Inserta sin traducir el error todavía: isCupoExceededError necesita
       // el código crudo de Postgres (CD001) para decidir si reintenta, y
       // insertEnrollmentRow ya lo traduce a AppError antes de propagarlo.
@@ -150,7 +178,9 @@ export class EnrollmentService {
         .insert({
           student_id: studentId,
           cohort_id: asignacion.cohortId,
-          monto_total: asignacion.precio,
+          monto_total: pagoInicial.montoTotal,
+          descuento: pagoInicial.descuento,
+          monto_abonado: pagoInicial.montoAbonado,
         })
         .select()
         .single();
@@ -227,6 +257,11 @@ export class EnrollmentService {
         nombre_completo: input.nombreCompleto,
         telefono: input.telefono ?? null,
         rol: 'estudiante',
+        fecha_nacimiento: input.fechaNacimiento ?? null,
+        tipo_sangre: input.tipoSangre ?? null,
+        genero: input.genero ?? null,
+        ciudadania: input.ciudadania ?? null,
+        direccion: input.direccion ?? null,
       })
       .select()
       .single();
@@ -241,13 +276,36 @@ export class EnrollmentService {
   private async createEnrollmentRow(
     studentId: string,
     cohortId: string,
-    cohort: CohortRow,
+    pagoInicial: PagoInicial,
   ): Promise<EnrollmentRow> {
     return this.insertEnrollmentRow({
       student_id: studentId,
       cohort_id: cohortId,
-      monto_total: Number(cohort.precio),
+      monto_total: pagoInicial.montoTotal,
+      descuento: pagoInicial.descuento,
+      monto_abonado: pagoInicial.montoAbonado,
     });
+  }
+
+  // Alcance mínimo (RF-06 futuro): solo el pago inicial al matricular, no
+  // un historial de pagos por cuotas (eso es Kushki, aparte). descuento se
+  // resta del precio de la cohorte; montoAbonado es lo que se registró
+  // como pagado en ese momento (igual a montoTotal si "paga todo", menor
+  // si "abona"). Valida ambas relaciones con un 400 claro en vez de dejar
+  // que lo atrape el CHECK de la base de datos como un 500 genérico.
+  private resolvePagoInicial(precio: number, input: CreateEnrollmentInput): PagoInicial {
+    const descuento = input.descuento ?? 0;
+    const montoTotal = precio - descuento;
+    if (montoTotal < 0) {
+      throw new AppError('El descuento no puede ser mayor al precio de la cohorte', 400);
+    }
+
+    const montoAbonado = input.montoAbonado ?? 0;
+    if (montoAbonado > montoTotal) {
+      throw new AppError('El monto abonado no puede ser mayor al monto total', 400);
+    }
+
+    return { montoTotal, descuento, montoAbonado };
   }
 
   private async insertEnrollmentRow(
