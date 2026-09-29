@@ -1,299 +1,152 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-
 import type { Database } from '../../src/config/database.types';
-import type { ConfirmarPracticaInput } from '../../src/models/practiceSlotGeneration.model';
+import type { ConfirmarPracticaInput, SugerirPracticaInput } from '../../src/models/practiceSlotGeneration.model';
 import { PracticeSlotGenerationService } from '../../src/services/practiceSlotGeneration.service';
 import { createChain, createSupabaseFromMock, type ChainResult } from '../helpers/supabaseMock';
 
 const enrollmentId = 'enrollment-1';
-const studentId = 'student-1';
-const cohortId = 'cohort-1';
-const courseId = 'course-1';
-
-const enrollmentRow = { student_id: studentId, cohort_id: cohortId, status: 'activo' };
-const cohortRow = { course_id: courseId };
-const courseRow = { horas_requeridas: 15 };
-
-function buildService(fromResults: ChainResult[]): PracticeSlotGenerationService {
-  const supabase = {
-    from: createSupabaseFromMock(fromResults),
-  } as unknown as SupabaseClient<Database>;
-  return new PracticeSlotGenerationService(supabase);
+const enrollment = { student_id: 'student-1', cohort_id: 'cohort-1', status: 'activo' };
+const context: ChainResult[] = [
+  { data: enrollment, error: null },
+  { data: { course_id: 'course-1' }, error: null },
+  { data: { horas_requeridas: 15 }, error: null },
+];
+const free = [{ id: 'ins-1', nombre_completo: 'Instructor de prueba' }];
+const input = {
+  fechaInicio: '2026-03-02', fechaFin: '2026-03-08',
+  modalidad: 'entre_semana' as const, horasPorDia: 2, horaDeseada: '15:00',
+};
+const confirmation = { ...input, horaResuelta: '15:00', instructorId: 'ins-1' };
+function harness(results = context, rpc = jest.fn().mockResolvedValue({ data: free, error: null })) {
+  const from = createSupabaseFromMock(results);
+  const service = new PracticeSlotGenerationService({ from, rpc } as unknown as SupabaseClient<Database>);
+  return { service, from, rpc };
 }
 
-const baseInput = {
-  fechaInicio: '2026-03-02', // lunes
-  modalidad: 'entre_semana' as const,
-  horasPorDia: 2,
-  fechaFin: '2026-03-08', // domingo -> 5 días entre semana (02..06)
-};
-
-describe('PracticeSlotGenerationService.sugerir', () => {
-  it('rechaza si horaDeseada + horasPorDia no cabe en 06:00-22:00, sin consultar la base', async () => {
-    const service = buildService([]);
-
-    await expect(
-      service.sugerir(enrollmentId, { ...baseInput, horaDeseada: '21:00' }),
-    ).rejects.toMatchObject({ statusCode: 400 });
+describe('PracticeSlotGenerationService', () => {
+  it('el generador valida duración también cuando se llama sin HTTP', async () => {
+    const { service, from, rpc } = harness([]);
+    await expect(service.sugerir(enrollmentId, { ...input, durationMinutes: 45 } as unknown as SugerirPracticaInput))
+      .rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.confirmar(enrollmentId, { ...confirmation, durationMinutes: 90 } as unknown as ConfirmarPracticaInput))
+      .rejects.toMatchObject({ statusCode: 400 });
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it('rechaza un horario fuera de 06:00–22:00 antes de consultar', async () => {
+    const { service, from, rpc } = harness([]);
+    await expect(service.sugerir(enrollmentId, { ...input, horaDeseada: '21:00' }))
+      .rejects.toMatchObject({ statusCode: 400 });
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('rechaza si se envían fechaFin y numeroSesiones a la vez', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-    ]);
-
-    await expect(
-      service.sugerir(enrollmentId, {
-        ...baseInput,
-        numeroSesiones: 5,
-        horaDeseada: '15:00',
-      }),
-    ).rejects.toMatchObject({ statusCode: 400 });
+  it('rechaza fechaFin y numeroSesiones simultáneos', async () => {
+    await expect(harness().service.sugerir(enrollmentId, { ...input, numeroSesiones: 5 }))
+      .rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it('responde 404 si la matrícula no existe', async () => {
-    const service = buildService([{ data: null, error: null }]);
-
-    await expect(
-      service.sugerir(enrollmentId, { ...baseInput, horaDeseada: '15:00' }),
-    ).rejects.toMatchObject({ statusCode: 404 });
+  it('rechaza la ausencia de fechaFin y numeroSesiones', async () => {
+    const { fechaFin: _fechaFin, ...withoutEnd } = input;
+    await expect(harness().service.sugerir(enrollmentId, withoutEnd))
+      .rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it('responde 409 si la matrícula no está activa', async () => {
-    const service = buildService([{ data: { ...enrollmentRow, status: 'retirado' }, error: null }]);
-
-    await expect(
-      service.sugerir(enrollmentId, { ...baseInput, horaDeseada: '15:00' }),
-    ).rejects.toMatchObject({ statusCode: 409 });
+  it.each([
+    [null, 404], [{ ...enrollment, status: 'retirado' }, 409],
+  ])('rechaza matrícula ausente o inactiva (%s)', async (row, status) => {
+    await expect(harness([{ data: row, error: null }]).service.sugerir(enrollmentId, input))
+      .rejects.toMatchObject({ statusCode: status });
   });
 
-  it('modalidad entre_semana: calcula solo los 5 días hábiles del rango (lunes a domingo)', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      { data: [{ id: 'ins-1', nombre_completo: 'Bruno Salas' }], error: null }, // instructores
-      { data: [], error: null }, // nadie ocupado a las 15:00
-    ]);
-
-    const result = await service.sugerir(enrollmentId, {
-      ...baseInput,
-      horaDeseada: '15:00',
+  it('cuenta días L–V y pasa cada bloque UTC a la disponibilidad de PostgreSQL', async () => {
+    const { service, from, rpc } = harness();
+    const result = await service.sugerir(enrollmentId, input);
+    expect(result.fechas).toEqual(['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05', '2026-03-06']);
+    expect(result).toMatchObject({
+      horaResuelta: '15:00', horaAjustada: false, totalSesiones: 5, horasProgramadas: 10, horasRequeridas: 15,
+      instructoresSugeridos: [{ id: 'ins-1', nombreCompleto: 'Instructor de prueba' }],
     });
-
-    expect(result.fechas).toEqual([
-      '2026-03-02',
-      '2026-03-03',
-      '2026-03-04',
-      '2026-03-05',
-      '2026-03-06',
-    ]);
-    expect(result.horaResuelta).toBe('15:00');
-    expect(result.horaAjustada).toBe(false);
-    expect(result.instructoresSugeridos).toEqual([{ id: 'ins-1', nombreCompleto: 'Bruno Salas' }]);
-    expect(result.totalSesiones).toBe(5);
-    expect(result.horasProgramadas).toBe(10); // 5 días x 2h
-    expect(result.horasRequeridas).toBe(15);
+    const starts = rpc.mock.calls[0][1].p_scheduled_ats as string[];
+    expect(starts).toHaveLength(10);
+    expect(starts.slice(0, 2)).toEqual(['2026-03-02T20:00:00.000Z', '2026-03-02T21:00:00.000Z']);
+    expect(from).toHaveBeenCalledTimes(3); // Solo contexto; sugerir no escribe.
   });
 
-  it('modalidad fin_de_semana: calcula solo sábado y domingo del mismo rango', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      { data: [{ id: 'ins-1', nombre_completo: 'Bruno Salas' }], error: null },
-      { data: [], error: null },
-    ]);
-
-    const result = await service.sugerir(enrollmentId, {
-      ...baseInput,
-      modalidad: 'fin_de_semana',
-      horaDeseada: '15:00',
-    });
-
+  it('cuenta solo S–D en modalidad fin de semana', async () => {
+    const result = await harness().service.sugerir(enrollmentId, { ...input, modalidad: 'fin_de_semana' });
     expect(result.fechas).toEqual(['2026-03-07', '2026-03-08']);
     expect(result.totalSesiones).toBe(2);
   });
 
-  it('numeroSesiones: cuenta N días hábiles en vez de usar fechaFin', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      { data: [{ id: 'ins-1', nombre_completo: 'Bruno Salas' }], error: null },
-      { data: [], error: null },
-    ]);
-
-    const result = await service.sugerir(enrollmentId, {
-      fechaInicio: '2026-03-02',
-      modalidad: 'entre_semana',
-      horasPorDia: 1,
-      numeroSesiones: 3,
-      horaDeseada: '15:00',
-    });
-
+  it('numeroSesiones cuenta N días de sesión', async () => {
+    const { fechaFin: _fechaFin, ...withoutEnd } = input;
+    const result = await harness().service.sugerir(enrollmentId, { ...withoutEnd, numeroSesiones: 3 });
     expect(result.fechas).toEqual(['2026-03-02', '2026-03-03', '2026-03-04']);
     expect(result.totalSesiones).toBe(3);
   });
 
-  it('si horaDeseada está ocupada, expande la búsqueda a horas adyacentes y marca horaAjustada', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      // offset 0 (15:00): un instructor, pero ocupado
-      { data: [{ id: 'ins-1', nombre_completo: 'Bruno Salas' }], error: null },
-      { data: [{ instructor_id: 'ins-1' }], error: null },
-      // offset -1 (14:00): mismo instructor, libre
-      { data: [{ id: 'ins-1', nombre_completo: 'Bruno Salas' }], error: null },
-      { data: [], error: null },
-    ]);
-
-    const result = await service.sugerir(enrollmentId, {
-      ...baseInput,
-      horaDeseada: '15:00',
-    });
-
-    expect(result.horaResuelta).toBe('14:00');
-    expect(result.horaAjustada).toBe(true);
+  it('expande a una hora adyacente si la RPC informa conflicto', async () => {
+    const rpc = jest.fn().mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: free, error: null });
+    const result = await harness(context, rpc).service.sugerir(enrollmentId, input);
+    expect(result).toMatchObject({ horaResuelta: '14:00', horaAjustada: true });
   });
 
-  it('si ningún instructor está libre en ninguna hora del rango, responde 409', async () => {
-    // 33 candidatas posibles (offset 0 a 16 en ambas direcciones), pero acá
-    // basta con simular que TODAS devuelven cero instructores libres.
-    const noInstructors: ChainResult[] = [];
-    for (let i = 0; i < 33; i += 1) {
-      noInstructors.push({ data: [], error: null }); // sin instructores registrados
-    }
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      ...noInstructors,
-    ]);
-
-    await expect(
-      service.sugerir(enrollmentId, { ...baseInput, horaDeseada: '15:00' }),
-    ).rejects.toMatchObject({ statusCode: 409 });
+  it('responde 409 cuando no hay instructor libre en ninguna candidata', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    await expect(harness(context, rpc).service.sugerir(enrollmentId, input))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect(rpc).toHaveBeenCalled();
   });
-});
 
-describe('PracticeSlotGenerationService.confirmar', () => {
-  const confirmarInput = {
-    ...baseInput,
-    horaResuelta: '15:00',
-    instructorId: 'ins-1',
-  } as ConfirmarPracticaInput;
+  it.each([
+    [null, 404], [{ id: 'ins-1', rol: 'estudiante' }, 400],
+  ])('valida existencia y rol del instructor (%s)', async (row, status) => {
+    await expect(harness([...context, { data: row, error: null }]).service.confirmar(enrollmentId, confirmation))
+      .rejects.toMatchObject({ statusCode: status });
+  });
 
-  it('recalcula las fechas de forma determinista, verifica disponibilidad e inserta en bloque', async () => {
-    // 5 días x 2h/día (horasPorDia de baseInput) = 10 franjas.
-    const insertChain = createChain({
-      data: Array.from({ length: 10 }, (_, i) => ({ id: `slot-${String(i + 1)}` })),
-      error: null,
-    });
-    // getEnrollmentContext + assertInstructorExists + assertInstructorFreeFor
-    // + el insert final — cada uno con su propia respuesta, en orden.
-    const from = jest
-      .fn()
-      .mockReturnValueOnce(createChain({ data: enrollmentRow, error: null }))
-      .mockReturnValueOnce(createChain({ data: cohortRow, error: null }))
-      .mockReturnValueOnce(createChain({ data: courseRow, error: null }))
-      .mockReturnValueOnce(createChain({ data: { id: 'ins-1', rol: 'instructor' }, error: null }))
-      .mockReturnValueOnce(createChain({ data: [], error: null }))
-      .mockReturnValueOnce(insertChain);
-    const service = new PracticeSlotGenerationService({
-      from,
-    } as unknown as SupabaseClient<Database>);
-
-    const result = await service.confirmar(enrollmentId, confirmarInput);
-
-    expect(result.slotsCreados).toBe(10);
-    expect(result.horasProgramadas).toBe(10);
-    expect(result.horasRequeridas).toBe(15);
+  it('recalcula y escribe el bloque completo de 10 franjas de 60 minutos', async () => {
+    const insert = createChain({ data: Array.from({ length: 10 }, (_, id) => ({ id: String(id) })), error: null });
+    const { service, from, rpc } = harness([...context, { data: { id: 'ins-1', rol: 'instructor' }, error: null }]);
+    from.mockReturnValueOnce(insert);
+    const result = await service.confirmar(enrollmentId, confirmation);
+    expect(result).toMatchObject({ slotsCreados: 10, horasProgramadas: 10, horasRequeridas: 15 });
     expect(result.slotIds).toHaveLength(10);
-
-    const insertedRows = insertChain.insert.mock.calls[0][0] as Record<string, unknown>[];
-    expect(insertedRows).toHaveLength(10);
-    for (const row of insertedRows) {
-      expect(row).toMatchObject({
-        cohort_id: cohortId,
-        instructor_id: 'ins-1',
-        student_id: studentId,
-        duration_minutes: 60,
-        status: 'asignado',
-      });
+    const rows = insert.insert.mock.calls[0][0] as Record<string, unknown>[];
+    expect(rows).toHaveLength(10);
+    expect(new Set(rows.map((row) => row.scheduled_at)).size).toBe(10);
+    for (const row of rows) {
+      expect(row).toMatchObject({ cohort_id: 'cohort-1', student_id: 'student-1',
+        instructor_id: 'ins-1', duration_minutes: 60, status: 'asignado' });
     }
-    expect(insertedRows[0].scheduled_at).toBe('2026-03-02T20:00:00.000Z');
+    expect(rpc).toHaveBeenCalledWith('practice_free_instructors', {
+      p_instructor_id: 'ins-1', p_scheduled_ats: rows.map((row) => row.scheduled_at),
+    });
+    expect(insert.insert).toHaveBeenCalledTimes(1);
   });
 
-  it('responde 404 si el instructor no existe', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      { data: null, error: null },
-    ]);
-
-    await expect(service.confirmar(enrollmentId, confirmarInput)).rejects.toMatchObject({
-      statusCode: 404,
-    });
+  it('un conflicto previo evita el INSERT, incluida la ocupación de liberado resuelta por SQL', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
+    const { service, from } = harness([...context, { data: { id: 'ins-1', rol: 'instructor' }, error: null }], rpc);
+    await expect(service.confirmar(enrollmentId, confirmation)).rejects.toMatchObject({ statusCode: 409 });
+    expect(from).toHaveBeenCalledTimes(4);
   });
 
-  it('responde 400 si el usuario indicado no tiene rol instructor', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      { data: { id: 'ins-1', rol: 'estudiante' }, error: null },
-    ]);
-
-    await expect(service.confirmar(enrollmentId, confirmarInput)).rejects.toMatchObject({
-      statusCode: 400,
+  it('traduce una exclusión perdida en la carrera del INSERT masivo a 409', async () => {
+    const insert = createChain({ data: null, error: { code: '23P01', message: 'constraint conflict', details: 'private' } });
+    const { service, from } = harness([...context, { data: { id: 'ins-1', rol: 'instructor' }, error: null }]);
+    from.mockReturnValueOnce(insert);
+    await expect(service.confirmar(enrollmentId, confirmation)).rejects.toMatchObject({
+      statusCode: 409, message: 'El instructor ya tiene una práctica que se solapa con este intervalo',
     });
+    expect(insert.insert).toHaveBeenCalledTimes(1);
   });
 
-  it('responde 409 con la fecha/hora en conflicto si el instructor ya no está libre (chequeo previo)', async () => {
-    const service = buildService([
-      { data: enrollmentRow, error: null },
-      { data: cohortRow, error: null },
-      { data: courseRow, error: null },
-      { data: { id: 'ins-1', rol: 'instructor' }, error: null },
-      { data: [{ scheduled_at: '2026-03-02T20:00:00.000Z' }], error: null }, // ya ocupado
-    ]);
-
-    await expect(service.confirmar(enrollmentId, confirmarInput)).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringContaining('2026-03-02 15:00') as string,
-    });
-  });
-
-  it('si el índice único rechaza el insert (carrera justo antes de escribir), responde 409 sin insertar parcialmente', async () => {
-    const from = jest
-      .fn()
-      .mockReturnValueOnce(createChain({ data: enrollmentRow, error: null }))
-      .mockReturnValueOnce(createChain({ data: cohortRow, error: null }))
-      .mockReturnValueOnce(createChain({ data: courseRow, error: null }))
-      .mockReturnValueOnce(createChain({ data: { id: 'ins-1', rol: 'instructor' }, error: null }))
-      .mockReturnValueOnce(createChain({ data: [], error: null }))
-      .mockReturnValueOnce(
-        createChain({
-          data: null,
-          error: {
-            code: '23505',
-            details:
-              'Key (instructor_id, scheduled_at)=(ins-1, 2026-03-02 20:00:00+00) already exists.',
-          },
-        }),
-      );
-    const service = new PracticeSlotGenerationService({
-      from,
-    } as unknown as SupabaseClient<Database>);
-
-    await expect(service.confirmar(enrollmentId, confirmarInput)).rejects.toMatchObject({
-      statusCode: 409,
-      message: expect.stringContaining('2026-03-02 15:00') as string,
-    });
+  it('propaga errores de disponibilidad sin crear prácticas', async () => {
+    const error = { code: 'XX000', message: 'error de prueba' };
+    await expect(harness(context, jest.fn().mockResolvedValue({ data: null, error }))
+      .service.sugerir(enrollmentId, input)).rejects.toEqual(error);
   });
 });
