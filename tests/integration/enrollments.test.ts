@@ -105,6 +105,16 @@ describe('POST /enrollments', () => {
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
+  it('responde 400 si fechaNacimiento no tiene formato YYYY-MM-DD', async () => {
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ ...validEnrollmentBody, fechaNacimiento: '15-05-2000' });
+
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
   it('responde 409 si la cédula ya está registrada', async () => {
     mockedFrom
       .mockReturnValueOnce(createChain({ data: cohortRow, error: null })) // getCohortOrThrow
@@ -184,6 +194,141 @@ describe('POST /enrollments', () => {
     expect(res.body.enrollment).toMatchObject({ id: 'enrollment-1', cohortId: cohortRow.id });
     expect(mockedSendMail).toHaveBeenCalledTimes(1);
     expect(mockedDeleteUser).not.toHaveBeenCalled();
+  });
+
+  it('acepta y persiste los datos ampliados del estudiante (fechaNacimiento, tipoSangre, genero, ciudadania, direccion)', async () => {
+    const studentId = 'new-student-id';
+    const bodyConDatosAmpliados = {
+      ...validEnrollmentBody,
+      fechaNacimiento: '2000-05-15',
+      tipoSangre: 'O+',
+      genero: 'Femenino',
+      ciudadania: 'Ecuatoriana',
+      direccion: 'Av. Siempre Viva 123',
+    };
+    const userRow = {
+      id: studentId,
+      cedula: bodyConDatosAmpliados.cedula,
+      nombre_completo: bodyConDatosAmpliados.nombreCompleto,
+      telefono: bodyConDatosAmpliados.telefono,
+      rol: 'estudiante',
+      fecha_nacimiento: bodyConDatosAmpliados.fechaNacimiento,
+      tipo_sangre: bodyConDatosAmpliados.tipoSangre,
+      genero: bodyConDatosAmpliados.genero,
+      ciudadania: bodyConDatosAmpliados.ciudadania,
+      direccion: bodyConDatosAmpliados.direccion,
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: cohortRow.id,
+      status: 'activo',
+      monto_total: cohortRow.precio,
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    let usersInsertBody: unknown;
+    mockedFrom
+      .mockReturnValueOnce(createChain({ data: cohortRow, error: null })) // getCohortOrThrow
+      .mockReturnValueOnce(createChain({ data: null, error: null })) // assertCedulaAvailable
+      .mockImplementationOnce(() => {
+        const chain = createChain({ data: userRow, error: null });
+        chain.insert = jest.fn((body: unknown) => {
+          usersInsertBody = body;
+          return chain;
+        });
+        return chain;
+      }) // createUserRow
+      .mockReturnValueOnce(createChain({ data: enrollmentRow, error: null })); // createEnrollmentRow
+    mockedCreateUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(bodyConDatosAmpliados);
+
+    expect(res.status).toBe(201);
+    expect(usersInsertBody).toMatchObject({
+      fecha_nacimiento: '2000-05-15',
+      tipo_sangre: 'O+',
+      genero: 'Femenino',
+      ciudadania: 'Ecuatoriana',
+      direccion: 'Av. Siempre Viva 123',
+    });
+    expect(res.body.student).toMatchObject({
+      fechaNacimiento: '2000-05-15',
+      tipoSangre: 'O+',
+      genero: 'Femenino',
+      ciudadania: 'Ecuatoriana',
+      direccion: 'Av. Siempre Viva 123',
+    });
+  });
+
+  it('responde 400 si descuento o montoAbonado son negativos', async () => {
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ ...validEnrollmentBody, descuento: -10 });
+
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('responde 400 (no 500) si el descuento supera el precio de la cohorte', async () => {
+    mockedFrom.mockReturnValueOnce(createChain({ data: cohortRow, error: null })); // getCohortOrThrow
+
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ ...validEnrollmentBody, descuento: 200 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('El descuento no puede ser mayor al precio de la cohorte');
+    expect(mockedCreateUser).not.toHaveBeenCalled();
+  });
+
+  it('aplica el descuento y persiste el monto abonado en la respuesta de creación de matrícula', async () => {
+    const studentId = 'new-student-id';
+    const userRow = {
+      id: studentId,
+      cedula: validEnrollmentBody.cedula,
+      nombre_completo: validEnrollmentBody.nombreCompleto,
+      telefono: validEnrollmentBody.telefono,
+      rol: 'estudiante',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: cohortRow.id,
+      status: 'activo',
+      monto_total: '100.00',
+      descuento: '50',
+      monto_abonado: '30',
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    mockedFrom
+      .mockReturnValueOnce(createChain({ data: cohortRow, error: null })) // getCohortOrThrow
+      .mockReturnValueOnce(createChain({ data: null, error: null })) // assertCedulaAvailable
+      .mockReturnValueOnce(createChain({ data: userRow, error: null })) // createUserRow
+      .mockReturnValueOnce(createChain({ data: enrollmentRow, error: null })); // createEnrollmentRow
+    mockedCreateUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ ...validEnrollmentBody, descuento: 50, montoAbonado: 30 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.enrollment).toMatchObject({ montoTotal: 100, descuento: 50, montoAbonado: 30 });
   });
 
   describe('sin cohortId: asignación automática vía CohortAssignmentService (Fase 10)', () => {

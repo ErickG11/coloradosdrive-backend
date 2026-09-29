@@ -43,6 +43,11 @@ export interface Database {
           rol: UserRole;
           status: StudentStatus | null;
           debe_cambiar_password: boolean;
+          fecha_nacimiento: string | null;
+          tipo_sangre: string | null;
+          genero: string | null;
+          ciudadania: string | null;
+          direccion: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -54,6 +59,11 @@ export interface Database {
           rol: UserRole;
           status?: StudentStatus | null;
           debe_cambiar_password?: boolean;
+          fecha_nacimiento?: string | null;
+          tipo_sangre?: string | null;
+          genero?: string | null;
+          ciudadania?: string | null;
+          direccion?: string | null;
         };
         Update: Partial<{
           cedula: string;
@@ -62,6 +72,11 @@ export interface Database {
           rol: UserRole;
           status: StudentStatus | null;
           debe_cambiar_password: boolean;
+          fecha_nacimiento: string | null;
+          tipo_sangre: string | null;
+          genero: string | null;
+          ciudadania: string | null;
+          direccion: string | null;
         }>;
         Relationships: [];
       };
@@ -146,6 +161,8 @@ export interface Database {
           cohort_id: string | null;
           status: EnrollmentStatus;
           monto_total: string | null;
+          descuento: string;
+          monto_abonado: string;
           horas_practica_objetivo: number | null;
           fecha_inscripcion: string;
           created_at: string;
@@ -157,12 +174,16 @@ export interface Database {
           cohort_id: string | null;
           status?: EnrollmentStatus;
           monto_total: number | null;
+          descuento?: number;
+          monto_abonado?: number;
           horas_practica_objetivo?: number | null;
         };
         Update: Partial<{
           cohort_id: string | null;
           status: EnrollmentStatus;
           monto_total: number | null;
+          descuento: number;
+          monto_abonado: number;
           horas_practica_objetivo: number | null;
         }>;
         Relationships: [];
