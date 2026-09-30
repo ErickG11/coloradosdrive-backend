@@ -194,6 +194,9 @@ export class InstructorService {
       password: temporaryPassword,
     });
     if (updateError) throw new AppError('No se pudo regenerar la contraseña temporal', 502);
+    const { error: flagError } = await this.db.from('users')
+      .update({ debe_cambiar_password: true }).eq('id', id).eq('rol', 'instructor');
+    if (flagError) throw new AppError('El estado de la contraseña requiere reconciliación administrativa', 503);
     try {
       await this.email.sendInstructorCredentials({
         to: data.user.email, nombreCompleto: row.nombre_completo, temporaryPassword,
