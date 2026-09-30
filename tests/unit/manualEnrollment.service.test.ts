@@ -44,6 +44,58 @@ const op: ManualOperation = {
   updated_at: '',
 };
 describe('Idempotencia y estado recuperable de confirmación', () => {
+  it('reenvío nuevo pendiente exige regeneración explícita antes de reclamar correo', async () => {
+    const rpc = jest.fn(),
+      from = jest
+        .fn()
+        .mockReturnValueOnce(createChain({ data: { ...op, student_created: true }, error: null }))
+        .mockReturnValueOnce(
+          createChain({
+            data: { nombre_completo: 'Nuevo', debe_cambiar_password: true },
+            error: null,
+          }),
+        );
+    const db = { rpc, from } as unknown as SupabaseClient<Database>;
+    await expect(
+      new ManualEnrollmentService(db, {} as EmailService).resend('admin', 'op', false),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it('una respuesta perdida de creación Auth conserva needs_review y no permite otro intento', async () => {
+    const rpc = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { ...op, phase: 'processing', claimed: true }, error: null })
+      .mockResolvedValueOnce({ data: { ...op, phase: 'needs_review' }, error: null });
+    const catalog = createChain({ data: [{ tipo: 'A', course_id: 'a' }], error: null }),
+      cohorts = createChain({ data: [], error: null }),
+      users = createChain({ data: null, error: null });
+    const from = jest.fn((table: string) =>
+      table === 'manual_course_catalog' ? catalog : table === 'cohorts' ? cohorts : users,
+    );
+    const createUser = jest.fn().mockRejectedValue(new Error('Local induced lost Auth response')),
+      deleteUser = jest.fn();
+    const db = {
+      rpc,
+      from,
+      auth: { admin: { createUser, deleteUser } },
+    } as unknown as SupabaseClient<Database>;
+    const request = {
+      ...input,
+      student: {
+        mode: 'new' as const,
+        cedula: '9905070099',
+        nombreCompleto: 'Sintético',
+        correo: 'lost-response@example.test',
+      },
+    };
+    await expect(
+      new ManualEnrollmentService(db, {} as EmailService).confirm('admin', 'op', request),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    expect(createUser).toHaveBeenCalledTimes(1);
+    expect(deleteUser).not.toHaveBeenCalled();
+    expect(users.update).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenLastCalledWith('abort_manual_enrollment', expect.any(Object));
+  });
   it('replay devuelve matrícula confirmada incluso si el correo falló, sin crear ni enviar de nuevo', async () => {
     const rpc = jest.fn().mockResolvedValue({ data: { ...op, claimed: false }, error: null }),
       createUser = jest.fn(),
@@ -77,12 +129,10 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
   it('clave con otro payload no ejecuta Auth', async () => {
     const createUser = jest.fn(),
       db = {
-        rpc: jest
-          .fn()
-          .mockResolvedValue({
-            data: null,
-            error: { code: 'CD021', message: 'Clave utilizada con otra operación' },
-          }),
+        rpc: jest.fn().mockResolvedValue({
+          data: null,
+          error: { code: 'CD021', message: 'Clave utilizada con otra operación' },
+        }),
         auth: { admin: { createUser } },
       } as unknown as SupabaseClient<Database>;
     await expect(

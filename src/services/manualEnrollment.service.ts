@@ -240,6 +240,7 @@ export class ManualEnrollmentService {
         409,
       );
     let createdId: string | null = null;
+    let authCreationUncertain = false;
     let password: string | undefined;
     try {
       const plan = manualPracticePlan(input.practice);
@@ -285,21 +286,27 @@ export class ManualEnrollmentService {
             409,
           );
         password = randomBytes(18).toString('base64url');
+        authCreationUncertain = true;
         const { data, error: ae } = await this.db.auth.admin.createUser({
           email: input.student.correo,
           password,
           email_confirm: true,
           app_metadata: { role: 'estudiante' },
         });
-        if (ae)
+        if (ae) {
+          // Un rechazo explícito 4xx acredita que no se creó la identidad.
+          // Transporte/5xx o respuesta perdida requieren reconciliar Auth.
+          if (ae.status && ae.status >= 400 && ae.status < 500) authCreationUncertain = false;
           throw new AppError(
             ae.code === 'email_exists'
               ? 'El correo ya existe. Busca y selecciona el estudiante existente.'
               : 'No se pudo crear la cuenta de acceso',
             ae.code === 'email_exists' ? 409 : 502,
           );
+        }
         studentId = data.user.id;
         createdId = studentId;
+        authCreationUncertain = false;
         await this.updateOperation(id, worker, { student_id: studentId, student_created: true });
       }
       const storedPlan = {
@@ -344,6 +351,12 @@ export class ManualEnrollmentService {
         );
       }
       if (current.phase === 'committed') return this.result(current);
+      if (authCreationUncertain) {
+        throw new AppError(
+          `No se pudo determinar la creación de la cuenta de ${id}. Requiere reconciliación de Auth antes de reintentar; no se eliminó ninguna identidad.`,
+          503,
+        );
+      }
       if (createdId) {
         const { error: de } = await this.db.auth.admin.deleteUser(createdId);
         if (de) {
@@ -406,6 +419,17 @@ export class ManualEnrollmentService {
       .eq('id', op.student_id)
       .single();
     if (pe) throw pe;
+    if (
+      !password &&
+      !regenerate &&
+      op.student_created &&
+      profile.debe_cambiar_password &&
+      op.email_status !== 'sent'
+    )
+      throw new AppError(
+        'Para reenviar el acceso de esta cuenta nueva debes confirmar explícitamente la regeneración de su contraseña temporal.',
+        409,
+      );
     if (regenerate && (!op.student_created || !profile.debe_cambiar_password))
       throw new AppError(
         'Solo puede regenerarse la contraseña temporal de una cuenta creada en esta operación que aún no la ha cambiado',
