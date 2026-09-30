@@ -52,8 +52,13 @@ describe('Plan civil compartido con el wizard por HTTP', () => {
     { horasPorDia: 1.5 },
     { horasPorDia: 0 },
     { horaDeseada: '21:01' },
-    { fechaFin: '2029-01-01' },
   ])('rechaza plan inválido %j', (override) => {
     expect(() => manualPracticePlan({ ...base, ...override })).toThrow();
+  });
+  it('un rango manual no impone un límite comercial adicional de semanas', () => {
+    const p = manualPracticePlan({ ...base, fechaFin: '2029-01-01' });
+    expect(p.fechaFinElegida).toBe('2029-01-01');
+    expect(p.semanas).toBe(1);
+    expect(p.dias).toBeGreaterThan(500);
   });
 });
