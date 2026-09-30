@@ -37,6 +37,12 @@ const SELECT_WITH_NAMES = `
   student:users!practice_slots_student_id_fkey(nombre_completo)
 `;
 
+const SELECT_WITH_ACTIVE_INSTRUCTOR = `
+  *,
+  instructor:users!practice_slots_instructor_id_fkey!inner(nombre_completo,activo),
+  student:users!practice_slots_student_id_fkey(nombre_completo)
+`;
+
 function toPracticeSlot(row: PracticeSlotRow): PracticeSlot {
   return {
     id: row.id,
@@ -204,45 +210,55 @@ export class PracticeSlotService {
 
   // RF-03: el estudiante ve las franjas disponibles de su propia cohorte
   // (vía su inscripción activa), más sus propias franjas ya asignadas/
-  // confirmadas aunque ya no estén "disponibles". studentId siempre viene
-  // del JWT ya verificado (ver practiceSlot.controller.ts), nunca de un
-  // parámetro del cliente, así que interpolarlo en el filtro .or() es
-  // seguro (un UUID de sesión, no un valor arbitrario del request).
+  // confirmadas aunque ya no estén "disponibles". Las franjas libres se
+  // filtran por instructor activo en PostgREST; las propias se consultan
+  // aparte para conservar las ya asignadas si el instructor se desactiva.
   //
   // 'liberado' se incluye junto a 'disponible': claimSlot acepta reclamar
   // una franja en cualquiera de esos dos estados (status IN ('disponible',
   // 'liberado')), así que el listado tiene que mostrar ambos - de lo
   // contrario, una franja cancelada por un estudiante (que queda en
-  // 'liberado', con student_id ya en NULL) dejaría de matchear las dos
-  // condiciones de este filtro y se volvería invisible para reclamarla de
-  // nuevo, incluso después del broadcast slot-released.
+  // 'liberado', con student_id ya en NULL) quedaría invisible para reclamarla
+  // de nuevo, incluso después del broadcast slot-released.
   async listSlotsForStudent(studentId: string): Promise<StudentPracticeSlot[]> {
     const cohortIds = await activeCohortIds(this.supabase, studentId);
     if (!cohortIds.length) {
       return [];
     }
 
-    const { data, error } = await this.supabase
+    const { data: freeSlots, error: freeSlotsError } = await this.supabase
+      .from('practice_slots')
+      .select(SELECT_WITH_ACTIVE_INSTRUCTOR)
+      .in('cohort_id', cohortIds)
+      .in('status', ['disponible', 'liberado'])
+      .eq('instructor.activo', true)
+      .order('scheduled_at', { ascending: true })
+      .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
+    if (freeSlotsError) {
+      throw freeSlotsError;
+    }
+
+    const { data: ownSlots, error: ownSlotsError } = await this.supabase
       .from('practice_slots')
       .select(SELECT_WITH_NAMES)
       .in('cohort_id', cohortIds)
-      .or(`status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`)
+      .eq('student_id', studentId)
       .order('scheduled_at', { ascending: true })
       .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
-
-    if (error) {
-      throw error;
+    if (ownSlotsError) {
+      throw ownSlotsError;
     }
 
-    return data.filter((row) => row.student_id === studentId || row.instructor?.activo)
+    return [...freeSlots, ...ownSlots]
+      .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))
       .map((row) => {
-      const slot = toPracticeSlotWithNames(row);
-      if (row.student_id === studentId &&
-          ['asignado', 'confirmado', 'completado'].includes(row.status)) return slot;
-      const hidden: Partial<PracticeSlotWithNames> = { ...slot };
-      delete hidden.instructorId;
-      delete hidden.instructorName;
-      return hidden as Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
+        const slot = toPracticeSlotWithNames(row);
+        if (row.student_id === studentId &&
+            ['asignado', 'confirmado', 'completado'].includes(row.status)) return slot;
+        const hidden: Partial<PracticeSlotWithNames> = { ...slot };
+        delete hidden.instructorId;
+        delete hidden.instructorName;
+        return hidden as Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
       });
   }
 
