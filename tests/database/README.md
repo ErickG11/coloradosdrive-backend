@@ -27,7 +27,7 @@ Desde la raíz del backend, sin instalar herramientas globales ni leer el `.env`
 Solo si NO existe un laboratorio registrado, `./tests/database/new-lab.ps1` prepara
 uno. Rechaza un StatePath existente y puertos ocupados. Ambos scripts aceptan
 `-StatePath` para el JSON del laboratorio; su valor predeterminado está en
-`../.cd-05-07-lab/current.json`, fuera del repositorio. No se guarda ningún secreto en Git.
+`../.pg-lab/current.json`, fuera del repositorio. No se guarda ningún secreto en Git.
 El directorio local del laboratorio contiene env-files temporales y logs; no imprimir
 ni compartir los env-files. Los contextos de build y las copias al auxiliar incluyen
 solo Dockerfile, pruebas, migraciones y documentación operativa, nunca `.env`.
