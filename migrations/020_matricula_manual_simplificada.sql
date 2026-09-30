@@ -1,4 +1,5 @@
--- Archivo generado por Supabase CLI 2.118.0, posterior al historial 001–019.
+-- 020_matricula_manual_simplificada.sql
+-- Matrícula manual simplificada (ADR-010). Aplicar después de 018 y 019.
 -- Preflight: pendientes antiguos necesitan un mapa EXPLÍCITO por inscripción:
 -- SET coloradosdrive.pending_course_map = '{"enrollment_uuid":"course_uuid"}';
 -- No se infiere el tipo por nombre, orden, precio ni otras matrículas.
