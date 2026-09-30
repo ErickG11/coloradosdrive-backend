@@ -29,10 +29,51 @@ export type AttemptStatus = 'en_progreso' | 'completado';
 export type PracticeSlotStatus =
   'disponible' | 'asignado' | 'confirmado' | 'liberado' | 'sin_practica' | 'completado';
 
+export interface ManualOperation extends Record<string, unknown> {
+  id: string;
+  actor_id: string;
+  request_hash: string;
+  worker_id: string;
+  phase: 'processing' | 'failed' | 'needs_review' | 'committed';
+  student_id: string | null;
+  student_created: boolean;
+  response: Record<string, unknown> | null;
+  email_status: 'pending' | 'sending' | 'sent' | 'failed';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      find_manual_students: {
+        Args: { p_actor: string; p_query: string };
+        Returns: { id: string; cedula: string; nombre_completo: string; correo: string }[];
+      };
+      reserve_manual_enrollment: {
+        Args: { p_id: string; p_actor: string; p_hash: string; p_worker: string };
+        Returns: ManualOperation & { claimed: boolean };
+      };
+      commit_manual_enrollment: {
+        Args: {
+          p_id: string;
+          p_worker: string;
+          p_student: string;
+          p_profile: Record<string, unknown> | null;
+          p_course: string;
+          p_cohort: string | null;
+          p_plan: Record<string, unknown>;
+          p_scheduled_ats: string[];
+          p_instructor: string | null;
+        };
+        Returns: Record<string, unknown>;
+      };
+      claim_manual_enrollment_email: { Args: { p_id: string }; Returns: boolean };
+      abort_manual_enrollment: {
+        Args: { p_id: string; p_worker: string };
+        Returns: ManualOperation;
+      };
       practice_free_instructors: {
         Args: { p_scheduled_ats: string[]; p_instructor_id?: string };
         Returns: { id: string; nombre_completo: string }[];
@@ -49,11 +90,27 @@ export interface Database {
         }[];
       };
       transition_practice_slot_for_scheduler: {
-        Args: { p_slot_id: string; p_transition: 'remind' | 'close' | 'complete'; p_expected_version: string };
+        Args: {
+          p_slot_id: string;
+          p_transition: 'remind' | 'close' | 'complete';
+          p_expected_version: string;
+        };
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
       };
     };
     Tables: {
+      manual_course_catalog: {
+        Row: { tipo: CourseType; course_id: string };
+        Insert: { tipo: CourseType; course_id: string };
+        Update: Partial<{ tipo: CourseType; course_id: string }>;
+        Relationships: [];
+      };
+      manual_enrollment_operations: {
+        Row: ManualOperation;
+        Insert: Pick<ManualOperation, 'id' | 'actor_id' | 'request_hash' | 'worker_id' | 'phase'>;
+        Update: Partial<ManualOperation>;
+        Relationships: [];
+      };
       users: {
         Row: {
           id: string;
@@ -177,6 +234,9 @@ export interface Database {
       enrollments: {
         Row: {
           id: string;
+          course_id: string;
+          course_type: CourseType;
+          practice_plan: Record<string, unknown> | null;
           student_id: string;
           cohort_id: string | null;
           status: EnrollmentStatus;
@@ -190,6 +250,9 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          course_id?: string;
+          course_type?: CourseType;
+          practice_plan?: Record<string, unknown> | null;
           student_id: string;
           cohort_id: string | null;
           status?: EnrollmentStatus;
@@ -199,6 +262,9 @@ export interface Database {
           horas_practica_objetivo?: number | null;
         };
         Update: Partial<{
+          course_id: string;
+          course_type: CourseType;
+          practice_plan: Record<string, unknown> | null;
           cohort_id: string | null;
           status: EnrollmentStatus;
           monto_total: number | null;

@@ -162,4 +162,12 @@ describe('authenticate middleware', () => {
     expect(next).toHaveBeenCalledWith();
     expect(mockedFrom).not.toHaveBeenCalled();
   });
+  it('permite consultar solo el estado propio con JWT antes de cambiar contraseña', async () => {
+    mockedVerify.mockResolvedValue({ sub: 'user-123', app_metadata: { role: 'estudiante' } });
+    const req = buildRequest('Bearer valid.token.here', 'GET', '/account-status');
+    (req as unknown as { baseUrl: string }).baseUrl = '/estudiantes';
+    await authenticate(req, res, next);
+    expect(next).toHaveBeenCalledWith();
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
 });

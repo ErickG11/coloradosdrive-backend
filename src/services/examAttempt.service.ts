@@ -13,6 +13,7 @@ import type {
 import { AppError } from '../utils/AppError';
 import type { EmailService } from './email.service';
 import { gradeOpenTextAnswer } from './grading.service';
+import { activeCourseIds } from './studentEnrollmentScope';
 
 type ExamRow = Database['public']['Tables']['exams']['Row'];
 type QuestionRow = Database['public']['Tables']['questions']['Row'];
@@ -558,33 +559,10 @@ export class ExamAttemptService {
     return data;
   }
 
-  // enrollments -> cohorts -> courses, sin selects anidados via foreign
-  // keys (misma convencion que ExamService.getActiveCourseIdForStudent).
+  // Verifica todos los cursos activos del propio sujeto, sin ampliar acceso
+  // a otros estudiantes ni a matrículas pendientes o terminales.
   private async assertStudentEnrolledInCourse(studentId: string, courseId: string): Promise<void> {
-    const { data: enrollment, error: enrollmentError } = await this.supabase
-      .from('enrollments')
-      .select('cohort_id')
-      .eq('student_id', studentId)
-      .eq('status', 'activo')
-      .maybeSingle();
-    if (enrollmentError) {
-      throw enrollmentError;
-    }
-    // Sin inscripción activa, o activa pero pendiente de cohorte (sin
-    // cohort_id todavía): en ambos casos no hay curso que verificar.
-    if (!enrollment?.cohort_id) {
-      throw new AppError('No tienes una inscripción activa en el curso de este examen', 403);
-    }
-
-    const { data: cohort, error: cohortError } = await this.supabase
-      .from('cohorts')
-      .select('course_id')
-      .eq('id', enrollment.cohort_id)
-      .maybeSingle();
-    if (cohortError) {
-      throw cohortError;
-    }
-    if (cohort?.course_id !== courseId) {
+    if (!(await activeCourseIds(this.supabase, studentId)).includes(courseId)) {
       throw new AppError('No tienes una inscripción activa en el curso de este examen', 403);
     }
   }

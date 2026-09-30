@@ -157,7 +157,7 @@ describe('exam attempts endpoints', () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
-        .mockReturnValueOnce(createChain({ data: null, error: null })); // sin enrollment activo
+        .mockReturnValueOnce(createChain({ data: [], error: null })); // sin enrollment activo
 
       const res = await request(app)
         .post(`/exams/${examId}/attempts`)
@@ -172,8 +172,8 @@ describe('exam attempts endpoints', () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
-        .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
-        .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
+        .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null })) // enrollment
+        .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null })) // cohort
         .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
         .mockReturnValueOnce(createChain({ data: attemptRow, error: null })) // insertAttempt
         .mockReturnValueOnce(
@@ -221,8 +221,8 @@ describe('exam attempts endpoints', () => {
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'practica' }), error: null }),
           ) // exam
-          .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
-          .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
+          .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null })) // enrollment
+          .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null })) // cohort
           .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
           .mockReturnValueOnce(
             createChain({ data: buildAttemptRow({ id: 'attempt-2' }), error: null }),
@@ -245,8 +245,8 @@ describe('exam attempts endpoints', () => {
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
           ) // exam
-          .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
-          .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
+          .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null })) // enrollment
+          .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null })) // cohort
           .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
           .mockReturnValueOnce(createChain({ data: null, error: null, count: 0 })) // hasAnyAttempt: ninguno todavía
           .mockReturnValueOnce(createChain({ data: buildAttemptRow(), error: null })) // insertAttempt
@@ -271,8 +271,8 @@ describe('exam attempts endpoints', () => {
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
           ) // exam
-          .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null })) // enrollment
-          .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null })) // cohort
+          .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null })) // enrollment
+          .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null })) // cohort
           .mockReturnValueOnce(createChain({ data: null, error: null })) // sin intento en_progreso
           .mockReturnValueOnce(createChain({ data: null, error: null, count: 1 })); // ya existe 1 intento
 
