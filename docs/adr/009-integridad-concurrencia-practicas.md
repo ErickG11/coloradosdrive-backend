@@ -87,7 +87,10 @@ en `docs/operations/cd-05-07.md`. 018/019 y el backend forman un contrato conjun
 Las pruebas Jest comprueban validación de duración, contrato HTTP y efectos tras
 transiciones aceptadas/omitidas, usando mocks. `tests/database` prepara pruebas reales
 de migraciones, restricciones, límites y sesiones concurrentes. No se ejecutó contra
-PostgreSQL en este entorno; aprobar Jest no demuestra las garantías SQL.
+PostgreSQL durante la implementación original; aprobar Jest no demuestra las garantías SQL.
+La primera validación real posterior aprobó en PostgreSQL 17.6, con carreras y roles
+efectivos: [registro y límites del laboratorio](../operations/cd-05-07-postgresql-lab.md).
+Supabase/PostgREST, Auth, RLS, historial completo y Node 18 siguen pendientes.
 
 Se descartaron consultas previas como única garantía (carrera), el índice único de
 inicios (ignora intersecciones) y sumar intervalos directamente a timestamptz en un
