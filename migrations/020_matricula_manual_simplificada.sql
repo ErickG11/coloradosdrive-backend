@@ -212,7 +212,7 @@ grant execute on function public.enrollment_resolve_course(),
 create or replace function public.enforce_enrollment_student_role()
 returns trigger
 language plpgsql security invoker set search_path = ''
-as $
+as $$
 declare
   student_role public.user_role;
 begin
@@ -224,12 +224,12 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create or replace function public.enforce_practice_slot_instructor_role()
 returns trigger
 language plpgsql security invoker set search_path = ''
-as $
+as $$
 declare
   instructor_role public.user_role;
 begin
@@ -241,12 +241,12 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create or replace function public.enforce_practice_slot_student_role()
 returns trigger
 language plpgsql security invoker set search_path = ''
-as $
+as $$
 declare
   student_role public.user_role;
 begin
@@ -262,12 +262,12 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 create or replace function public.enforce_cohort_cupo()
 returns trigger
 language plpgsql security invoker set search_path = ''
-as $
+as $$
 declare
   v_cupo integer;
   v_ocupados integer;
@@ -311,7 +311,7 @@ begin
 
   return NEW;
 end;
-$;
+$$;
 
 notify pgrst, 'reload schema';
 commit;
