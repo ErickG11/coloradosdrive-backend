@@ -38,8 +38,8 @@ export function manualPracticePlan(input: ManualPracticeInput): ManualPracticePl
   }
   const start = parseFechaCivil(input.fechaInicio);
   const end = input.fechaFin === undefined ? null : parseFechaCivil(input.fechaFin);
-  if (end && (end < start || end > start.plus({ years: 2 }))) {
-    throw new AppError('El rango de práctica debe estar ordenado y no superar dos años', 400);
+  if (end && end < start) {
+    throw new AppError('La fecha final no puede ser anterior al inicio', 400);
   }
   const diasObjetivo = input.semanas * (input.modalidad === 'entre_semana' ? 5 : 2);
   const fechas: string[] = [];
