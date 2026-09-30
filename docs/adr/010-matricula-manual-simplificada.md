@@ -14,6 +14,9 @@ un reintento de red no debe crear cuentas duplicadas.
 
 ## Decisión
 
+Los cambios de base de datos están en `migrations/020_matricula_manual_simplificada.sql`,
+posterior a 018 y 019 (CD-05–07).
+
 - **Confirmación única.** Los pasos Estudiante, Curso y Prácticas solo consultan
   o preparan; únicamente el resumen final crea cuenta nueva, matrícula y
   programación. El frontend consume el preview del backend y no mantiene un
