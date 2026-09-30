@@ -214,12 +214,15 @@ describe('módulo de instructores', () => {
     expect(updateUser).not.toHaveBeenCalled();
 
     from.mockReturnValueOnce(createChain({ data: row, error: null }));
+    const flag = createChain({ data: null, error: null });
+    from.mockReturnValueOnce(flag);
     getUser.mockResolvedValue({ data: { user: { email: input.correo } }, error: null });
     updateUser.mockResolvedValue({ error: null });
     const sent = await request(app).post(`/admin/instructores/${id}/reenviar-credenciales`)
       .set('Authorization', token('admin')).send({});
     expect(sent.status).toBe(204);
     expect(updateUser).toHaveBeenCalledTimes(1);
+    expect(flag.update).toHaveBeenCalledWith({ debe_cambiar_password: true });
     expect(sendMail).toHaveBeenCalledTimes(1);
   });
 
