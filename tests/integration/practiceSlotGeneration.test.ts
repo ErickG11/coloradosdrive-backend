@@ -199,7 +199,7 @@ describe('generador de práctica (admin)', () => {
         .mockReturnValueOnce(createChain({ data: { course_id: 'course-1' }, error: null }))
         .mockReturnValueOnce(createChain({ data: { horas_requeridas: 15 }, error: null }))
         .mockReturnValueOnce(
-          createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }),
+          createChain({ data: { id: instructorId, rol: 'instructor', activo: true }, error: null }),
         )
         .mockReturnValueOnce(insertChain);
       mockedRpc.mockResolvedValue({ data: [{ id: instructorId, nombre_completo: 'Bruno Salas' }], error: null });

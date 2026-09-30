@@ -56,7 +56,7 @@ function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
 function buildSlotRowWithNames(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     ...buildSlotRow(),
-    instructor: { nombre_completo: 'Bruno Salas' },
+    instructor: { nombre_completo: 'Bruno Salas', activo: true },
     student: null,
     ...overrides,
   };
@@ -154,7 +154,7 @@ describe('practice-slots endpoints', () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
         .mockReturnValueOnce(
-          createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }),
+          createChain({ data: { id: instructorId, rol: 'instructor', activo: true }, error: null }),
         )
         .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }));
 
@@ -351,6 +351,8 @@ describe('practice-slots endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(2);
+      expect(res.body[0]).not.toHaveProperty('instructorId');
+      expect(res.body[0]).not.toHaveProperty('instructorName');
       expect(res.body[1]).toEqual(
         expect.objectContaining({ instructorName: 'Bruno Salas', studentName: 'Ana Torres' }),
       );
@@ -384,6 +386,24 @@ describe('practice-slots endpoints', () => {
       expect(res.body).toEqual([
         expect.objectContaining({ id: 'slot-released', status: 'liberado', studentName: null }),
       ]);
+      expect(res.body[0]).not.toHaveProperty('instructorId');
+      expect(res.body[0]).not.toHaveProperty('instructorName');
+    });
+
+    it('oculta franjas libres de un instructor inactivo y conserva las propias asignadas', async () => {
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
+        .mockReturnValueOnce(createChain({ data: [
+          buildSlotRowWithNames({ instructor: { nombre_completo: 'Bruno Salas', activo: false } }),
+          buildSlotRowWithNames({ id: 'propia', status: 'asignado', student_id: studentId,
+            instructor: { nombre_completo: 'Bruno Salas', activo: false } }),
+        ], error: null }));
+      const res = await request(app).get('/practice-slots')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0]).toMatchObject({ id: 'propia', instructorName: 'Bruno Salas' });
     });
 
     it('instructor: ve todas sus franjas, en cualquier estado, con el nombre del estudiante si tiene', async () => {
@@ -397,7 +417,9 @@ describe('practice-slots endpoints', () => {
         ],
         error: null,
       });
-      mockedFrom.mockReturnValueOnce(chain);
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(chain);
 
       const res = await request(app)
         .get('/practice-slots')
@@ -484,7 +506,7 @@ describe('practice-slots endpoints', () => {
         mockedFrom
           .mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
           .mockReturnValueOnce(
-            createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }),
+            createChain({ data: { id: instructorId, rol: 'instructor', activo: true }, error: null }),
           );
       }
       const write = createChain({ data: buildSlotRow({ scheduled_at: expected }), error: null });
@@ -573,7 +595,7 @@ describe('practice-slots endpoints', () => {
     mockedFrom
       .mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
       .mockReturnValueOnce(
-        createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }),
+        createChain({ data: { id: instructorId, rol: 'instructor', activo: true }, error: null }),
       )
       .mockReturnValueOnce(insert);
     const { durationMinutes: _duration, ...withoutDuration } = validCreateBody;
@@ -592,7 +614,7 @@ describe('practice-slots endpoints', () => {
         mockedFrom
           .mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
           .mockReturnValueOnce(
-            createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }),
+            createChain({ data: { id: instructorId, rol: 'instructor', activo: true }, error: null }),
           );
       }
       mockedFrom.mockReturnValueOnce(
