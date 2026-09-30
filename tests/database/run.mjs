@@ -116,6 +116,7 @@ await success(await file('../../migrations/005_practice_slots.sql'));
 await success(await file('../../migrations/010_practice_slots_no_overlap.sql'));
 const migration18 = await file('../../migrations/018_practice_slots_integrity.sql');
 const migration19 = await file('../../migrations/019_practice_slots_atomic_transitions.sql');
+const migration21 = await file('../../migrations/021_instructores_activos.sql');
 const cohort = '30000000-0000-4000-8000-000000000001';
 const teacher = '10000000-0000-4000-8000-000000000001';
 const student1 = '20000000-0000-4000-8000-000000000001';
@@ -139,10 +140,9 @@ assert.equal(await success('select count(*) from public.practice_slots;'), '2');
 await success('delete from public.practice_slots;');
 await success(migration18);
 await success(migration19);
-await success(await file('./regression.sql'));
 const extensionInstalled = await success(extensionSql);
 if (extensionScenario !== 'absent') assert.equal(extensionInstalled, extensionBefore, 'La extensión preexistente se movió o reemplazó.');
-console.log('PASS: fixture, migraciones 005/010/018/019, precondiciones CD005/CD006 y regresión SQL.');
+console.log('PASS: fixture, migraciones 005/010/018/019 y precondiciones CD005/CD006.');
 
 // Creaciones parciales concurrentes: la segunda realmente espera el lock GiST.
 await race(insert("'2035-03-01T08:00:00Z'"), insert("'2035-03-01T08:30:00Z'"), '23P01');
@@ -221,4 +221,7 @@ for (const scenario of ['018+019', 'solo 018']) {
   console.log(`PASS: rollback ${scenario}; filas, extensión e índice anterior conservados; 018 reaplicada.`);
 }
 await success(migration19);
-console.log('PASS: precondiciones, restricciones, RPC, límites, carreras reales, ambos escenarios de reversión y reaplicación.');
+await success('delete from public.practice_slots;'); // Solo base desechable tras las pruebas de rollback.
+await success(migration21);
+await success(await file('./regression.sql'));
+console.log('PASS: precondiciones, restricciones, RPC, límites, carreras, rollback, migración 021 y regresión SQL.');
