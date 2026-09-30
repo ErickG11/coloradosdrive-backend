@@ -36,6 +36,11 @@ describe('integridad de escrituras de práctica', () => {
     expect(() => throwPracticeWriteError(new PostgrestError({ code: '23514', message: 'practice_slots_duration_60', details: '', hint: '' })))
       .toThrow('exactamente 60');
   });
+  it('traduce la desactivación concurrente del instructor a 409', () => {
+    expect(() => throwPracticeWriteError(new PostgrestError({
+      code: 'CD023', message: 'detalle SQL privado', details: '', hint: '',
+    }))).toThrow('El instructor indicado está inactivo');
+  });
 });
 
 describe('contrato temporal del CRUD de prácticas', () => {
@@ -67,7 +72,7 @@ describe('contrato temporal del CRUD de prácticas', () => {
     const write = createChain({ data: { scheduled_at: expected }, error: null });
     const from = jest.fn()
       .mockReturnValueOnce(createChain({ data: { id: 'cohort' }, error: null }))
-      .mockReturnValueOnce(createChain({ data: { id: 'instructor', rol: 'instructor' }, error: null }))
+      .mockReturnValueOnce(createChain({ data: { id: 'instructor', rol: 'instructor', activo: true }, error: null }))
       .mockReturnValue(write);
     const service = new PracticeSlotService({ from } as unknown as SupabaseClient<Database>);
 
@@ -93,5 +98,15 @@ describe('contrato temporal del CRUD de prácticas', () => {
 
     expect(write.update).toHaveBeenCalledWith({ duration_minutes: 60 });
     expect(result.scheduledAt).toBe(current);
+  });
+
+  it('mantiene una franja con instructor inactivo al editar sin cambiar instructor_id', async () => {
+    const from = jest.fn()
+      .mockReturnValueOnce(createChain({ data: { instructor_id: 'instructor' }, error: null }))
+      .mockReturnValueOnce(createChain({ data: { scheduled_at: '2026-03-01T13:00:00Z' }, error: null }));
+    const service = new PracticeSlotService({ from } as unknown as SupabaseClient<Database>);
+    await service.updateSlot('slot', { instructorId: 'instructor', scheduledAt: '2026-03-01T13:00:00Z' });
+    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).not.toHaveBeenCalledWith('users');
   });
 });
