@@ -328,22 +328,21 @@ describe('practice-slots endpoints', () => {
     });
 
     it('estudiante con inscripción activa: ve disponibles de su cohorte + las propias', async () => {
-      const chain = createChain({
-        data: [
-          buildSlotRowWithNames(),
-          buildSlotRowWithNames({
-            id: 'slot-2',
-            student_id: studentId,
-            status: 'asignado',
-            student: { nombre_completo: 'Ana Torres' },
-          }),
-        ],
+      const freeSlots = createChain({ data: [buildSlotRowWithNames()], error: null });
+      const ownSlots = createChain({
+        data: [buildSlotRowWithNames({
+          id: 'slot-2',
+          student_id: studentId,
+          status: 'asignado',
+          student: { nombre_completo: 'Ana Torres' },
+        })],
         error: null,
       });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
-        .mockReturnValueOnce(chain);
+        .mockReturnValueOnce(freeSlots)
+        .mockReturnValueOnce(ownSlots);
 
       const res = await request(app)
         .get('/practice-slots')
@@ -356,9 +355,12 @@ describe('practice-slots endpoints', () => {
       expect(res.body[1]).toEqual(
         expect.objectContaining({ instructorName: 'Bruno Salas', studentName: 'Ana Torres' }),
       );
-      expect(chain.or).toHaveBeenCalledWith(
-        `status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`,
-      );
+      expect(freeSlots.select).toHaveBeenCalledWith(expect.stringContaining(
+        'instructor:users!practice_slots_instructor_id_fkey!inner(nombre_completo,activo)',
+      ));
+      expect(freeSlots.in).toHaveBeenCalledWith('status', ['disponible', 'liberado']);
+      expect(freeSlots.eq).toHaveBeenCalledWith('instructor.activo', true);
+      expect(ownSlots.eq).toHaveBeenCalledWith('student_id', studentId);
     });
 
     it('estudiante B ve la franja que el estudiante A acaba de liberar (cancelar)', async () => {
@@ -376,7 +378,8 @@ describe('practice-slots endpoints', () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
-        .mockReturnValueOnce(chain);
+        .mockReturnValueOnce(chain)
+        .mockReturnValueOnce(createChain({ data: [], error: null }));
 
       const res = await request(app)
         .get('/practice-slots')
@@ -391,19 +394,51 @@ describe('practice-slots endpoints', () => {
     });
 
     it('oculta franjas libres de un instructor inactivo y conserva las propias asignadas', async () => {
+      const freeSlots = createChain({ data: [], error: null });
+      const ownSlots = createChain({ data: [
+        buildSlotRowWithNames({ id: 'propia', status: 'asignado', student_id: studentId,
+          instructor: { nombre_completo: 'Bruno Salas', activo: false } }),
+      ], error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
-        .mockReturnValueOnce(createChain({ data: [
-          buildSlotRowWithNames({ instructor: { nombre_completo: 'Bruno Salas', activo: false } }),
-          buildSlotRowWithNames({ id: 'propia', status: 'asignado', student_id: studentId,
-            instructor: { nombre_completo: 'Bruno Salas', activo: false } }),
-        ], error: null }));
+        .mockReturnValueOnce(freeSlots)
+        .mockReturnValueOnce(ownSlots);
       const res = await request(app).get('/practice-slots')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
       expect(res.body[0]).toMatchObject({ id: 'propia', instructorName: 'Bruno Salas' });
+      expect(freeSlots.select).toHaveBeenCalledWith(expect.stringContaining(
+        'instructor:users!practice_slots_instructor_id_fkey!inner(nombre_completo,activo)',
+      ));
+      expect(freeSlots.eq).toHaveBeenCalledWith('instructor.activo', true);
+      expect(ownSlots.eq).toHaveBeenCalledWith('student_id', studentId);
+    });
+
+    it('filtra disponibles y liberadas por instructor activo en la consulta', async () => {
+      const freeSlots = createChain({ data: [
+        buildSlotRowWithNames({ id: 'disponible-activa' }),
+        buildSlotRowWithNames({ id: 'liberada-activa', status: 'liberado' }),
+      ], error: null });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
+        .mockReturnValueOnce(freeSlots)
+        .mockReturnValueOnce(createChain({ data: [], error: null }));
+
+      const res = await request(app).get('/practice-slots')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.map((slot: { id: string }) => slot.id)).toEqual([
+        'disponible-activa', 'liberada-activa',
+      ]);
+      expect(freeSlots.select).toHaveBeenCalledWith(expect.stringContaining(
+        'instructor:users!practice_slots_instructor_id_fkey!inner(nombre_completo,activo)',
+      ));
+      expect(freeSlots.in).toHaveBeenCalledWith('status', ['disponible', 'liberado']);
+      expect(freeSlots.eq).toHaveBeenCalledWith('instructor.activo', true);
     });
 
     it('instructor: ve todas sus franjas, en cualquier estado, con el nombre del estudiante si tiene', async () => {
