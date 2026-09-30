@@ -78,6 +78,10 @@ export interface Database {
         Args: { p_scheduled_ats: string[]; p_instructor_id?: string };
         Returns: { id: string; nombre_completo: string }[];
       };
+      set_instructor_active: {
+        Args: { p_id: string; p_active: boolean };
+        Returns: boolean;
+      };
       act_on_practice_slot: {
         Args: { p_slot_id: string; p_student_id: string; p_action: 'claim' | 'confirm' | 'cancel' };
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
@@ -120,6 +124,7 @@ export interface Database {
           rol: UserRole;
           status: StudentStatus | null;
           debe_cambiar_password: boolean;
+          activo: boolean;
           fecha_nacimiento: string | null;
           tipo_sangre: string | null;
           genero: string | null;
@@ -136,6 +141,7 @@ export interface Database {
           rol: UserRole;
           status?: StudentStatus | null;
           debe_cambiar_password?: boolean;
+          activo?: boolean;
           fecha_nacimiento?: string | null;
           tipo_sangre?: string | null;
           genero?: string | null;
@@ -149,6 +155,7 @@ export interface Database {
           rol: UserRole;
           status: StudentStatus | null;
           debe_cambiar_password: boolean;
+          activo: boolean;
           fecha_nacimiento: string | null;
           tipo_sangre: string | null;
           genero: string | null;

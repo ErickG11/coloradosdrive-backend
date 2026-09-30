@@ -68,6 +68,30 @@ function formatScheduledAt(scheduledAt: string): string {
 export class EmailService {
   constructor(private readonly transporter: Transporter) {}
 
+  async sendInstructorCredentials(params: WelcomeEmailParams): Promise<void> {
+    const login = new URL('/login', env.FRONTEND_URL).toString();
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      subject: 'Acceso de instructor a ColoradosDrive',
+      text: [
+        `Hola ${params.nombreCompleto},`,
+        'Tus credenciales de instructor son:',
+        `Correo: ${params.to}`,
+        `Contraseña temporal: ${params.temporaryPassword}`,
+        'Debes cambiarla al ingresar por primera vez.',
+        `Acceder: ${login}`,
+      ].join('\n'),
+      html: [
+        `<p>Hola ${escapeHtml(params.nombreCompleto)},</p>`,
+        '<p>Tus credenciales de instructor son:</p>',
+        `<p>Correo: ${escapeHtml(params.to)}<br>Contraseña temporal: <strong>${escapeHtml(params.temporaryPassword)}</strong></p>`,
+        '<p>Debes cambiarla al ingresar por primera vez.</p>',
+        `<p><a href="${escapeHtml(login)}">Acceder a ColoradosDrive</a></p>`,
+      ].join('\n'),
+    });
+  }
+
   async sendManualEnrollmentEmail(p: ManualEnrollmentEmailParams): Promise<void> {
     const url = new URL('/login', env.FRONTEND_URL);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
