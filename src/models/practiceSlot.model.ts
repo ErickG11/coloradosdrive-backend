@@ -27,15 +27,17 @@ export interface PracticeSlot {
   updatedAt: string;
 }
 
-// Forma que devuelven los 3 listados (admin/estudiante/instructor, ver
-// PracticeSlotService): instructorName siempre presente (instructorId es
-// NOT NULL), studentName null cuando no hay estudiante asignado. Evita
-// que cada rol tenga que resolver nombres ajenos por su cuenta contra
-// /users (ver docs/adr/008).
+// Forma completa para admin, instructor y franjas ya asignadas al estudiante.
+// En la selección del estudiante se omiten instructorId e instructorName.
 export interface PracticeSlotWithNames extends PracticeSlot {
   instructorName: string;
   studentName: string | null;
 }
+
+// Durante la selección, la identidad del instructor permanece oculta.
+export type StudentPracticeSlot =
+  | PracticeSlotWithNames
+  | Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
 
 // 'verde': sin estudiante asignado (disponible/liberado), o estados fuera
 // del ciclo activo (sin_practica/completado). 'rojo'/'amarillo'/'neutro':

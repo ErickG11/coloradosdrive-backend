@@ -13,6 +13,9 @@ export function effectivePracticeDuration(duration: number | undefined): 60 {
 
 // No exponer details de PostgreSQL (pueden contener identificadores).
 export function throwPracticeWriteError(error: PostgrestError): never {
+  if (error.code === 'CD023') {
+    throw new AppError('El instructor indicado está inactivo', 409);
+  }
   if (error.code === '23P01' ||
       (error.code === '23505' && error.message.includes('practice_slots_instructor_no_overlap'))) {
     throw new AppError('El instructor ya tiene una práctica que se solapa con este intervalo', 409);

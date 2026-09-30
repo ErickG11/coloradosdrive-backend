@@ -7,6 +7,7 @@ import type {
   PracticeSlotStatus,
   PracticeSlotWithColor,
   PracticeSlotWithNames,
+  StudentPracticeSlot,
   UpdatePracticeSlotInput,
 } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
@@ -26,13 +27,13 @@ type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
 // docs/adr/008): instructor nunca es null (instructor_id es NOT NULL),
 // student sí lo es cuando la franja no tiene estudiante asignado.
 type PracticeSlotRowWithNames = PracticeSlotRow & {
-  instructor: { nombre_completo: string } | null;
+  instructor: { nombre_completo: string; activo: boolean } | null;
   student: { nombre_completo: string } | null;
 };
 
 const SELECT_WITH_NAMES = `
   *,
-  instructor:users!practice_slots_instructor_id_fkey(nombre_completo),
+  instructor:users!practice_slots_instructor_id_fkey(nombre_completo,activo),
   student:users!practice_slots_student_id_fkey(nombre_completo)
 `;
 
@@ -215,7 +216,7 @@ export class PracticeSlotService {
   // 'liberado', con student_id ya en NULL) dejaría de matchear las dos
   // condiciones de este filtro y se volvería invisible para reclamarla de
   // nuevo, incluso después del broadcast slot-released.
-  async listSlotsForStudent(studentId: string): Promise<PracticeSlotWithNames[]> {
+  async listSlotsForStudent(studentId: string): Promise<StudentPracticeSlot[]> {
     const cohortIds = await activeCohortIds(this.supabase, studentId);
     if (!cohortIds.length) {
       return [];
@@ -233,7 +234,16 @@ export class PracticeSlotService {
       throw error;
     }
 
-    return data.map(toPracticeSlotWithNames);
+    return data.filter((row) => row.student_id === studentId || row.instructor?.activo)
+      .map((row) => {
+      const slot = toPracticeSlotWithNames(row);
+      if (row.student_id === studentId &&
+          ['asignado', 'confirmado', 'completado'].includes(row.status)) return slot;
+      const hidden: Partial<PracticeSlotWithNames> = { ...slot };
+      delete hidden.instructorId;
+      delete hidden.instructorName;
+      return hidden as Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
+      });
   }
 
   // RF-03: "acceso de solo lectura a su disponibilidad semanal y a los
@@ -265,7 +275,10 @@ export class PracticeSlotService {
     const scheduledAt =
       input.scheduledAt === undefined ? undefined : normalizePracticeScheduledAt(input.scheduledAt);
     if (input.instructorId !== undefined) {
-      await this.assertInstructorExists(input.instructorId);
+      const current = await this.getSlotRowOrThrow(id);
+      if (input.instructorId !== current.instructor_id) {
+        await this.assertInstructorExists(input.instructorId);
+      }
     }
 
     const updatePayload: Database['public']['Tables']['practice_slots']['Update'] = {};
@@ -325,7 +338,7 @@ export class PracticeSlotService {
   private async assertInstructorExists(instructorId: string): Promise<void> {
     const { data, error } = await this.supabase
       .from('users')
-      .select('id, rol')
+      .select('id, rol, activo')
       .eq('id', instructorId)
       .maybeSingle();
     if (error) {
@@ -336,6 +349,9 @@ export class PracticeSlotService {
     }
     if (data.rol !== 'instructor') {
       throw new AppError('El usuario indicado no tiene rol instructor', 400);
+    }
+    if (!data.activo) {
+      throw new AppError('El instructor indicado está inactivo', 409);
     }
   }
 
