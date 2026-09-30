@@ -13,6 +13,7 @@ import { AppError } from '../utils/AppError';
 import { computeColorSemana } from '../utils/colorSemana';
 import { effectivePracticeDuration, throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
+import { activeCohortIds } from './studentEnrollmentScope';
 
 // colorSemana solo tiene sentido para franjas con estudiante asignado
 // dentro de su ciclo activo; el resto siempre es 'verde' (ver
@@ -215,15 +216,15 @@ export class PracticeSlotService {
   // condiciones de este filtro y se volvería invisible para reclamarla de
   // nuevo, incluso después del broadcast slot-released.
   async listSlotsForStudent(studentId: string): Promise<PracticeSlotWithNames[]> {
-    const cohortId = await this.getActiveCohortIdForStudent(studentId);
-    if (!cohortId) {
+    const cohortIds = await activeCohortIds(this.supabase, studentId);
+    if (!cohortIds.length) {
       return [];
     }
 
     const { data, error } = await this.supabase
       .from('practice_slots')
       .select(SELECT_WITH_NAMES)
-      .eq('cohort_id', cohortId)
+      .in('cohort_id', cohortIds)
       .or(`status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`)
       .order('scheduled_at', { ascending: true })
       .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
@@ -261,8 +262,8 @@ export class PracticeSlotService {
   // reclamo simultáneo.
   async updateSlot(id: string, input: UpdatePracticeSlotInput): Promise<PracticeSlot> {
     effectivePracticeDuration(input.durationMinutes);
-    const scheduledAt = input.scheduledAt === undefined
-      ? undefined : normalizePracticeScheduledAt(input.scheduledAt);
+    const scheduledAt =
+      input.scheduledAt === undefined ? undefined : normalizePracticeScheduledAt(input.scheduledAt);
     if (input.instructorId !== undefined) {
       await this.assertInstructorExists(input.instructorId);
     }
@@ -336,19 +337,6 @@ export class PracticeSlotService {
     if (data.rol !== 'instructor') {
       throw new AppError('El usuario indicado no tiene rol instructor', 400);
     }
-  }
-
-  private async getActiveCohortIdForStudent(studentId: string): Promise<string | null> {
-    const { data, error } = await this.supabase
-      .from('enrollments')
-      .select('cohort_id')
-      .eq('student_id', studentId)
-      .eq('status', 'activo')
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    return data ? data.cohort_id : null;
   }
 
   private async getSlotRowOrThrow(id: string): Promise<PracticeSlotRow> {

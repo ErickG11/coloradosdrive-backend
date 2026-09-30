@@ -12,13 +12,12 @@ import type {
   SugerirPracticaResult,
 } from '../models/practiceSlotGeneration.model';
 import { AppError } from '../utils/AppError';
-import { effectivePracticeDuration, PRACTICE_DURATION_MINUTES, throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import {
-  formatHora,
-  parseFechaCivil,
-  parseHora,
-  toScheduledAtUTC,
-} from '../utils/schoolTimezone';
+  effectivePracticeDuration,
+  PRACTICE_DURATION_MINUTES,
+  throwPracticeWriteError,
+} from '../utils/practiceSlotIntegrity';
+import { formatHora, parseFechaCivil, parseHora, toScheduledAtUTC } from '../utils/schoolTimezone';
 import type { HoraDelDia } from '../utils/schoolTimezone';
 
 const WINDOW_START_MINUTES = 6 * 60; // 06:00
@@ -64,6 +63,29 @@ export class PracticeSlotGenerationService {
     // getEnrollmentContext ya valida que la matrícula exista y esté
     // activa; aquí solo hace falta el dato de horas requeridas del curso.
     const { horasRequeridas } = await this.getEnrollmentContext(enrollmentId);
+    return this.suggestPlan(input, horasRequeridas);
+  }
+
+  async suggestForCourse(
+    courseId: string,
+    input: SugerirPracticaInput,
+  ): Promise<SugerirPracticaResult> {
+    const { data, error } = await this.supabase
+      .from('courses')
+      .select('horas_requeridas')
+      .eq('id', courseId)
+      .single();
+    if (error) throw error;
+    return this.suggestPlan(input, data.horas_requeridas);
+  }
+
+  private async suggestPlan(
+    input: SugerirPracticaInput,
+    horasRequeridas: number | null,
+  ): Promise<SugerirPracticaResult> {
+    effectivePracticeDuration(input.durationMinutes);
+    const horaDeseada = parseHora(input.horaDeseada);
+    assertWithinDayWindow(horaDeseada, input.horasPorDia);
     const plan = this.buildSessionPlan(input);
 
     const candidato = await this.buscarHoraConInstructorLibre(
@@ -134,6 +156,18 @@ export class PracticeSlotGenerationService {
       horasRequeridas,
       slotIds: data.map((row) => row.id),
     };
+  }
+
+  // El wizard usa el mismo generador real, pero deja la escritura a la RPC
+  // transaccional de confirmación (no crea una matrícula al consultar).
+  async prepareForTransaction(input: ConfirmarPracticaInput): Promise<string[]> {
+    const hora = parseHora(input.horaResuelta);
+    assertWithinDayWindow(hora, input.horasPorDia);
+    await this.assertInstructorExists(input.instructorId);
+    const plan = this.buildSessionPlan(input);
+    const scheduled = this.buildScheduledAtsForHour(plan.fechasCiviles, hora, input.horasPorDia);
+    await this.assertInstructorFreeFor(input.instructorId, scheduled);
+    return scheduled;
   }
 
   // -----------------------------------------------------------------
@@ -261,7 +295,10 @@ export class PracticeSlotGenerationService {
     if (error) {
       throw error;
     }
-    return data.map((instructor) => ({ id: instructor.id, nombreCompleto: instructor.nombre_completo }));
+    return data.map((instructor) => ({
+      id: instructor.id,
+      nombreCompleto: instructor.nombre_completo,
+    }));
   }
 
   private async assertInstructorFreeFor(
