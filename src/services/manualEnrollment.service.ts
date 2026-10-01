@@ -10,6 +10,7 @@ import type {
 import { AppError } from '../utils/AppError';
 import { manualPracticePlan, type ManualPracticePlan } from '../utils/manualPracticePlan';
 import { SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
+import { applyVotingExemption, normalizeDocuments, validateInitialPayment, type InitialPayment } from '../utils/manualEnrollmentDetails';
 import {
   CohortAssignmentService,
   type AssignCohortForCourseResult,
@@ -55,6 +56,8 @@ export function manualEnrollmentError(error: PostgrestError): Error {
       'Ya existe una matrícula vigente del mismo tipo o una cuenta con esa cédula. Selecciona el estudiante existente.',
       409,
     );
+  if (['CD025', 'CD026'].includes(error.code)) return new AppError(error.message, 400);
+  if (error.code === 'CD027') return new AppError('Matrícula no encontrada', 404);
   if (['CD001', 'CD020', 'CD021', '23P01'].includes(error.code))
     return new AppError(
       error.code === '23P01'
@@ -152,7 +155,7 @@ export class ManualEnrollmentService {
   }
   private async resolveCourse(
     input: Pick<ManualEnrollmentInput, 'courseType' | 'cohortId' | 'automatic'>,
-  ): Promise<string> {
+  ): Promise<{ courseId: string; price: number | null }> {
     const catalog = await this.catalogCourse(input.courseType);
     if (input.automatic) {
       const current = await this.cohorts.assignCohortForCourse(catalog);
@@ -168,7 +171,7 @@ export class ManualEnrollmentService {
           'Solo se permite pendiente de cohorte cuando el motor no encuentra una elegible',
           400,
         );
-      return catalog;
+      return { courseId: catalog, price: null };
     }
     const { data: cohort, error } = await this.db
       .from('cohorts')
@@ -188,13 +191,13 @@ export class ManualEnrollmentService {
     const today = DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd');
     if (today < cohort.fecha_inicio_matricula || today > cohort.fecha_fin_matricula)
       throw new AppError('La matrícula de la cohorte no está abierta', 409);
-    return cohort.course_id;
+    return { courseId: cohort.course_id, price: Number(cohort.precio) };
   }
   async practicePreview(
     input: Pick<ManualEnrollmentInput, 'courseType' | 'cohortId' | 'automatic' | 'practice'>,
   ): Promise<{ plan: ManualPracticePlan; suggestion: SugerirPracticaResult | null }> {
     const plan = manualPracticePlan(input.practice);
-    const courseId = await this.resolveCourse(input);
+    const { courseId } = await this.resolveCourse(input);
     const suggestion = input.cohortId
       ? await this.generator.suggestForCourse(courseId, {
           fechaInicio: input.practice.fechaInicio,
@@ -226,8 +229,12 @@ export class ManualEnrollmentService {
     input: ManualEnrollmentInput,
   ): Promise<ManualEnrollmentResult> {
     const worker = randomUUID();
+    const documents = normalizeDocuments(input.documentos);
+    const payment: InitialPayment = input.pago ?? {
+      modalidad: 'abono', descuento: 0, montoAbonado: 0,
+    };
     // Ninguna contraseña forma parte del payload ni del registro de idempotencia.
-    const hash = createHash('sha256').update(stable(input)).digest('hex');
+    const hash = createHash('sha256').update(stable({ ...input, documentos: documents, pago: payment })).digest('hex');
     const { data: op, error: re } = await this.db.rpc('reserve_manual_enrollment', {
       p_id: id,
       p_actor: actor,
@@ -246,7 +253,8 @@ export class ManualEnrollmentService {
     let password: string | undefined;
     try {
       const plan = manualPracticePlan(input.practice);
-      const course = await this.resolveCourse(input);
+      const { courseId, price } = await this.resolveCourse(input);
+      validateInitialPayment(price, payment);
       const scheduled = input.cohortId
         ? await this.generator.prepareForTransaction({
             fechaInicio: input.practice.fechaInicio,
@@ -258,16 +266,18 @@ export class ManualEnrollmentService {
           })
         : [];
       let studentId: string;
+      let birthDate: string | null;
       if (input.student.mode === 'existing') {
         studentId = input.student.id;
         const { data, error } = await this.db
           .from('users')
-          .select('id,rol')
+          .select('id,rol,fecha_nacimiento')
           .eq('id', studentId)
           .maybeSingle();
         if (error) throw error;
         if (data?.rol !== 'estudiante')
           throw new AppError('Selecciona un estudiante existente válido', 400);
+        birthDate = data.fecha_nacimiento;
         const { data: identity, error: identityError } =
           await this.db.auth.admin.getUserById(studentId);
         if (identityError || identity.user.app_metadata.role !== 'estudiante')
@@ -276,6 +286,7 @@ export class ManualEnrollmentService {
             409,
           );
       } else {
+        birthDate = input.student.fechaNacimiento ?? null;
         const { data: profile, error } = await this.db
           .from('users')
           .select('id')
@@ -321,11 +332,14 @@ export class ManualEnrollmentService {
         p_worker: worker,
         p_student: studentId,
         p_profile: input.student.mode === 'new' ? { ...input.student } : null,
-        p_course: course,
+        p_course: courseId,
         p_cohort: input.cohortId,
         p_plan: storedPlan,
         p_scheduled_ats: scheduled,
         p_instructor: input.practice.instructorId ?? null,
+        p_documents: applyVotingExemption(documents, birthDate,
+          DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd')),
+        p_payment: payment,
       });
       if (we) throw manualEnrollmentError(we);
       // La matrícula ya fue confirmada. El envío y su estado no participan
