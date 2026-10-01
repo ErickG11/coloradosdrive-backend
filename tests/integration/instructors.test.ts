@@ -55,6 +55,7 @@ describe('módulo de instructores', () => {
     ['post', `/admin/instructores/${id}/desactivar`],
     ['post', `/admin/instructores/${id}/reactivar`],
     ['post', `/admin/instructores/${id}/reenviar-credenciales`],
+    ['post', `/admin/instructores/${id}/restablecer-password`],
   ] as const;
   function call(method: 'get' | 'post' | 'patch', path: string) {
     if (method === 'get') return request(app).get(path);
@@ -224,6 +225,124 @@ describe('módulo de instructores', () => {
     expect(updateUser).toHaveBeenCalledTimes(1);
     expect(flag.update).toHaveBeenCalledWith({ debe_cambiar_password: true });
     expect(sendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it('restablecer contraseña devuelve 404 para id inexistente o sin rol instructor y 409 si está inactivo', async () => {
+    from.mockReturnValueOnce(createChain({ data: null, error: null }));
+    const missing = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+      .set('Authorization', token('admin')).send({});
+    expect(missing.status).toBe(404);
+    const otherRoleQuery = createChain({ data: null, error: null });
+    from.mockReturnValueOnce(otherRoleQuery);
+    const otherRole = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+      .set('Authorization', token('admin')).send({});
+    expect(otherRole.status).toBe(404);
+    expect(otherRoleQuery.eq).toHaveBeenCalledWith('rol', 'instructor');
+    from.mockReturnValueOnce(createChain({ data: { ...row, activo: false }, error: null }));
+    const inactive = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+      .set('Authorization', token('admin')).send({});
+    expect(inactive.status).toBe(409);
+    expect(inactive.body.message).toBe('El instructor está inactivo');
+    expect(updateUser).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('restablece, marca cambio obligatorio, envía un correo y no expone la clave', async () => {
+    const log = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const flag = createChain({ data: null, error: null });
+      from.mockReturnValueOnce(createChain({ data: { ...row, debe_cambiar_password: false }, error: null }));
+      from.mockReturnValueOnce(flag);
+      getUser.mockResolvedValue({ data: { user: { email: input.correo } }, error: null });
+      updateUser.mockResolvedValue({ error: null });
+      const res = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+        .set('Authorization', token('admin')).send({});
+
+      expect(res.status).toBe(204);
+      expect(res.text).toBe('');
+      expect(updateUser).toHaveBeenCalledTimes(1);
+      const password = updateUser.mock.calls[0][1].password as string;
+      expect(password).toMatch(/^[A-Za-z0-9_-]{24}$/);
+      expect(flag.update).toHaveBeenCalledWith({ debe_cambiar_password: true });
+      expect(sendMail).toHaveBeenCalledTimes(1);
+      expect(sendMail.mock.calls[0][0].text).toContain(`Contraseña temporal: ${password}`);
+      expect(sendMail.mock.calls[0][0].text).toContain('Un administrador solicitó restablecer');
+      expect(JSON.stringify(res.body)).not.toContain(password);
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(password);
+      expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({
+        adminId: 'test-user-id', instructorId: id, fecha: expect.any(String),
+      });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('no altera BD ni envía correo si Auth rechaza el restablecimiento', async () => {
+    from.mockReturnValueOnce(createChain({ data: row, error: null }));
+    getUser.mockResolvedValue({ data: { user: { email: input.correo } }, error: null });
+    updateUser.mockResolvedValue({ error: { message: 'auth unavailable' } });
+    const res = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+      .set('Authorization', token('admin')).send({});
+    expect(res.status).toBe(502);
+    expect(from).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(JSON.stringify(res.body)).not.toContain('auth unavailable');
+  });
+
+  it('trata un corte de respuesta de Auth como resultado incierto y no envía correo', async () => {
+    from.mockReturnValueOnce(createChain({ data: row, error: null }));
+    getUser.mockResolvedValue({ data: { user: { email: input.correo } }, error: null });
+    updateUser.mockRejectedValue(new Error('network timeout'));
+    const res = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+      .set('Authorization', token('admin')).send({});
+    expect(res.status).toBe(503);
+    expect(res.body.message).toContain('incierto');
+    expect(from).toHaveBeenCalledTimes(1);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('no envía correo si falla el indicador de cambio obligatorio', async () => {
+    from.mockReturnValueOnce(createChain({ data: row, error: null }));
+    from.mockReturnValueOnce(createChain({ data: null, error: { message: 'db unavailable' } }));
+    getUser.mockResolvedValue({ data: { user: { email: input.correo } }, error: null });
+    updateUser.mockResolvedValue({ error: null });
+    const res = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+      .set('Authorization', token('admin')).send({});
+    expect(res.status).toBe(503);
+    expect(res.body.message).toContain('reconciliación');
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(JSON.stringify(res.body)).not.toContain('db unavailable');
+  });
+
+  it('si falla el correo, un reintento genera otra clave y solo confirma el envío logrado', async () => {
+    const log = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const flag1 = createChain({ data: null, error: null });
+      const flag2 = createChain({ data: null, error: null });
+      from.mockReturnValueOnce(createChain({ data: row, error: null }))
+        .mockReturnValueOnce(flag1)
+        .mockReturnValueOnce(createChain({ data: row, error: null }))
+        .mockReturnValueOnce(flag2);
+      getUser.mockResolvedValue({ data: { user: { email: input.correo } }, error: null });
+      updateUser.mockResolvedValue({ error: null });
+      sendMail.mockRejectedValueOnce(new Error('smtp unavailable')).mockResolvedValueOnce({});
+      const failed = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+        .set('Authorization', token('admin')).send({});
+      expect(failed.status).toBe(502);
+      expect(failed.body.message).toContain('reintenta para generar una nueva clave');
+      expect(flag1.update).toHaveBeenCalledWith({ debe_cambiar_password: true });
+      expect(log).not.toHaveBeenCalled();
+      const retried = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
+        .set('Authorization', token('admin')).send({});
+      expect(retried.status).toBe(204);
+      expect(updateUser.mock.calls[0][1].password).not.toBe(updateUser.mock.calls[1][1].password);
+      expect(flag2.update).toHaveBeenCalledWith({ debe_cambiar_password: true });
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(log).toHaveBeenCalledTimes(1);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('consulta propia solo devuelve nombre del estudiante y datos de la franja', async () => {

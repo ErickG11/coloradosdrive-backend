@@ -90,6 +90,11 @@ instructorAdminRouter.post('/:id/reenviar-credenciales', [id, onlyFields([])], v
     await service.resendCredentials(req.params.id);
     res.status(204).send();
   }));
+instructorAdminRouter.post('/:id/restablecer-password', [id, onlyFields([])], validate,
+  asyncHandler(async (req, res) => {
+    await service.resetPassword(req.params.id, ownId(req));
+    res.status(204).send();
+  }));
 
 instructorSelfRouter.use(asyncHandler(authenticate), requireRole('instructor'));
 instructorSelfRouter.get('/account-status', asyncHandler(async (req, res) => {
