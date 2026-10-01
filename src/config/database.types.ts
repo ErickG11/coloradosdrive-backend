@@ -66,8 +66,19 @@ export interface Database {
           p_plan: Record<string, unknown>;
           p_scheduled_ats: string[];
           p_instructor: string | null;
+          p_documents: { tipo: string; estado: string }[];
+          p_payment: { modalidad: string; descuento: number; montoAbonado: number };
         };
         Returns: Record<string, unknown>;
+      };
+      update_manual_enrollment_details: {
+        Args: {
+          p_enrollment: string;
+          p_actor: string;
+          p_documents: { tipo: string; estado: string }[] | null;
+          p_payment: { modalidad: string; descuento: number; montoAbonado: number } | null;
+        };
+        Returns: boolean;
       };
       claim_manual_enrollment_email: { Args: { p_id: string }; Returns: boolean };
       abort_manual_enrollment: {
@@ -113,6 +124,28 @@ export interface Database {
         Row: ManualOperation;
         Insert: Pick<ManualOperation, 'id' | 'actor_id' | 'request_hash' | 'worker_id' | 'phase'>;
         Update: Partial<ManualOperation>;
+        Relationships: [];
+      };
+      enrollment_documents: {
+        Row: {
+          enrollment_id: string;
+          tipo: string;
+          estado: string;
+          fecha_marcado: string | null;
+          marcado_por: string | null;
+        };
+        Insert: {
+          enrollment_id: string;
+          tipo: string;
+          estado: string;
+          fecha_marcado?: string | null;
+          marcado_por?: string | null;
+        };
+        Update: Partial<{
+          estado: string;
+          fecha_marcado: string | null;
+          marcado_por: string | null;
+        }>;
         Relationships: [];
       };
       users: {

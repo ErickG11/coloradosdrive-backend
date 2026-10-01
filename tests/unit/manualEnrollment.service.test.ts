@@ -44,6 +44,48 @@ const op: ManualOperation = {
   updated_at: '',
 };
 describe('Idempotencia y estado recuperable de confirmación', () => {
+  it('incluye checklist y abono en el hash canónico de la solicitud', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: { ...op, claimed: false }, error: null });
+    const db = { rpc } as unknown as SupabaseClient<Database>;
+    const service = new ManualEnrollmentService(db, {} as EmailService);
+    await service.confirm('admin', 'op', input);
+    await service.confirm('admin', 'op', { ...input,
+      documentos: [{ tipo: 'cedula', estado: 'entregado' }],
+      pago: { modalidad: 'abono', descuento: 0, montoAbonado: 25 },
+    });
+    expect(rpc.mock.calls[0][1].p_hash).not.toBe(rpc.mock.calls[1][1].p_hash);
+  });
+  it('envía a la RPC el abono pendiente y la exención de un estudiante existente', async () => {
+    const rpc = jest.fn((name: string) => {
+      if (name === 'reserve_manual_enrollment')
+        return Promise.resolve({ data: { ...op, phase: 'processing', claimed: true }, error: null });
+      if (name === 'commit_manual_enrollment')
+        return Promise.resolve({ data: committed, error: null });
+      return Promise.resolve({ data: false, error: null });
+    });
+    const from = jest.fn((table: string) => {
+      if (table === 'manual_course_catalog')
+        return createChain({ data: [{ tipo: 'A', course_id: 'a' }], error: null });
+      if (table === 'cohorts') return createChain({ data: [], error: null });
+      if (table === 'users') return createChain({ data: {
+        id: 'student', rol: 'estudiante', fecha_nacimiento: '1950-01-01',
+      }, error: null });
+      return createChain({ data: { ...op, email_status: 'sent' }, error: null });
+    });
+    const db = { rpc, from, auth: { admin: { getUserById: jest.fn().mockResolvedValue({
+      data: { user: { app_metadata: { role: 'estudiante' } } }, error: null,
+    }) } } } as unknown as SupabaseClient<Database>;
+    const service = new ManualEnrollmentService(db, {} as EmailService);
+    await service.confirm('admin', 'op', { ...input,
+      pago: { modalidad: 'abono', descuento: 0, montoAbonado: 500 },
+    });
+    expect(rpc).toHaveBeenCalledWith('commit_manual_enrollment', expect.objectContaining({
+      p_payment: { modalidad: 'abono', descuento: 0, montoAbonado: 500 },
+      p_documents: expect.arrayContaining([
+        { tipo: 'papeleta_votacion', estado: 'no_aplica' },
+      ]),
+    }));
+  });
   it('reenvío nuevo pendiente exige regeneración explícita antes de reclamar correo', async () => {
     const rpc = jest.fn(),
       from = jest
