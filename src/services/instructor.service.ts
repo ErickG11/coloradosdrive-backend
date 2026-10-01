@@ -9,6 +9,10 @@ import type { EmailService } from './email.service';
 
 type UserRow = Database['public']['Tables']['users']['Row'];
 
+function temporaryPassword(): string {
+  return randomBytes(18).toString('base64url');
+}
+
 export interface InstructorInput {
   cedula: string;
   nombreCompleto: string;
@@ -70,12 +74,12 @@ export class InstructorService {
     if (lookupError) throw new AppError('No se pudo verificar la cédula', 500);
     if (existing) throw new AppError('La cédula ya está registrada', 409);
 
-    const temporaryPassword = randomBytes(18).toString('base64url');
+    const generatedPassword = temporaryPassword();
     let authResult: Awaited<ReturnType<typeof this.db.auth.admin.createUser>>;
     try {
       authResult = await this.db.auth.admin.createUser({
         email: input.correo,
-        password: temporaryPassword,
+        password: generatedPassword,
         email_confirm: true,
         app_metadata: { role: 'instructor' },
       });
@@ -105,7 +109,7 @@ export class InstructorService {
         throw new AppError('No se pudo guardar el instructor', 500);
       }
       await this.email.sendInstructorCredentials({
-        to: input.correo, nombreCompleto: input.nombreCompleto, temporaryPassword,
+        to: input.correo, nombreCompleto: input.nombreCompleto, temporaryPassword: generatedPassword,
       });
       return { ...summary(row), correo: input.correo };
     } catch (error) {
@@ -204,6 +208,44 @@ export class InstructorService {
     } catch {
       throw new AppError('No se pudo enviar el correo de acceso; puedes reintentarlo', 502);
     }
+  }
+
+  async resetPassword(id: string, adminId: string): Promise<void> {
+    const row = await this.row(id);
+    if (!row.activo) throw new AppError('El instructor está inactivo', 409);
+    const { data, error } = await this.db.auth.admin.getUserById(id);
+    if (error || !data.user.email) throw new AppError('No se pudo consultar el correo', 503);
+
+    const generatedPassword = temporaryPassword();
+    let authResult: Awaited<ReturnType<typeof this.db.auth.admin.updateUserById>>;
+    try {
+      authResult = await this.db.auth.admin.updateUserById(id, {
+        password: generatedPassword,
+      });
+    } catch {
+      // Un corte de red puede ocurrir después de que Auth aplique el cambio.
+      throw new AppError('El resultado del restablecimiento en Auth es incierto; reintenta', 503);
+    }
+    if (authResult.error) throw new AppError('No se pudo restablecer la contraseña en Auth', 502);
+
+    const { error: flagError } = await this.db.from('users')
+      .update({ debe_cambiar_password: true }).eq('id', id).eq('rol', 'instructor');
+    if (flagError) {
+      // Auth y public.users no comparten transacción. No enviamos una clave
+      // sin bloqueo de acceso; el administrador debe reintentar o reconciliar.
+      throw new AppError('La contraseña cambió en Auth, pero el estado requiere reconciliación; reintenta', 503);
+    }
+
+    try {
+      await this.email.sendInstructorCredentials({
+        to: data.user.email, nombreCompleto: row.nombre_completo,
+        temporaryPassword: generatedPassword, reason: 'admin_reset',
+      });
+    } catch {
+      // El reintento genera una clave nueva y reemplaza esta; jamás se expone.
+      throw new AppError('La contraseña cambió, pero el correo no se envió; reintenta para generar una nueva clave', 502);
+    }
+    console.warn(JSON.stringify({ adminId, instructorId: id, fecha: new Date().toISOString() }));
   }
 
   async own(id: string): Promise<InstructorOwn> {
