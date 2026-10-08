@@ -28,7 +28,7 @@ const validCreateBody = {
   cohortId,
   instructorId,
   scheduledAt: '2026-03-01T10:00:00Z',
-  durationMinutes: 45,
+  durationMinutes: 60,
 };
 
 function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
@@ -38,7 +38,7 @@ function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
     instructor_id: instructorId,
     student_id: null,
     scheduled_at: validCreateBody.scheduledAt,
-    duration_minutes: 45,
+    duration_minutes: 60,
     status: 'disponible',
     confirmation_notified_at: null,
     release_notified_at: null,
@@ -428,10 +428,9 @@ describe('practice-slots endpoints', () => {
       expect(res.body.message).toBe('Solo se puede editar una franja disponible (sin reclamar)');
     });
 
-    it('edita la franja disponible y responde 200', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: buildSlotRow({ duration_minutes: 60 }), error: null }),
-      );
+    it('omitir scheduledAt edita otros campos sin cambiar el inicio', async () => {
+      const write = createChain({ data: buildSlotRow({ duration_minutes: 60 }), error: null });
+      mockedFrom.mockReturnValueOnce(write);
 
       const res = await request(app)
         .patch(`/practice-slots/${slotId}`)
@@ -440,7 +439,75 @@ describe('practice-slots endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.durationMinutes).toBe(60);
+      expect(res.body.scheduledAt).toBe(validCreateBody.scheduledAt);
+      expect(write.update).toHaveBeenCalledWith({ duration_minutes: 60 });
     });
+  });
+
+  describe.each(['POST', 'PATCH'])('%s: contrato de scheduledAt', (method) => {
+    it.each([
+      ['fecha sola', '2026-03-01'],
+      ['hora sin zona', '2026-03-01T08:00:00'],
+      ['minutos sin zona', '2026-03-01T08:00'],
+      ['día inexistente', '2026-02-30T08:00:00Z'],
+      ['año no bisiesto', '2025-02-29T08:00:00Z'],
+      ['mes inválido', '2026-13-01T08:00:00Z'],
+      ['hora inválida', '2026-03-01T24:00:00Z'],
+      ['segundos inválidos', '2026-03-01T08:00:60Z'],
+      ['offset con hora inválida', '2026-03-01T08:00:00+24:00'],
+      ['offset con minutos inválidos', '2026-03-01T08:00:00-05:60'],
+      ['offset incompleto', '2026-03-01T08:00:00-05'],
+      ['precisión no admitida', '2026-03-01T08:00:00.1234567Z'],
+      ['null', null],
+      ['número', 1772370000000],
+    ])('rechaza %s con HTTP 400 antes de consultar datos', async (_description, scheduledAt) => {
+      const route = method === 'POST' ? request(app).post('/practice-slots')
+        : request(app).patch(`/practice-slots/${slotId}`);
+      const res = await route
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+        .send(method === 'POST' ? { ...validCreateBody, scheduledAt } : { scheduledAt });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('Z u offset explícito');
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['2026-03-01T13:00:00Z', '2026-03-01T13:00:00.000Z'],
+      ['2026-03-01T08:00:00-05:00', '2026-03-01T13:00:00.000Z'],
+      ['2026-03-01T18:30+05:30', '2026-03-01T13:00:00.000Z'],
+      ['2024-02-29T23:30:00.123456-05:00', '2024-03-01T04:30:00.123456Z'],
+    ])('acepta %s y envía UTC conservando el instante', async (scheduledAt, expected) => {
+      if (method === 'POST') {
+        mockedFrom.mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
+          .mockReturnValueOnce(createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }));
+      }
+      const write = createChain({ data: buildSlotRow({ scheduled_at: expected }), error: null });
+      mockedFrom.mockReturnValueOnce(write);
+      const route = method === 'POST' ? request(app).post('/practice-slots')
+        : request(app).patch(`/practice-slots/${slotId}`);
+      const res = await route
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+        .send(method === 'POST' ? { ...validCreateBody, scheduledAt } : { scheduledAt });
+
+      expect(res.status).toBe(method === 'POST' ? 201 : 200);
+      expect(res.body.scheduledAt).toBe(expected);
+      if (method === 'POST') {
+        expect(write.insert).toHaveBeenCalledWith(expect.objectContaining({ scheduled_at: expected }));
+      } else {
+        expect(write.update).toHaveBeenCalledWith({ scheduled_at: expected });
+      }
+    });
+  });
+
+  it('POST exige scheduledAt y responde 400 si se omite', async () => {
+    const { scheduledAt: _scheduledAt, ...withoutTimestamp } = validCreateBody;
+    const res = await request(app).post('/practice-slots')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(withoutTimestamp);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('Z u offset explícito');
+    expect(mockedFrom).not.toHaveBeenCalled();
   });
 
   describe('DELETE /practice-slots/:id (admin)', () => {
@@ -469,4 +536,52 @@ describe('practice-slots endpoints', () => {
       expect(res.status).toBe(204);
     });
   });
+
+  it.each([45, 90, 0, null, '60'])('POST rechaza duración %s antes de consultar datos', async (duration) => {
+    const res = await request(app).post('/practice-slots')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ ...validCreateBody, durationMinutes: duration });
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('PATCH rechaza una duración distinta de 60', async () => {
+    const res = await request(app).patch(`/practice-slots/${slotId}`)
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ durationMinutes: 45 });
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
+  it('POST sin duración conserva el contrato y escribe 60 minutos efectivos', async () => {
+    const insert = createChain({ data: buildSlotRow(), error: null });
+    mockedFrom.mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
+      .mockReturnValueOnce(createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }))
+      .mockReturnValueOnce(insert);
+    const { durationMinutes: _duration, ...withoutDuration } = validCreateBody;
+    const res = await request(app).post('/practice-slots')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(withoutDuration);
+    expect(res.status).toBe(201);
+    expect(insert.insert).toHaveBeenCalledWith(expect.objectContaining({ duration_minutes: 60 }));
+  });
+
+  it.each(['POST', 'PATCH'])('%s traduce solapamientos de PostgreSQL a HTTP 409', async (method) => {
+    if (method === 'POST') {
+      mockedFrom.mockReturnValueOnce(createChain({ data: { id: cohortId }, error: null }))
+        .mockReturnValueOnce(createChain({ data: { id: instructorId, rol: 'instructor' }, error: null }));
+    }
+    mockedFrom.mockReturnValueOnce(createChain({
+      data: null, error: { code: '23P01', message: 'constraint conflict', details: 'identificadores privados' },
+    }));
+    const route = method === 'POST' ? request(app).post('/practice-slots')
+      : request(app).patch(`/practice-slots/${slotId}`);
+    const res = await route
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send(method === 'POST' ? validCreateBody : { scheduledAt: validCreateBody.scheduledAt });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('El instructor ya tiene una práctica que se solapa con este intervalo');
+    expect(JSON.stringify(res.body)).not.toContain('identificadores privados');
+  });
+
 });

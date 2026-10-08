@@ -11,6 +11,8 @@ import type {
 } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
 import { computeColorSemana } from '../utils/colorSemana';
+import { effectivePracticeDuration, throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
+import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
 
 // colorSemana solo tiene sentido para franjas con estudiante asignado
 // dentro de su ciclo activo; el resto siempre es 'verde' (ver
@@ -79,6 +81,8 @@ export class PracticeSlotService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
   async createSlot(input: CreatePracticeSlotInput): Promise<PracticeSlot> {
+    const duration = effectivePracticeDuration(input.durationMinutes);
+    const scheduledAt = normalizePracticeScheduledAt(input.scheduledAt);
     await this.assertCohortExists(input.cohortId);
     await this.assertInstructorExists(input.instructorId);
 
@@ -87,14 +91,14 @@ export class PracticeSlotService {
       .insert({
         cohort_id: input.cohortId,
         instructor_id: input.instructorId,
-        scheduled_at: input.scheduledAt,
-        duration_minutes: input.durationMinutes,
+        scheduled_at: scheduledAt,
+        duration_minutes: duration,
       })
       .select()
       .single();
 
     if (error) {
-      throw error;
+      throwPracticeWriteError(error);
     }
 
     return toPracticeSlot(data);
@@ -256,13 +260,16 @@ export class PracticeSlotService {
   // check-then-act) para no perder una condición de carrera contra un
   // reclamo simultáneo.
   async updateSlot(id: string, input: UpdatePracticeSlotInput): Promise<PracticeSlot> {
+    effectivePracticeDuration(input.durationMinutes);
+    const scheduledAt = input.scheduledAt === undefined
+      ? undefined : normalizePracticeScheduledAt(input.scheduledAt);
     if (input.instructorId !== undefined) {
       await this.assertInstructorExists(input.instructorId);
     }
 
     const updatePayload: Database['public']['Tables']['practice_slots']['Update'] = {};
     if (input.instructorId !== undefined) updatePayload.instructor_id = input.instructorId;
-    if (input.scheduledAt !== undefined) updatePayload.scheduled_at = input.scheduledAt;
+    if (scheduledAt !== undefined) updatePayload.scheduled_at = scheduledAt;
     if (input.durationMinutes !== undefined) updatePayload.duration_minutes = input.durationMinutes;
 
     const { data, error } = await this.supabase
@@ -274,7 +281,7 @@ export class PracticeSlotService {
       .maybeSingle();
 
     if (error) {
-      throw error;
+      throwPracticeWriteError(error);
     }
     if (!data) {
       await this.getSlotRowOrThrow(id);

@@ -57,8 +57,9 @@ export interface PracticeSlotWithColor extends PracticeSlotWithNames {
 export interface CreatePracticeSlotInput {
   cohortId: string;
   instructorId: string;
+  // Fecha y hora ISO 8601 con Z u offset ±HH:mm; el service normaliza a UTC.
   scheduledAt: string;
-  durationMinutes: number;
+  durationMinutes?: 60;
 }
 
 // Solo los datos de programación de la franja - nunca studentId ni
@@ -68,8 +69,9 @@ export interface CreatePracticeSlotInput {
 // en el service, no aquí).
 export type UpdatePracticeSlotInput = Partial<{
   instructorId: string;
+  // Mismo contrato temporal que CreatePracticeSlotInput; omitir conserva el inicio.
   scheduledAt: string;
-  durationMinutes: number;
+  durationMinutes: 60;
 }>;
 
 export interface SubmitAttendanceInput {
