@@ -48,6 +48,8 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 export function manualEnrollmentError(error: PostgrestError): Error {
+  if (error.code === 'CD023')
+    return new AppError('El instructor dejó de estar disponible. Consulta una nueva sugerencia.', 409);
   if (error.code === '23505')
     return new AppError(
       'Ya existe una matrícula vigente del mismo tipo o una cuenta con esa cédula. Selecciona el estudiante existente.',

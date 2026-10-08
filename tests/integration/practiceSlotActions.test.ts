@@ -87,6 +87,7 @@ describe('practice-slots student actions', () => {
     ['claim', 'CD404', 404, 'Franja no encontrada'],
     ['claim', 'CD403', 403, 'No tienes una inscripción activa en la cohorte de esta franja'],
     ['claim', 'CD409', 409, 'Esta franja ya no está disponible'],
+    ['claim', 'CD023', 409, 'El instructor indicado está inactivo'],
     ['claim', 'CD409', 409, 'La ventana de reclamación ya cerró'],
     ['confirm', 'CD404', 404, 'Franja no encontrada'],
     ['confirm', 'CD409', 409, 'Este turno no está pendiente de confirmación'],
@@ -179,6 +180,7 @@ describe('practice-slots student actions', () => {
     it('responde 404 si la franja no es del instructor autenticado', async () => {
       // mockAuthToken resuelve sub: 'test-user-id'; la franja pertenece a
       // otro instructor (instructorId).
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
       mockedFrom.mockReturnValueOnce(
         createChain({
           data: buildSlotRow({ instructor_id: instructorId, status: 'completado' }),
@@ -195,6 +197,7 @@ describe('practice-slots student actions', () => {
     });
 
     it('responde 409 si la franja todavía no está completado', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
       mockedFrom.mockReturnValueOnce(
         createChain({
           data: buildSlotRow({ instructor_id: studentId, status: 'confirmado' }),
@@ -212,6 +215,7 @@ describe('practice-slots student actions', () => {
 
     it('marca asistencia sobre una franja completada propia y responde 200', async () => {
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ instructor_id: studentId, status: 'completado' }),
@@ -246,6 +250,7 @@ describe('practice-slots student actions', () => {
 
       // Instructor A marca asistencia en SU propia franja: funciona.
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ id: slotOfA, instructor_id: instructorA, status: 'completado' }),
@@ -278,6 +283,7 @@ describe('practice-slots student actions', () => {
 
       // El mismo instructor A intenta marcar asistencia en una franja de
       // B: 404, nunca ve ni toca la franja ajena.
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
       mockedFrom.mockReturnValueOnce(
         createChain({
           data: buildSlotRow({ id: slotOfB, instructor_id: instructorB, status: 'completado' }),
