@@ -47,6 +47,10 @@ function exactlyOneOfFechaFinOrNumeroSesiones(_: unknown, { req }: Meta): boolea
 }
 
 const baseValidators = [
+  body('durationMinutes')
+    .optional()
+    .custom((value: unknown) => value === 60)
+    .withMessage('Las prácticas deben durar exactamente 60 minutos'),
   fechaValidator('fechaInicio'),
   fechaValidator('fechaFin', true),
   body('numeroSesiones')
