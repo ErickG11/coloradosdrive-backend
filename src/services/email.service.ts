@@ -8,6 +8,20 @@ export interface WelcomeEmailParams {
   temporaryPassword: string;
 }
 
+export interface ManualEnrollmentEmailParams {
+  to: string;
+  nombreCompleto: string;
+  courseType: 'A' | 'B';
+  cohortName: string | null;
+  status: string;
+  days: number;
+  blocks: number;
+  start: string;
+  end: string;
+  studentCreated: boolean;
+  temporaryPassword?: string;
+}
+
 export interface ExamResultEmailParams {
   to: string;
   nombreCompleto: string;
@@ -54,6 +68,45 @@ function formatScheduledAt(scheduledAt: string): string {
 export class EmailService {
   constructor(private readonly transporter: Transporter) {}
 
+  async sendManualEnrollmentEmail(p: ManualEnrollmentEmailParams): Promise<void> {
+    const url = new URL('/login', env.FRONTEND_URL);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+      throw new Error('FRONTEND_URL inválida para el correo');
+    }
+    const login = url.toString();
+    const title = p.studentCreated
+      ? 'Bienvenida y matrícula confirmada — ColoradosDrive'
+      : 'Matrícula adicional confirmada — ColoradosDrive';
+    const credentials = p.temporaryPassword
+      ? `Contraseña temporal: ${p.temporaryPassword}\nDeberás cambiarla al ingresar por primera vez.`
+      : 'Usa tus credenciales actuales. Esta matrícula no cambia tu contraseña.';
+    const summary = `Tipo ${p.courseType} · ${p.cohortName ?? 'Pendiente de cohorte'}\nEstado: ${p.status}\nPlan: ${String(p.days)} días, ${String(p.blocks)} bloques de 60 minutos (${p.start} a ${p.end}).`;
+    const pending =
+      p.status === 'pendiente_cohorte'
+        ? 'El plan se conservó; aún no se generaron franjas. La asignación posterior de cohorte queda pendiente.'
+        : 'Las prácticas de este plan quedaron programadas.';
+    const lines = [
+      `Hola ${p.nombreCompleto},`,
+      '',
+      'Tu matrícula en ColoradosDrive fue confirmada.',
+      summary,
+      pending,
+      '',
+      `Usuario: ${p.to}`,
+      credentials,
+      '',
+      `Acceder a ColoradosDrive: ${login}`,
+    ];
+    const htmlSummary = escapeHtml(summary).replace(/\n/g, '<br>');
+    await this.transporter.sendMail({
+      from: `ColoradosDrive <${env.EMAIL_FROM}>`,
+      to: p.to,
+      subject: title,
+      text: lines.join('\n'),
+      html: `<!doctype html><html lang="es"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;background:#f3f4f6;color:#111827;font:16px Arial,sans-serif"><table role="presentation" width="100%"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" style="max-width:600px;background:white;border-radius:8px"><tr><td style="padding:28px"><p style="font-weight:bold;font-size:22px">ColoradosDrive</p><h1 style="font-size:22px">Matrícula confirmada</h1><p>Hola ${escapeHtml(p.nombreCompleto)},</p><p>${htmlSummary}</p><p>${escapeHtml(pending)}</p><p>Usuario: ${escapeHtml(p.to)}</p><p>${escapeHtml(credentials).replace(/\n/g, '<br>')}</p><p style="margin:28px 0"><a href="${escapeHtml(login)}" style="display:inline-block;background:#991b1b;color:white;padding:14px 20px;border-radius:5px;text-decoration:none;font-weight:bold">Acceder a ColoradosDrive</a></p><p>También puedes ingresar desde:<br><a href="${escapeHtml(login)}">${escapeHtml(login)}</a></p></td></tr></table></td></tr></table></body></html>`,
+    });
+  }
+
   async sendWelcomeEmail(params: WelcomeEmailParams): Promise<void> {
     const { to, nombreCompleto, temporaryPassword } = params;
 
@@ -69,16 +122,15 @@ export class EmailService {
         `Correo: ${to}`,
         `Contraseña temporal: ${temporaryPassword}`,
         '',
-        // TODO(seguridad): el documento de tesis no especifica forzar el
-        // cambio de contraseña en el primer login; es una mejora de
-        // seguridad recomendada a futuro, no implementada en este sprint.
-        'Te recomendamos cambiar tu contraseña después de iniciar sesión por primera vez.',
+        'Deberás cambiar tu contraseña temporal al ingresar por primera vez.',
+        `Acceder a ColoradosDrive: ${new URL('/login', env.FRONTEND_URL).toString()}`,
       ].join('\n'),
       html: [
-        `<p>Hola ${nombreCompleto},</p>`,
+        `<p>Hola ${escapeHtml(nombreCompleto)},</p>`,
         '<p>Tu cuenta en ColoradosDrive fue creada. Estos son tus datos de acceso:</p>',
-        `<p>Correo: ${to}<br>Contraseña temporal: <strong>${temporaryPassword}</strong></p>`,
-        '<p>Te recomendamos cambiar tu contraseña después de iniciar sesión por primera vez.</p>',
+        `<p>Correo: ${escapeHtml(to)}<br>Contraseña temporal: <strong>${escapeHtml(temporaryPassword)}</strong></p>`,
+        '<p>Deberás cambiar tu contraseña temporal al ingresar por primera vez.</p>',
+        `<p><a href="${escapeHtml(new URL('/login', env.FRONTEND_URL).toString())}">Acceder a ColoradosDrive</a></p>`,
       ].join('\n'),
     });
   }

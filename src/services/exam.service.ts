@@ -12,6 +12,7 @@ import type {
   UpdateQuestionInput,
 } from '../models/exam.model';
 import { AppError } from '../utils/AppError';
+import { activeCourseIds } from './studentEnrollmentScope';
 
 type ExamRow = Database['public']['Tables']['exams']['Row'];
 type QuestionRow = Database['public']['Tables']['questions']['Row'];
@@ -111,15 +112,15 @@ export class ExamService {
   // RF-02/RBAC: el estudiante solo ve examenes publicados del curso de su
   // inscripcion activa (nunca los de otros cursos, nunca los no publicados).
   async listExamsForStudent(studentId: string): Promise<Exam[]> {
-    const courseId = await this.getActiveCourseIdForStudent(studentId);
-    if (!courseId) {
+    const courseIds = await activeCourseIds(this.supabase, studentId);
+    if (!courseIds.length) {
       return [];
     }
 
     const { data, error } = await this.supabase
       .from('exams')
       .select()
-      .eq('course_id', courseId)
+      .in('course_id', courseIds)
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
@@ -428,38 +429,6 @@ export class ExamService {
       throw new AppError('Pregunta no encontrada', 404);
     }
     return data;
-  }
-
-  // Curso de la inscripcion activa del estudiante, siguiendo
-  // enrollments -> cohorts -> courses (sin selects anidados/embebidos via
-  // foreign keys, por convencion del proyecto).
-  private async getActiveCourseIdForStudent(studentId: string): Promise<string | null> {
-    const { data: enrollment, error: enrollmentError } = await this.supabase
-      .from('enrollments')
-      .select('cohort_id')
-      .eq('student_id', studentId)
-      .eq('status', 'activo')
-      .maybeSingle();
-
-    if (enrollmentError) {
-      throw enrollmentError;
-    }
-    // Sin inscripción activa, o activa pero pendiente de cohorte (sin
-    // cohort_id todavía): en ambos casos no hay curso que resolver.
-    if (!enrollment?.cohort_id) {
-      return null;
-    }
-
-    const { data: cohort, error: cohortError } = await this.supabase
-      .from('cohorts')
-      .select('course_id')
-      .eq('id', enrollment.cohort_id)
-      .maybeSingle();
-
-    if (cohortError) {
-      throw cohortError;
-    }
-    return cohort ? cohort.course_id : null;
   }
 
   private translateForeignKeyViolation(error: PostgrestError, message: string): Error {

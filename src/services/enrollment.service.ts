@@ -155,6 +155,7 @@ export class EnrollmentService {
         return this.insertEnrollmentRow({
           student_id: studentId,
           cohort_id: null,
+          course_id: courseId,
           status: 'pendiente_cohorte',
           monto_total: null,
         });
@@ -192,7 +193,10 @@ export class EnrollmentService {
         excluidas.push(asignacion.cohortId);
         continue;
       }
-      throw this.translateEnrollmentInsertError(error, 'El estudiante ya está activo en otra cohorte');
+      throw this.translateEnrollmentInsertError(
+        error,
+        'El estudiante ya está activo en otra cohorte',
+      );
     }
 
     // Se agotaron los reintentos (prácticamente imposible en la práctica,
@@ -201,6 +205,7 @@ export class EnrollmentService {
     return this.insertEnrollmentRow({
       student_id: studentId,
       cohort_id: null,
+      course_id: courseId,
       status: 'pendiente_cohorte',
       monto_total: null,
     });
@@ -257,6 +262,7 @@ export class EnrollmentService {
         nombre_completo: input.nombreCompleto,
         telefono: input.telefono ?? null,
         rol: 'estudiante',
+        debe_cambiar_password: true,
         fecha_nacimiento: input.fechaNacimiento ?? null,
         tipo_sangre: input.tipoSangre ?? null,
         genero: input.genero ?? null,

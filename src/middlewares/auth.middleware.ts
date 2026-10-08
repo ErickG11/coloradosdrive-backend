@@ -19,7 +19,8 @@ const CHANGE_PASSWORD_PATH = '/estudiantes/cambiar-password';
 // falta una consulta por request de estudiante.
 async function assertPasswordNotPendingChange(req: Request, studentId: string): Promise<void> {
   const isChangePasswordRequest =
-    req.method === 'POST' && `${req.baseUrl}${req.path}` === CHANGE_PASSWORD_PATH;
+    (req.method === 'POST' && `${req.baseUrl}${req.path}` === CHANGE_PASSWORD_PATH) ||
+    (req.method === 'GET' && `${req.baseUrl}${req.path}` === '/estudiantes/account-status');
   if (isChangePasswordRequest) {
     return;
   }
