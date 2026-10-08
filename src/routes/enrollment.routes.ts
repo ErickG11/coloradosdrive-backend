@@ -40,6 +40,48 @@ const enrollValidators = [
   body('cohortId').optional().isUUID().withMessage('cohortId debe ser un UUID válido'),
   body('courseId').optional().isUUID().withMessage('courseId debe ser un UUID válido'),
   body().custom(requireCohortIdOrCourseId),
+  // Datos ampliados del estudiante: los 5 son opcionales (ver
+  // 016_users_datos_estudiante_ampliados.sql), ninguno bloquea la matrícula.
+  body('fechaNacimiento')
+    .optional()
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('fechaNacimiento debe tener formato YYYY-MM-DD'),
+  body('tipoSangre')
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('tipoSangre no puede estar vacío si se envía'),
+  body('genero')
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('genero no puede estar vacío si se envía'),
+  body('ciudadania')
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('ciudadania no puede estar vacío si se envía'),
+  body('direccion')
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('direccion no puede estar vacío si se envía'),
+  // Pago inicial al matricular (ver 017_enrollments_pago_inicial.sql):
+  // ambos opcionales, default 0. La relación entre precio/descuento/abono
+  // se valida en EnrollmentService, donde se conoce el precio real de la
+  // cohorte.
+  body('descuento')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('descuento debe ser un número mayor o igual a 0'),
+  body('montoAbonado')
+    .optional()
+    .isFloat({ min: 0 })
+    .withMessage('montoAbonado debe ser un número mayor o igual a 0'),
 ];
 
 enrollmentRouter.post('/', enrollValidators, validate, asyncHandler(createEnrollment));
