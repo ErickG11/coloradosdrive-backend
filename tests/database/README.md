@@ -1,51 +1,12 @@
 # Pruebas reales de PostgreSQL para CD-05–07
 
-**Ejecutadas en PostgreSQL 17.6 en Docker.** Evidencia, resultados y recursos:
-[`docs/operations/cd-05-07-postgresql-lab.md`](../../docs/operations/cd-05-07-postgresql-lab.md).
-Se necesita PostgreSQL
+**Ejecutadas en PostgreSQL 17.6.** Se necesita PostgreSQL
 local ya disponible, cliente `psql` y una base exclusiva vacía sin datos reales.
 El runner no instala infraestructura, no crea bases/roles, no carga .env y no contacta
 Supabase. Usa únicamente los nombres CD_TEST_DATABASE_URL, CD_TEST_DATABASE_DISPOSABLE
 y, opcionalmente, CD_TEST_PSQL (ruta de un psql existente). No registrar sus valores.
 CD_TEST_BTREE_GIST selecciona `absent` (default), `public` o `extensions` y exige que
 la extensión tenga ese estado inicial antes de escribir. Cada escenario usa otra base nueva.
-
-## Laboratorio Docker desde Windows
-
-Desde la raíz del backend, sin instalar herramientas globales ni leer el `.env`:
-
-```powershell
-# Primero inspeccionar el laboratorio ya registrado; no crear uno duplicado.
-./tests/database/lab.ps1 -Action Inspect
-# Si está detenido, iniciar solo sus dos contenedores.
-./tests/database/lab.ps1 -Action Start
-# Crea tres bases nuevas y ejecuta secuencialmente la batería en ellas.
-./tests/database/lab.ps1 -Action Run
-./tests/database/lab.ps1 -Action Stop
-```
-
-Solo si NO existe un laboratorio registrado, `./tests/database/new-lab.ps1` prepara
-uno. Rechaza un StatePath existente y puertos ocupados. Ambos scripts aceptan
-`-StatePath` para el JSON del laboratorio; su valor predeterminado está en
-`../.pg-lab/current.json`, fuera del repositorio. No se guarda ningún secreto en Git.
-El directorio local del laboratorio contiene env-files temporales y logs; no imprimir
-ni compartir los env-files. Los contextos de build y las copias al auxiliar incluyen
-solo Dockerfile, pruebas, migraciones y documentación operativa, nunca `.env`.
-
-El servidor usa la imagen oficial 17.6 fijada por digest, volumen nuevo, nombres y
-etiquetas únicos, red exclusiva sin masquerade de salida y publicación comprobada
-únicamente en `127.0.0.1`. El auxiliar reúne Node 22.20.0 y psql 17.6 y comparte el
-namespace de red del servidor mediante `--network container:<id>`: `127.0.0.1:5432`
-es el PostgreSQL nuevo, no un host Docker arbitrario. No se amplía la lista de hosts
-del runner. `lab.ps1` verifica etiquetas, IDs, exclusividad de red, namespace y puerto
-efectivo antes de ejecutar. `run-database.sh` conserva stdin/exit code con `exec` y
-usa `flock -n` para impedir dos runners simultáneos. Cada psql sigue siendo otra sesión.
-No se usan túneles, bases existentes ni credenciales de la aplicación.
-
-Si se interrumpe una ejecución, inspeccionar procesos, JSON, logs/exit codes y catálogo
-antes de continuar. Los scripts conservan las bases, incluidas las fallidas; nunca
-reintentan sobre una base con fixture. Detener/reiniciar afecta solo a los IDs
-etiquetados del laboratorio. No ejecutan prune, push, merge ni despliegues.
 
 ## Runner sin Docker
 

@@ -11,6 +11,8 @@ import { ManualEnrollmentService } from '../services/manualEnrollment.service';
 import { asyncHandler } from '../utils/asyncHandler';
 import { manualPracticePlan } from '../utils/manualPracticePlan';
 import { AppError } from '../utils/AppError';
+import { DOCUMENT_TYPES, validateDocumentUpdates, type DocumentInput, type InitialPayment } from '../utils/manualEnrollmentDetails';
+import { ManualEnrollmentDetailsService } from '../services/manualEnrollmentDetails.service';
 function actor(req: Request): string {
   if (!req.user) throw new AppError('Authentication required', 401);
   return req.user.id;
@@ -18,7 +20,24 @@ function actor(req: Request): string {
 
 export const manualEnrollmentRouter = Router();
 const service = new ManualEnrollmentService(supabaseAdmin, new EmailService(mailer));
+const details = new ManualEnrollmentDetailsService(supabaseAdmin);
 manualEnrollmentRouter.use(asyncHandler(authenticate), requireRole('admin'));
+const documents = [
+  body('documentos').optional().isArray({ max: DOCUMENT_TYPES.length })
+    .custom((value: unknown) => { validateDocumentUpdates(value as DocumentInput[]); return true; }),
+  body('documentos.*.tipo').isIn(DOCUMENT_TYPES),
+  body('documentos.*.estado').isIn(['entregado', 'pendiente', 'no_aplica']),
+];
+const payment = [
+  body('pago').optional().isObject(),
+  body('pago.modalidad').if(body('pago').exists()).isIn(['abono', 'completo']),
+  body('pago.descuento').if(body('pago').exists()).isFloat({ min: 0 })
+    .custom((value) => typeof value === 'number' && Number.isInteger(Math.round(value * 100)) &&
+      Math.abs(value * 100 - Math.round(value * 100)) < 1e-8),
+  body('pago.montoAbonado').if(body('pago').exists()).isFloat({ min: 0 })
+    .custom((value) => typeof value === 'number' && Number.isInteger(Math.round(value * 100)) &&
+      Math.abs(value * 100 - Math.round(value * 100)) < 1e-8),
+];
 const course = [
   body('courseType').isIn(['A', 'B']),
   body('automatic').isBoolean({ strict: true }),
@@ -101,12 +120,37 @@ manualEnrollmentRouter.post(
       .isEmail()
       .normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false }),
     body('student.telefono').optional().isString().isLength({ max: 20 }),
+    body('student.fechaNacimiento').optional().isISO8601({ strict: true, strictSeparator: true }),
+    ...documents,
+    ...payment,
   ],
   validate,
   asyncHandler(async (req, res) => {
     const key = req.get('Idempotency-Key');
     if (!key) throw new AppError('Idempotency-Key is required', 400);
     res.status(200).json(await service.confirm(actor(req), key, req.body as ManualEnrollmentInput));
+  }),
+);
+manualEnrollmentRouter.get(
+  '/:enrollmentId/details',
+  [param('enrollmentId').isUUID()], validate,
+  asyncHandler(async (req, res) => {
+    res.json(await details.get(req.params.enrollmentId));
+  }),
+);
+manualEnrollmentRouter.patch(
+  '/:enrollmentId/details',
+  [
+    param('enrollmentId').isUUID(),
+    body().custom((value: unknown) => !!value && typeof value === 'object' &&
+      Object.keys(value).length > 0 &&
+      Object.keys(value).every((key) => ['documentos', 'pago'].includes(key))),
+    ...documents,
+    ...payment,
+  ], validate,
+  asyncHandler(async (req, res) => {
+    res.json(await details.update(actor(req), req.params.enrollmentId,
+      req.body as { documentos?: DocumentInput[]; pago?: InitialPayment }));
   }),
 );
 manualEnrollmentRouter.get(
