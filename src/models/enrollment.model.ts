@@ -17,6 +17,12 @@ export interface Enrollment {
   cohortId: string | null;
   status: EnrollmentStatus;
   montoTotal: number | null;
+  // Pago inicial al matricular (ver 017_enrollments_pago_inicial.sql):
+  // base para un futuro módulo de estado de cuenta, no un historial de
+  // pagos en sí. Siempre presentes (default 0 en base de datos), incluso
+  // cuando montoTotal es null (pendiente_cohorte).
+  descuento: number;
+  montoAbonado: number;
   fechaInscripcion: string;
   createdAt: string;
   updatedAt: string;
@@ -41,4 +47,17 @@ export interface CreateEnrollmentInput {
   telefono?: string;
   cohortId?: string;
   courseId?: string;
+  // Datos ampliados del estudiante (ver 016_users_datos_estudiante_ampliados.sql):
+  // los 5 son opcionales, ninguno bloquea la matrícula si no se manda.
+  fechaNacimiento?: string;
+  tipoSangre?: string;
+  genero?: string;
+  ciudadania?: string;
+  direccion?: string;
+  // Pago inicial (ver 017_enrollments_pago_inicial.sql): ambos opcionales,
+  // default 0 (sin descuento, nada abonado todavía). Solo se aplican
+  // cuando la matrícula queda con cohorte asignada (con montoTotal real);
+  // si queda pendiente_cohorte, se ignoran — ver EnrollmentService.
+  descuento?: number;
+  montoAbonado?: number;
 }

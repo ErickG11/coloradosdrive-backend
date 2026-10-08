@@ -39,9 +39,10 @@ const cohortRow = {
 function buildSupabaseMock(fromResults: ChainResult[]) {
   const createUser = jest.fn();
   const deleteUser = jest.fn().mockResolvedValue({ data: {}, error: null });
+  const from = createSupabaseFromMock(fromResults);
 
   const raw = {
-    from: createSupabaseFromMock(fromResults),
+    from,
     auth: { admin: { createUser, deleteUser } },
   };
 
@@ -49,6 +50,7 @@ function buildSupabaseMock(fromResults: ChainResult[]) {
     supabase: raw as unknown as SupabaseClient<Database>,
     createUser,
     deleteUser,
+    from,
   };
 }
 
@@ -211,6 +213,277 @@ describe('EnrollmentService.enrollStudent', () => {
     );
     expect(deleteUser).not.toHaveBeenCalled();
   });
+
+  it('acepta y persiste los datos ampliados del estudiante como opcionales', async () => {
+    const studentId = 'new-student-id';
+    const inputConDatosAmpliados: CreateEnrollmentInput = {
+      ...validInput,
+      fechaNacimiento: '2000-05-15',
+      tipoSangre: 'O+',
+      genero: 'Femenino',
+      ciudadania: 'Ecuatoriana',
+      direccion: 'Av. Siempre Viva 123',
+    };
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: cohortRow.id,
+      status: 'activo',
+      monto_total: cohortRow.precio,
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const userRow = {
+      id: studentId,
+      cedula: inputConDatosAmpliados.cedula,
+      nombre_completo: inputConDatosAmpliados.nombreCompleto,
+      telefono: inputConDatosAmpliados.telefono,
+      rol: 'estudiante',
+      fecha_nacimiento: inputConDatosAmpliados.fechaNacimiento,
+      tipo_sangre: inputConDatosAmpliados.tipoSangre,
+      genero: inputConDatosAmpliados.genero,
+      ciudadania: inputConDatosAmpliados.ciudadania,
+      direccion: inputConDatosAmpliados.direccion,
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    const { supabase, createUser, from } = buildSupabaseMock([
+      { data: cohortRow, error: null },
+      { data: null, error: null },
+      { data: userRow, error: null },
+      { data: enrollmentRow, error: null },
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent(inputConDatosAmpliados);
+
+    // Tercera llamada a .from(): createUserRow (0=cohorts, 1=assertCedulaAvailable, 2=users insert).
+    const usersInsertCall = from.mock.results[2].value.insert as jest.Mock;
+    expect(usersInsertCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fecha_nacimiento: '2000-05-15',
+        tipo_sangre: 'O+',
+        genero: 'Femenino',
+        ciudadania: 'Ecuatoriana',
+        direccion: 'Av. Siempre Viva 123',
+      }),
+    );
+
+    expect(result.student).toMatchObject({
+      fechaNacimiento: '2000-05-15',
+      tipoSangre: 'O+',
+      genero: 'Femenino',
+      ciudadania: 'Ecuatoriana',
+      direccion: 'Av. Siempre Viva 123',
+    });
+  });
+
+  it('sin datos ampliados, los inserta como null', async () => {
+    const studentId = 'new-student-id';
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: cohortRow.id,
+      status: 'activo',
+      monto_total: cohortRow.precio,
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const userRow = {
+      id: studentId,
+      cedula: validInput.cedula,
+      nombre_completo: validInput.nombreCompleto,
+      telefono: validInput.telefono,
+      rol: 'estudiante',
+      fecha_nacimiento: null,
+      tipo_sangre: null,
+      genero: null,
+      ciudadania: null,
+      direccion: null,
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+
+    const { supabase, createUser, from } = buildSupabaseMock([
+      { data: cohortRow, error: null },
+      { data: null, error: null },
+      { data: userRow, error: null },
+      { data: enrollmentRow, error: null },
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent(validInput);
+
+    const usersInsertCall = from.mock.results[2].value.insert as jest.Mock;
+    expect(usersInsertCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fecha_nacimiento: null,
+        tipo_sangre: null,
+        genero: null,
+        ciudadania: null,
+        direccion: null,
+      }),
+    );
+    expect(result.student).toMatchObject({
+      fechaNacimiento: null,
+      tipoSangre: null,
+      genero: null,
+      ciudadania: null,
+      direccion: null,
+    });
+  });
+});
+
+describe('EnrollmentService.enrollStudent (pago inicial: descuento y monto abonado)', () => {
+  const studentId = 'new-student-id';
+  const userRow = {
+    id: studentId,
+    cedula: validInput.cedula,
+    nombre_completo: validInput.nombreCompleto,
+    telefono: validInput.telefono,
+    rol: 'estudiante',
+    created_at: '2026-01-02T00:00:00Z',
+    updated_at: '2026-01-02T00:00:00Z',
+  };
+
+  it('sin descuento ni montoAbonado, inserta ambos en 0 y monto_total = precio de la cohorte', async () => {
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: cohortRow.id,
+      status: 'activo',
+      monto_total: '150.00',
+      descuento: '0',
+      monto_abonado: '0',
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const { supabase, createUser, from } = buildSupabaseMock([
+      { data: cohortRow, error: null },
+      { data: null, error: null },
+      { data: userRow, error: null },
+      { data: enrollmentRow, error: null },
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent(validInput);
+
+    const enrollmentInsertCall = from.mock.results[3].value.insert as jest.Mock;
+    expect(enrollmentInsertCall).toHaveBeenCalledWith(
+      expect.objectContaining({ monto_total: 150, descuento: 0, monto_abonado: 0 }),
+    );
+    expect(result.enrollment).toMatchObject({ montoTotal: 150, descuento: 0, montoAbonado: 0 });
+  });
+
+  it('resta el descuento del precio de la cohorte y persiste el monto abonado ("abona" parcial)', async () => {
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: cohortRow.id,
+      status: 'activo',
+      monto_total: '100.00',
+      descuento: '50',
+      monto_abonado: '30',
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const { supabase, createUser, from } = buildSupabaseMock([
+      { data: cohortRow, error: null },
+      { data: null, error: null },
+      { data: userRow, error: null },
+      { data: enrollmentRow, error: null },
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent({ ...validInput, descuento: 50, montoAbonado: 30 });
+
+    const enrollmentInsertCall = from.mock.results[3].value.insert as jest.Mock;
+    expect(enrollmentInsertCall).toHaveBeenCalledWith(
+      expect.objectContaining({ monto_total: 100, descuento: 50, monto_abonado: 30 }),
+    );
+    expect(result.enrollment).toMatchObject({ montoTotal: 100, descuento: 50, montoAbonado: 30 });
+  });
+
+  it('"paga todo": montoAbonado igual a monto_total (precio menos descuento) se acepta', async () => {
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: cohortRow.id,
+      status: 'activo',
+      monto_total: '150.00',
+      descuento: '0',
+      monto_abonado: '150.00',
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const { supabase, createUser } = buildSupabaseMock([
+      { data: cohortRow, error: null },
+      { data: null, error: null },
+      { data: userRow, error: null },
+      { data: enrollmentRow, error: null },
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent({ ...validInput, montoAbonado: 150 });
+
+    expect(result.enrollment).toMatchObject({ montoTotal: 150, montoAbonado: 150 });
+  });
+
+  it('rechaza con 400 si el descuento supera el precio de la cohorte, sin crear ningún usuario en Auth', async () => {
+    const { supabase, createUser } = buildSupabaseMock([{ data: cohortRow, error: null }]);
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    await expect(
+      service.enrollStudent({ ...validInput, descuento: 200 }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'El descuento no puede ser mayor al precio de la cohorte',
+    });
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it('rechaza con 400 si el monto abonado supera el monto total, sin crear ningún usuario en Auth', async () => {
+    const { supabase, createUser } = buildSupabaseMock([{ data: cohortRow, error: null }]);
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService();
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    await expect(
+      service.enrollStudent({ ...validInput, montoAbonado: 151 }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'El monto abonado no puede ser mayor al monto total',
+    });
+    expect(createUser).not.toHaveBeenCalled();
+  });
 });
 
 describe('EnrollmentService.enrollStudent (sin cohortId: asignación automática, Fase 10)', () => {
@@ -262,6 +535,45 @@ describe('EnrollmentService.enrollStudent (sin cohortId: asignación automática
     expect(assignCohortForCourse).toHaveBeenCalledWith('course-uuid-1', undefined, []);
     expect(result.enrollment).toMatchObject({ id: 'enrollment-1', cohortId: 'cohort-uuid-1' });
     expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('aplica descuento y monto abonado también cuando la cohorte se asigna automáticamente', async () => {
+    const enrollmentRow = {
+      id: 'enrollment-1',
+      student_id: studentId,
+      cohort_id: 'cohort-uuid-1',
+      status: 'activo',
+      monto_total: '100.00',
+      descuento: '50',
+      monto_abonado: '100.00',
+      fecha_inscripcion: '2026-01-02T00:00:00Z',
+      created_at: '2026-01-02T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+    };
+    const { supabase, createUser, from } = buildSupabaseMock([
+      { data: null, error: null }, // assertCedulaAvailable
+      { data: userRow, error: null }, // createUserRow
+      { data: enrollmentRow, error: null }, // insertEnrollmentRow
+    ]);
+    createUser.mockResolvedValue({ data: { user: { id: studentId } }, error: null });
+
+    const { emailService } = buildEmailService();
+    const { cohortAssignmentService } = buildCohortAssignmentService([
+      { cohortId: 'cohort-uuid-1', warning: null, precio: 150, cohortNombre: 'Cohorte Marzo' },
+    ]);
+    const service = new EnrollmentService(supabase, emailService, cohortAssignmentService);
+
+    const result = await service.enrollStudent({
+      ...autoAssignInput,
+      descuento: 50,
+      montoAbonado: 100,
+    });
+
+    const enrollmentInsertCall = from.mock.results[2].value.insert as jest.Mock;
+    expect(enrollmentInsertCall).toHaveBeenCalledWith(
+      expect.objectContaining({ monto_total: 100, descuento: 50, monto_abonado: 100 }),
+    );
+    expect(result.enrollment).toMatchObject({ montoTotal: 100, descuento: 50, montoAbonado: 100 });
   });
 
   it('sin ninguna cohorte elegible, crea la matrícula como pendiente_cohorte', async () => {

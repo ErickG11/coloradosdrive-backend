@@ -12,13 +12,19 @@ export interface AuthenticatedUser {
   role: Role;
 }
 
-// Perfil completo de la tabla `users`, reflejando migrations/001_init.sql.
+// Perfil completo de la tabla `users`, reflejando migrations/001_init.sql
+// y 016_users_datos_estudiante_ampliados.sql.
 export interface UserProfile {
   id: string;
   cedula: string;
   nombreCompleto: string;
   telefono: string | null;
   rol: Role;
+  fechaNacimiento: string | null;
+  tipoSangre: string | null;
+  genero: string | null;
+  ciudadania: string | null;
+  direccion: string | null;
   createdAt: string;
   updatedAt: string;
 }
