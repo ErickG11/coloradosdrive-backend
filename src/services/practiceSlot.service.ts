@@ -7,10 +7,14 @@ import type {
   PracticeSlotStatus,
   PracticeSlotWithColor,
   PracticeSlotWithNames,
+  StudentPracticeSlot,
   UpdatePracticeSlotInput,
 } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
 import { computeColorSemana } from '../utils/colorSemana';
+import { effectivePracticeDuration, throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
+import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
+import { activeCohortIds } from './studentEnrollmentScope';
 
 // colorSemana solo tiene sentido para franjas con estudiante asignado
 // dentro de su ciclo activo; el resto siempre es 'verde' (ver
@@ -23,13 +27,19 @@ type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
 // docs/adr/008): instructor nunca es null (instructor_id es NOT NULL),
 // student sí lo es cuando la franja no tiene estudiante asignado.
 type PracticeSlotRowWithNames = PracticeSlotRow & {
-  instructor: { nombre_completo: string } | null;
+  instructor: { nombre_completo: string; activo: boolean } | null;
   student: { nombre_completo: string } | null;
 };
 
 const SELECT_WITH_NAMES = `
   *,
-  instructor:users!practice_slots_instructor_id_fkey(nombre_completo),
+  instructor:users!practice_slots_instructor_id_fkey(nombre_completo,activo),
+  student:users!practice_slots_student_id_fkey(nombre_completo)
+`;
+
+const SELECT_WITH_ACTIVE_INSTRUCTOR = `
+  *,
+  instructor:users!practice_slots_instructor_id_fkey!inner(nombre_completo,activo),
   student:users!practice_slots_student_id_fkey(nombre_completo)
 `;
 
@@ -79,6 +89,8 @@ export class PracticeSlotService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
   async createSlot(input: CreatePracticeSlotInput): Promise<PracticeSlot> {
+    const duration = effectivePracticeDuration(input.durationMinutes);
+    const scheduledAt = normalizePracticeScheduledAt(input.scheduledAt);
     await this.assertCohortExists(input.cohortId);
     await this.assertInstructorExists(input.instructorId);
 
@@ -87,14 +99,14 @@ export class PracticeSlotService {
       .insert({
         cohort_id: input.cohortId,
         instructor_id: input.instructorId,
-        scheduled_at: input.scheduledAt,
-        duration_minutes: input.durationMinutes,
+        scheduled_at: scheduledAt,
+        duration_minutes: duration,
       })
       .select()
       .single();
 
     if (error) {
-      throw error;
+      throwPracticeWriteError(error);
     }
 
     return toPracticeSlot(data);
@@ -198,37 +210,56 @@ export class PracticeSlotService {
 
   // RF-03: el estudiante ve las franjas disponibles de su propia cohorte
   // (vía su inscripción activa), más sus propias franjas ya asignadas/
-  // confirmadas aunque ya no estén "disponibles". studentId siempre viene
-  // del JWT ya verificado (ver practiceSlot.controller.ts), nunca de un
-  // parámetro del cliente, así que interpolarlo en el filtro .or() es
-  // seguro (un UUID de sesión, no un valor arbitrario del request).
+  // confirmadas aunque ya no estén "disponibles". Las franjas libres se
+  // filtran por instructor activo en PostgREST; las propias se consultan
+  // aparte para conservar las ya asignadas si el instructor se desactiva.
   //
   // 'liberado' se incluye junto a 'disponible': claimSlot acepta reclamar
   // una franja en cualquiera de esos dos estados (status IN ('disponible',
   // 'liberado')), así que el listado tiene que mostrar ambos - de lo
   // contrario, una franja cancelada por un estudiante (que queda en
-  // 'liberado', con student_id ya en NULL) dejaría de matchear las dos
-  // condiciones de este filtro y se volvería invisible para reclamarla de
-  // nuevo, incluso después del broadcast slot-released.
-  async listSlotsForStudent(studentId: string): Promise<PracticeSlotWithNames[]> {
-    const cohortId = await this.getActiveCohortIdForStudent(studentId);
-    if (!cohortId) {
+  // 'liberado', con student_id ya en NULL) quedaría invisible para reclamarla
+  // de nuevo, incluso después del broadcast slot-released.
+  async listSlotsForStudent(studentId: string): Promise<StudentPracticeSlot[]> {
+    const cohortIds = await activeCohortIds(this.supabase, studentId);
+    if (!cohortIds.length) {
       return [];
     }
 
-    const { data, error } = await this.supabase
+    const { data: freeSlots, error: freeSlotsError } = await this.supabase
       .from('practice_slots')
-      .select(SELECT_WITH_NAMES)
-      .eq('cohort_id', cohortId)
-      .or(`status.eq.disponible,status.eq.liberado,student_id.eq.${studentId}`)
+      .select(SELECT_WITH_ACTIVE_INSTRUCTOR)
+      .in('cohort_id', cohortIds)
+      .in('status', ['disponible', 'liberado'])
+      .eq('instructor.activo', true)
       .order('scheduled_at', { ascending: true })
       .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
-
-    if (error) {
-      throw error;
+    if (freeSlotsError) {
+      throw freeSlotsError;
     }
 
-    return data.map(toPracticeSlotWithNames);
+    const { data: ownSlots, error: ownSlotsError } = await this.supabase
+      .from('practice_slots')
+      .select(SELECT_WITH_NAMES)
+      .in('cohort_id', cohortIds)
+      .eq('student_id', studentId)
+      .order('scheduled_at', { ascending: true })
+      .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
+    if (ownSlotsError) {
+      throw ownSlotsError;
+    }
+
+    return [...freeSlots, ...ownSlots]
+      .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))
+      .map((row) => {
+        const slot = toPracticeSlotWithNames(row);
+        if (row.student_id === studentId &&
+            ['asignado', 'confirmado', 'completado'].includes(row.status)) return slot;
+        const hidden: Partial<PracticeSlotWithNames> = { ...slot };
+        delete hidden.instructorId;
+        delete hidden.instructorName;
+        return hidden as Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
+      });
   }
 
   // RF-03: "acceso de solo lectura a su disponibilidad semanal y a los
@@ -256,13 +287,19 @@ export class PracticeSlotService {
   // check-then-act) para no perder una condición de carrera contra un
   // reclamo simultáneo.
   async updateSlot(id: string, input: UpdatePracticeSlotInput): Promise<PracticeSlot> {
+    effectivePracticeDuration(input.durationMinutes);
+    const scheduledAt =
+      input.scheduledAt === undefined ? undefined : normalizePracticeScheduledAt(input.scheduledAt);
     if (input.instructorId !== undefined) {
-      await this.assertInstructorExists(input.instructorId);
+      const current = await this.getSlotRowOrThrow(id);
+      if (input.instructorId !== current.instructor_id) {
+        await this.assertInstructorExists(input.instructorId);
+      }
     }
 
     const updatePayload: Database['public']['Tables']['practice_slots']['Update'] = {};
     if (input.instructorId !== undefined) updatePayload.instructor_id = input.instructorId;
-    if (input.scheduledAt !== undefined) updatePayload.scheduled_at = input.scheduledAt;
+    if (scheduledAt !== undefined) updatePayload.scheduled_at = scheduledAt;
     if (input.durationMinutes !== undefined) updatePayload.duration_minutes = input.durationMinutes;
 
     const { data, error } = await this.supabase
@@ -274,7 +311,7 @@ export class PracticeSlotService {
       .maybeSingle();
 
     if (error) {
-      throw error;
+      throwPracticeWriteError(error);
     }
     if (!data) {
       await this.getSlotRowOrThrow(id);
@@ -317,7 +354,7 @@ export class PracticeSlotService {
   private async assertInstructorExists(instructorId: string): Promise<void> {
     const { data, error } = await this.supabase
       .from('users')
-      .select('id, rol')
+      .select('id, rol, activo')
       .eq('id', instructorId)
       .maybeSingle();
     if (error) {
@@ -329,19 +366,9 @@ export class PracticeSlotService {
     if (data.rol !== 'instructor') {
       throw new AppError('El usuario indicado no tiene rol instructor', 400);
     }
-  }
-
-  private async getActiveCohortIdForStudent(studentId: string): Promise<string | null> {
-    const { data, error } = await this.supabase
-      .from('enrollments')
-      .select('cohort_id')
-      .eq('student_id', studentId)
-      .eq('status', 'activo')
-      .maybeSingle();
-    if (error) {
-      throw error;
+    if (!data.activo) {
+      throw new AppError('El instructor indicado está inactivo', 409);
     }
-    return data ? data.cohort_id : null;
   }
 
   private async getSlotRowOrThrow(id: string): Promise<PracticeSlotRow> {

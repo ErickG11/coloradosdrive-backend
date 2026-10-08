@@ -232,7 +232,7 @@ describe('exams endpoints', () => {
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(createChain({ data: null, error: null })); // sin enrollment activo
+        .mockReturnValueOnce(createChain({ data: [], error: null })); // sin enrollment activo
 
       const res = await request(app)
         .get('/exams')
@@ -245,8 +245,8 @@ describe('exams endpoints', () => {
     it('estudiante con inscripción activa: solo ve examenes publicados de su curso', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(createChain({ data: { cohort_id: 'cohort-1' }, error: null }))
-        .mockReturnValueOnce(createChain({ data: { course_id: courseId }, error: null }))
+        .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null }))
+        .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null }))
         .mockReturnValueOnce(
           createChain({ data: [{ ...examRow, is_published: true }], error: null }),
         );
