@@ -11,16 +11,15 @@ import { env } from './env';
 // Node.js: https://supabase.com/docs/guides/auth/jwts
 //
 // `jose` v6 se distribuye solo como ESM ("type": "module", sin build
-// CommonJS). Este backend compila a CommonJS (module: CommonJS en
-// tsconfig.json, para Node 18 LTS), y Node 18 no soporta require()
-// síncrono de paquetes ESM — esa interoperabilidad llegó a Node en
-// versiones posteriores.
+// CommonJS). Se conserva el import() nativo desde CommonJS para que
+// TypeScript y Jest no transformen la carga ESM. El runtime declarado
+// es Node 22: jose v6 requiere Web Crypto y Fetch disponibles globalmente.
 //
 // Un `import('jose')` dinámico normal no alcanza: con module: CommonJS,
 // tsc reescribe TODO import() dinámico a
 // `Promise.resolve().then(() => require('jose'))` (verificado en el
 // build compilado), que sigue siendo un require() síncrono por debajo y
-// rompería igual en Node 18. Se envuelve en un Function constructor para
+// alteraría la carga ESM. Se envuelve en un Function constructor para
 // que tsc no lo toque y quede un import() nativo real en tiempo de
 // ejecución — el mecanismo que Node sí soporta para cargar ESM desde
 // CommonJS desde hace mucho más tiempo que require() síncrono de ESM.
