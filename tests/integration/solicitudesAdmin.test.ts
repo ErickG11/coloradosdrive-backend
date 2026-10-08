@@ -599,6 +599,7 @@ describe('solicitudes de inscripción (admin)', () => {
         expect(enrollmentInsertChain.insert).toHaveBeenCalledWith({
           student_id: newStudentId,
           cohort_id: null,
+          course_id: courseId,
           status: 'pendiente_cohorte',
           monto_total: null,
         });

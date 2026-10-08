@@ -4,18 +4,11 @@ import type { Database } from '../config/database.types';
 import type { EmailService } from './email.service';
 import type { RealtimeService } from './realtime.service';
 
-type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
+type SchedulerTransition = 'remind' | 'close' | 'complete';
+type Candidate = Database['public']['Functions']['practice_slots_scheduler_candidates']['Returns'][number];
 
-const CONFIRMATION_REMINDER_MINUTES_BEFORE = 20;
-const CONFIRMATION_WINDOW_CLOSE_MINUTES = 5;
-
-// Recibe el cliente de Supabase, EmailService y RealtimeService por
-// constructor (mismo patrón que el resto de servicios) para poder
-// mockearlos en tests con el tiempo controlado, en vez de esperar
-// minutos reales. src/jobs/practiceSlotCron.ts es el único que
-// instancia esta clase con los singletons reales y la conecta a
-// node-cron - correr cada minuto es responsabilidad de ese archivo, no
-// de esta clase, que solo sabe "ejecutar una pasada ahora mismo".
+// PostgreSQL selecciona candidatos y decide estado/plazo de nuevo al escribir.
+// El reloj de Node no participa en las decisiones (ADR 009).
 export class PracticeSlotSchedulerService {
   constructor(
     private readonly supabase: SupabaseClient<Database>,
@@ -24,145 +17,45 @@ export class PracticeSlotSchedulerService {
   ) {}
 
   async runOnce(): Promise<void> {
-    await this.notifyUpcomingConfirmations();
-    await this.closeSlotsWithoutPractice();
-    await this.completeFinishedSlots();
-  }
-
-  // RF-03: notifica 20 minutos antes de la práctica, pidiendo
-  // confirmación. Solo franjas 'asignado' nunca notificadas todavía, y
-  // que todavía no hayan empezado (evita reenviar un recordatorio
-  // engañoso si el proceso estuvo caído y esta pasada se ejecuta tarde).
-  private async notifyUpcomingConfirmations(): Promise<void> {
-    const now = new Date();
-    const reminderThreshold = new Date(
-      now.getTime() + CONFIRMATION_REMINDER_MINUTES_BEFORE * 60_000,
-    );
-
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .select()
-      .eq('status', 'asignado')
-      .is('confirmation_notified_at', null)
-      .lte('scheduled_at', reminderThreshold.toISOString())
-      .gt('scheduled_at', now.toISOString());
-
-    if (error) {
-      throw error;
-    }
-
-    for (const row of data) {
-      await this.processConfirmationReminder(row);
+    for (const transition of ['remind', 'close', 'complete'] as const) {
+      const { data, error } = await this.supabase.rpc('practice_slots_scheduler_candidates', {
+        p_transition: transition,
+      });
+      if (error) {
+        throw error;
+      }
+      for (const candidate of data) {
+        await this.processTransition(candidate, transition);
+      }
     }
   }
 
-  private async processConfirmationReminder(row: PracticeSlotRow): Promise<void> {
-    if (row.student_id) {
-      await this.notifyStudentConfirmationRequestSafely(row.student_id, row.scheduled_at);
-    }
-
-    const { error } = await this.supabase
-      .from('practice_slots')
-      .update({ confirmation_notified_at: new Date().toISOString() })
-      .eq('id', row.id);
-
-    if (error) {
-      throw error;
-    }
-  }
-
-  // RF-03: "la asignación del cupo liberado es por orden de solicitud;
-  // ... si ningún estudiante toma el cupo faltando 5 minutos ... el
-  // sistema notifica al instructor". Se trata igual una franja jamás
-  // reclamada (disponible), una liberada sin volver a tomarse
-  // (liberado), y una asignada que nunca se confirmó (asignado) - las
-  // 3 significan "nadie va a estar ahí", sin margen real para que
-  // alguien más la tome a esta altura.
-  private async closeSlotsWithoutPractice(): Promise<void> {
-    const closeThreshold = new Date(Date.now() + CONFIRMATION_WINDOW_CLOSE_MINUTES * 60_000);
-
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .select()
-      .in('status', ['disponible', 'liberado', 'asignado'])
-      .lte('scheduled_at', closeThreshold.toISOString());
-
-    if (error) {
-      throw error;
-    }
-
-    for (const row of data) {
-      await this.closeSlotWithoutPracticeSafely(row);
-    }
-  }
-
-  private async closeSlotWithoutPracticeSafely(row: PracticeSlotRow): Promise<void> {
-    // El UPDATE repite la condición de estado: si otra pasada, u otra
-    // acción del estudiante (ej. justo reclamó/confirmó), ya cambió esta
-    // fila entre el SELECT y este punto, no la pisamos por error.
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .update({
-        status: 'sin_practica',
-        student_id: null,
-        confirmed_at: null,
-        confirmation_notified_at: null,
-      })
-      .eq('id', row.id)
-      .in('status', ['disponible', 'liberado', 'asignado'])
-      .select()
-      .maybeSingle();
-
+  private async processTransition(candidate: Candidate, transition: SchedulerTransition): Promise<void> {
+    const { data, error } = await this.supabase.rpc('transition_practice_slot_for_scheduler', {
+      p_slot_id: candidate.slot.id,
+      p_transition: transition,
+      p_expected_version: candidate.row_version,
+    }).maybeSingle();
     if (error) {
       throw error;
     }
     if (!data) {
-      return;
+      return; // Otro proceso cambió la fila o ya no cumple el plazo: sin efectos.
     }
 
-    // row.student_id (antes del UPDATE, que ya lo limpió a NULL) es
-    // no-nulo únicamente si la franja venía de 'asignado' - el estudiante
-    // que la tenía asignada también debe enterarse de que perdió el cupo
-    // por no confirmar a tiempo, no solo el instructor.
-    if (row.student_id) {
-      await this.broadcastToUserSafely(row.student_id, 'no-practice', {
-        scheduledAt: data.scheduled_at,
-      });
+    // La respuesta de la RPC confirma el commit antes de emitir efectos.
+    if (transition === 'remind' && data.student_id !== null) {
+      await this.notifyStudentConfirmationRequestSafely(data.student_id, data.scheduled_at);
+    } else if (transition === 'close') {
+      // La versión aceptada garantiza que este era el estudiante al cerrar.
+      if (candidate.slot.student_id !== null) {
+        await this.broadcastToUserSafely(candidate.slot.student_id, 'no-practice', {
+          scheduledAt: data.scheduled_at,
+        });
+      }
+      await this.notifyInstructorNoPracticeSafely(data.instructor_id, data.scheduled_at);
     }
-
-    await this.notifyInstructorNoPracticeSafely(data.instructor_id, data.scheduled_at);
-  }
-
-  // RF-03: al pasar scheduled_at + duration_minutes, un turno confirmado
-  // se da por completado. No hay notificación asociada a esta
-  // transición (el documento no la pide).
-  private async completeFinishedSlots(): Promise<void> {
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .select()
-      .eq('status', 'confirmado');
-
-    if (error) {
-      throw error;
-    }
-
-    const now = Date.now();
-    const dueIds = data
-      .filter((row) => new Date(row.scheduled_at).getTime() + row.duration_minutes * 60_000 <= now)
-      .map((row) => row.id);
-
-    if (dueIds.length === 0) {
-      return;
-    }
-
-    const { error: updateError } = await this.supabase
-      .from('practice_slots')
-      .update({ status: 'completado' })
-      .in('id', dueIds);
-
-    if (updateError) {
-      throw updateError;
-    }
+    // Completar no tiene notificación; se conserva el contrato de RF-03.
   }
 
   private async notifyStudentConfirmationRequestSafely(

@@ -27,15 +27,17 @@ export interface PracticeSlot {
   updatedAt: string;
 }
 
-// Forma que devuelven los 3 listados (admin/estudiante/instructor, ver
-// PracticeSlotService): instructorName siempre presente (instructorId es
-// NOT NULL), studentName null cuando no hay estudiante asignado. Evita
-// que cada rol tenga que resolver nombres ajenos por su cuenta contra
-// /users (ver docs/adr/008).
+// Forma completa para admin, instructor y franjas ya asignadas al estudiante.
+// En la selección del estudiante se omiten instructorId e instructorName.
 export interface PracticeSlotWithNames extends PracticeSlot {
   instructorName: string;
   studentName: string | null;
 }
+
+// Durante la selección, la identidad del instructor permanece oculta.
+export type StudentPracticeSlot =
+  | PracticeSlotWithNames
+  | Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
 
 // 'verde': sin estudiante asignado (disponible/liberado), o estados fuera
 // del ciclo activo (sin_practica/completado). 'rojo'/'amarillo'/'neutro':
@@ -57,8 +59,9 @@ export interface PracticeSlotWithColor extends PracticeSlotWithNames {
 export interface CreatePracticeSlotInput {
   cohortId: string;
   instructorId: string;
+  // Fecha y hora ISO 8601 con Z u offset ±HH:mm; el service normaliza a UTC.
   scheduledAt: string;
-  durationMinutes: number;
+  durationMinutes?: 60;
 }
 
 // Solo los datos de programación de la franja - nunca studentId ni
@@ -68,8 +71,9 @@ export interface CreatePracticeSlotInput {
 // en el service, no aquí).
 export type UpdatePracticeSlotInput = Partial<{
   instructorId: string;
+  // Mismo contrato temporal que CreatePracticeSlotInput; omitir conserva el inicio.
   scheduledAt: string;
-  durationMinutes: number;
+  durationMinutes: 60;
 }>;
 
 export interface SubmitAttendanceInput {

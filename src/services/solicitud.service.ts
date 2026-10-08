@@ -703,6 +703,7 @@ export class SolicitudService {
         await this.insertEnrollmentRow({
           student_id: studentId,
           cohort_id: null,
+          course_id: courseId,
           status: 'pendiente_cohorte',
           monto_total: null,
         });
@@ -731,6 +732,7 @@ export class SolicitudService {
     await this.insertEnrollmentRow({
       student_id: studentId,
       cohort_id: null,
+      course_id: courseId,
       status: 'pendiente_cohorte',
       monto_total: null,
     });

@@ -8,7 +8,7 @@ API REST desacoplada, desplegada como **proceso persistente** (no serverless) en
 
 ## Stack
 
-- **Node.js 18 LTS** + **Express.js 4.18** + **TypeScript 5.3**
+- **Node.js 22 LTS** (>=22 <23) + **Express.js 4.18** + **TypeScript 5.3**
 - **PostgreSQL** vía **Supabase** (Auth, Realtime, Base de datos)
 - **Helmet 7.1** — cabeceras de seguridad HTTP
 - **express-validator** — validación de entradas
@@ -41,7 +41,8 @@ docs/
 
 ### Requisitos previos
 
-- Node.js 18.x
+- Node.js >=22 <23. Node 22 termina su soporte el 30 de abril de 2027;
+  ver [diagnóstico y coordinación de Railway](docs/operations/node-22-runtime.md).
 - Un proyecto de Supabase (URL, anon key, service role key y JWT secret — en Project Settings → API)
 - Una cuenta SMTP para el correo de bienvenida (host, puerto, usuario y contraseña) — en este proyecto, [Resend vía SMTP](https://resend.com/docs/send-with-smtp)
 

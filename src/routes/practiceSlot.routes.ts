@@ -18,6 +18,7 @@ import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
 import { PRACTICE_SLOT_STATUSES } from '../models/practiceSlot.model';
 import { asyncHandler } from '../utils/asyncHandler';
+import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
 
 export const practiceSlotRouter = Router();
 
@@ -27,11 +28,11 @@ const createValidators = [
   body('cohortId').isUUID().withMessage('cohortId debe ser un UUID válido'),
   body('instructorId').isUUID().withMessage('instructorId debe ser un UUID válido'),
   body('scheduledAt')
-    .isISO8601()
-    .withMessage('scheduledAt debe ser una fecha/hora válida (ISO 8601)'),
+    .custom((value: unknown) => { normalizePracticeScheduledAt(value); return true; }),
   body('durationMinutes')
-    .isInt({ min: 1 })
-    .withMessage('durationMinutes debe ser un entero mayor a 0'),
+    .optional()
+    .custom((value: unknown) => value === 60)
+    .withMessage('Las prácticas deben durar exactamente 60 minutos'),
 ];
 
 const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID válido');
@@ -41,12 +42,11 @@ const updateValidators = [
   body('instructorId').optional().isUUID().withMessage('instructorId debe ser un UUID válido'),
   body('scheduledAt')
     .optional()
-    .isISO8601()
-    .withMessage('scheduledAt debe ser una fecha/hora válida (ISO 8601)'),
+    .custom((value: unknown) => { normalizePracticeScheduledAt(value); return true; }),
   body('durationMinutes')
     .optional()
-    .isInt({ min: 1 })
-    .withMessage('durationMinutes debe ser un entero mayor a 0'),
+    .custom((value: unknown) => value === 60)
+    .withMessage('Las prácticas deben durar exactamente 60 minutos'),
 ];
 
 const listValidators = [

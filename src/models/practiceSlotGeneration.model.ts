@@ -9,6 +9,7 @@ export interface GenerarPracticaBaseInput {
   fechaInicio: string;
   modalidad: Modalidad;
   horasPorDia: number;
+  durationMinutes?: 60;
   // Exactamente uno de los dos.
   fechaFin?: string;
   numeroSesiones?: number;

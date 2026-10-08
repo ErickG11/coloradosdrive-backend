@@ -3,6 +3,7 @@ import request from 'supertest';
 jest.mock('../../src/config/supabase', () => ({
   supabaseAdmin: {
     from: jest.fn(),
+    rpc: jest.fn(),
     channel: jest.fn(),
     removeChannel: jest.fn(),
   },
@@ -20,6 +21,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
 
+const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedFrom = supabaseAdmin.from as jest.Mock;
 const mockedChannel = supabaseAdmin.channel as jest.Mock;
 const mockedRemoveChannel = supabaseAdmin.removeChannel as jest.Mock;
@@ -38,7 +40,7 @@ function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
     instructor_id: instructorId,
     student_id: null,
     scheduled_at: '2026-03-01T10:00:00.000Z',
-    duration_minutes: 45,
+    duration_minutes: 60,
     status: 'disponible',
     confirmation_notified_at: null,
     release_notified_at: null,
@@ -59,319 +61,107 @@ function mockHttpSendSuccess() {
 
 describe('practice-slots student actions', () => {
   const app = createApp();
-
   beforeEach(() => {
     mockedFrom.mockReset();
+    mockedRpc.mockReset();
     mockedChannel.mockReset();
     mockedRemoveChannel.mockReset();
     mockedVerifySupabaseJwt.mockReset();
   });
 
-  describe('protección por rol', () => {
-    it('POST .../claim con rol admin responde 403', async () => {
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/claim`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
-      expect(res.status).toBe(403);
-      expect(mockedFrom).not.toHaveBeenCalled();
-    });
+  function authenticateStudent() {
+    mockedFrom.mockReturnValue(createChain({ data: { debe_cambiar_password: false }, error: null }));
+    return `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`;
+  }
 
-    it('POST .../confirm con rol instructor responde 403', async () => {
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/confirm`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
-      expect(res.status).toBe(403);
-    });
+  it.each([
+    ['claim', 'admin'], ['confirm', 'instructor'], ['cancel', 'admin'],
+  ] as const)('rechaza %s con rol %s antes de la RPC', async (action, role) => {
+    const res = await request(app).post(`/practice-slots/${slotId}/${action}`)
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, role)}`);
+    expect(res.status).toBe(403);
+    expect(mockedRpc).not.toHaveBeenCalled();
+  });
 
-    it('POST .../cancel con rol admin responde 403', async () => {
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/cancel`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
-      expect(res.status).toBe(403);
+  it.each([
+    ['claim', 'CD404', 404, 'Franja no encontrada'],
+    ['claim', 'CD403', 403, 'No tienes una inscripción activa en la cohorte de esta franja'],
+    ['claim', 'CD409', 409, 'Esta franja ya no está disponible'],
+    ['claim', 'CD023', 409, 'El instructor indicado está inactivo'],
+    ['claim', 'CD409', 409, 'La ventana de reclamación ya cerró'],
+    ['confirm', 'CD404', 404, 'Franja no encontrada'],
+    ['confirm', 'CD409', 409, 'Este turno no está pendiente de confirmación'],
+    ['confirm', 'CD409', 409, 'La ventana de confirmación ya cerró'],
+    ['cancel', 'CD404', 404, 'Franja no encontrada'],
+    ['cancel', 'CD409', 409, 'Este turno no se puede cancelar'],
+  ])('%s traduce %s a HTTP %s', async (action, code, status, message) => {
+    mockedRpc.mockReturnValue(createChain({ data: null, error: { code, message } }));
+    const res = await request(app).post(`/practice-slots/${slotId}/${action}`)
+      .set('Authorization', authenticateStudent());
+    expect(res.status).toBe(status);
+    expect(res.body.message).toBe(message);
+    expect(mockedChannel).not.toHaveBeenCalled();
+  });
+
+  it.each(['claim', 'confirm'] as const)('%s usa el actor del JWT y devuelve el DTO vigente', async (action) => {
+    mockedRpc.mockReturnValue(createChain({
+      data: buildSlotRow({ student_id: studentId, status: action === 'claim' ? 'asignado' : 'confirmado' }),
+      error: null,
+    }));
+    const res = await request(app).post(`/practice-slots/${slotId}/${action}`)
+      .set('Authorization', authenticateStudent()).send({ studentId: 'otro-actor', now: 'ayer' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: slotId, studentId, durationMinutes: 60 });
+    expect(mockedRpc).toHaveBeenCalledWith('act_on_practice_slot', {
+      p_slot_id: slotId, p_student_id: studentId, p_action: action,
     });
   });
 
-  describe('POST /practice-slots/:id/claim (estudiante)', () => {
-    it('responde 404 si la franja no existe', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(createChain({ data: null, error: null }));
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/claim`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(404);
-    });
-
-    it('responde 403 si el estudiante no está en la cohorte de la franja', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
-        .mockReturnValueOnce(createChain({ data: null, error: null }));
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/claim`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(403);
-    });
-
-    it('reclama la franja disponible y responde 200', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
-        .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'asignado' }),
-            error: null,
-          }),
-        );
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/claim`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ studentId, status: 'asignado' });
-    });
-
-    it('condición de carrera: dos solicitudes reclamando la misma franja, solo una gana', async () => {
-      // No se simula concurrencia real (el mock es una cola secuencial de
-      // respuestas, no una base de datos con locking real) - se prueba
-      // directamente el mecanismo que sí previene la carrera en
-      // producción: el UPDATE atómico con WHERE status IN (...). La
-      // primera solicitud encuentra la fila disponible y la reclama; la
-      // segunda, aunque haga exactamente la misma secuencia de consultas,
-      // no encuentra ninguna fila que matchee (ya cambió de estado) y
-      // recibe 409 - así se comportaría sin importar cuál de las dos
-      // peticiones reales llegara primero al servidor.
-      mockedFrom
-        // Solicitud A: gana.
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
-        .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'asignado' }),
-            error: null,
-          }),
-        )
-        // Solicitud B: pierde (el UPDATE no matchea ninguna fila).
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(createChain({ data: buildSlotRow(), error: null }))
-        .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
-        .mockReturnValueOnce(createChain({ data: null, error: null }));
-
-      const resA = await request(app)
-        .post(`/practice-slots/${slotId}/claim`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-      const resB = await request(app)
-        .post(`/practice-slots/${slotId}/claim`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(resA.status).toBe(200);
-      expect(resB.status).toBe(409);
-      expect(resB.body.message).toBe('Esta franja ya no está disponible');
-    });
+  it('simula dos respuestas de reclamación concurrentes: HTTP 200 y 409 (no demuestra locks SQL)', async () => {
+    mockedRpc.mockReturnValueOnce(createChain({
+      data: buildSlotRow({ student_id: studentId, status: 'asignado' }), error: null,
+    })).mockReturnValueOnce(createChain({
+      data: null, error: { code: 'CD409', message: 'Esta franja ya no está disponible' },
+    }));
+    const auth = authenticateStudent();
+    mockAuthToken(mockedVerifySupabaseJwt, 'estudiante');
+    const responses = await Promise.all([1, 2].map(() =>
+      request(app).post(`/practice-slots/${slotId}/claim`).set('Authorization', auth)));
+    expect(responses.map((res) => res.status).sort()).toEqual([200, 409]);
   });
 
-  describe('POST /practice-slots/:id/confirm (estudiante)', () => {
-    it('responde 404 si la franja no es del estudiante', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({ data: buildSlotRow({ student_id: 'otro-estudiante' }), error: null }),
-        );
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/confirm`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(404);
-    });
-
-    it('responde 409 si la ventana de confirmación ya cerró (menos de 5 min antes)', async () => {
-      const soon = new Date(Date.now() + 2 * 60_000).toISOString();
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'asignado', scheduled_at: soon }),
-            error: null,
-          }),
-        );
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/confirm`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(409);
-      expect(res.body.message).toBe('La ventana de confirmación ya cerró');
-    });
-
-    it('confirma dentro de la ventana y responde 200', async () => {
-      const later = new Date(Date.now() + 15 * 60_000).toISOString();
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'asignado', scheduled_at: later }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({
-              student_id: studentId,
-              status: 'confirmado',
-              scheduled_at: later,
-            }),
-            error: null,
-          }),
-        );
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/confirm`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe('confirmado');
-    });
+  it('cancelar devuelve la franja liberada y notifica tras confirmar la escritura', async () => {
+    mockedRpc.mockReturnValue(createChain({
+      data: buildSlotRow({ status: 'liberado', release_notified_at: '2026-03-01T09:00:00Z' }),
+      error: null,
+    }));
+    const httpSend = mockHttpSendSuccess();
+    const res = await request(app).post(`/practice-slots/${slotId}/cancel`)
+      .set('Authorization', authenticateStudent());
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'liberado', studentId: null, confirmedAt: null, confirmationNotifiedAt: null });
+    expect(httpSend).toHaveBeenCalledWith('slot-released', { slotId, scheduledAt: '2026-03-01T10:00:00.000Z' });
   });
 
-  describe('POST /practice-slots/:id/cancel (estudiante)', () => {
-    it('responde 409 si el turno ya está liberado', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'liberado' }),
-            error: null,
-          }),
-        );
+  it('una franja reclamada de nuevo no hereda el ciclo anterior devuelto por PostgreSQL', async () => {
+    mockedRpc.mockReturnValue(createChain({
+      data: buildSlotRow({ status: 'asignado', student_id: studentId }), error: null,
+    }));
+    const res = await request(app).post(`/practice-slots/${slotId}/claim`)
+      .set('Authorization', authenticateStudent());
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ confirmedAt: null, confirmationNotifiedAt: null, releaseNotifiedAt: null });
+  });
 
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/cancel`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(409);
-    });
-
-    it('responde 409 si el turno ya está completado (no se puede cancelar una práctica que ya pasó)', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'completado' }),
-            error: null,
-          }),
-        );
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/cancel`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(409);
-      expect(res.body.message).toBe('Este turno no se puede cancelar');
-    });
-
-    it('cancela, libera el cupo, resetea el ciclo de confirmación, y notifica a la cohorte por Realtime', async () => {
-      const httpSend = mockHttpSendSuccess();
-      const updateChain = createChain({ data: buildSlotRow({ status: 'liberado' }), error: null });
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'confirmado' }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(updateChain);
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/cancel`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
+  it('si Realtime falla, la cancelación confirmada sigue respondiendo 200', async () => {
+    mockedRpc.mockReturnValue(createChain({ data: buildSlotRow({ status: 'liberado' }), error: null }));
+    mockedChannel.mockReturnValue({ httpSend: jest.fn().mockRejectedValue(new Error('fallo simulado')) });
+    const logger = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const res = await request(app).post(`/practice-slots/${slotId}/cancel`)
+        .set('Authorization', authenticateStudent());
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('liberado');
-      expect(res.body.studentId).toBeNull();
-      // No basta con lo que el mock "devuelve" (buildSlotRow ya trae estos
-      // campos en null por defecto, eso no prueba nada por sí solo) - se
-      // verifica el payload real que el servicio le manda a .update(): sin
-      // este reset, un segundo estudiante que reclame esta misma franja
-      // después heredaría confirmation_notified_at ya puesto y nunca
-      // recibiría su propia notificación de 20 minutos (ver docs/adr/007).
-      expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          student_id: null,
-          status: 'liberado',
-          confirmed_at: null,
-          confirmation_notified_at: null,
-        }),
-      );
-      expect(mockedChannel).toHaveBeenCalledWith(`cohort-${cohortId}-practice-slots`, {
-        config: { private: true },
-      });
-      expect(httpSend).toHaveBeenCalledWith('slot-released', expect.objectContaining({ slotId }));
-    });
-
-    it('un segundo estudiante que reclama la franja liberada no hereda campos del ciclo anterior', async () => {
-      // Complementa el test anterior: cancelSlot() ya prueba que RESETEA
-      // los campos; este prueba que claimSlot() no los TOCA (no los
-      // sobrescribe con algo distinto de null) - juntos confirman que la
-      // franja llega "limpia" al segundo estudiante.
-      const releasedSlotId = '44444444-4444-4444-8444-444444444444';
-      const claimChain = createChain({
-        data: buildSlotRow({ id: releasedSlotId, student_id: studentId, status: 'asignado' }),
-        error: null,
-      });
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ id: releasedSlotId, status: 'liberado' }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(createChain({ data: { id: 'enrollment-1' }, error: null }))
-        .mockReturnValueOnce(claimChain);
-
-      const res = await request(app)
-        .post(`/practice-slots/${releasedSlotId}/claim`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(200);
-      expect(claimChain.update).toHaveBeenCalledWith({
-        student_id: 'test-user-id',
-        status: 'asignado',
-      });
-    });
-
-    it('si la notificación Realtime falla, la cancelación igual se confirma (best-effort)', async () => {
-      const httpSend = jest.fn().mockResolvedValue({ success: false, status: 500, error: 'boom' });
-      mockedChannel.mockReturnValue({ httpSend });
-      mockedRemoveChannel.mockResolvedValue(undefined);
-
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ student_id: studentId, status: 'asignado' }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(
-          createChain({ data: buildSlotRow({ status: 'liberado' }), error: null }),
-        );
-
-      const res = await request(app)
-        .post(`/practice-slots/${slotId}/cancel`)
-        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
-
-      expect(res.status).toBe(200);
-    });
+    } finally { logger.mockRestore(); }
   });
 
   describe('PATCH /practice-slots/:id/attendance (instructor)', () => {
@@ -390,6 +180,7 @@ describe('practice-slots student actions', () => {
     it('responde 404 si la franja no es del instructor autenticado', async () => {
       // mockAuthToken resuelve sub: 'test-user-id'; la franja pertenece a
       // otro instructor (instructorId).
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
       mockedFrom.mockReturnValueOnce(
         createChain({
           data: buildSlotRow({ instructor_id: instructorId, status: 'completado' }),
@@ -406,6 +197,7 @@ describe('practice-slots student actions', () => {
     });
 
     it('responde 409 si la franja todavía no está completado', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
       mockedFrom.mockReturnValueOnce(
         createChain({
           data: buildSlotRow({ instructor_id: studentId, status: 'confirmado' }),
@@ -423,6 +215,7 @@ describe('practice-slots student actions', () => {
 
     it('marca asistencia sobre una franja completada propia y responde 200', async () => {
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ instructor_id: studentId, status: 'completado' }),
@@ -457,6 +250,7 @@ describe('practice-slots student actions', () => {
 
       // Instructor A marca asistencia en SU propia franja: funciona.
       mockedFrom
+        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(
           createChain({
             data: buildSlotRow({ id: slotOfA, instructor_id: instructorA, status: 'completado' }),
@@ -489,6 +283,7 @@ describe('practice-slots student actions', () => {
 
       // El mismo instructor A intenta marcar asistencia en una franja de
       // B: 404, nunca ve ni toca la franja ajena.
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
       mockedFrom.mockReturnValueOnce(
         createChain({
           data: buildSlotRow({ id: slotOfB, instructor_id: instructorB, status: 'completado' }),
