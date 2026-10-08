@@ -89,7 +89,7 @@ transiciones aceptadas/omitidas, usando mocks. `tests/database` prepara pruebas 
 de migraciones, restricciones, límites y sesiones concurrentes. No se ejecutó contra
 PostgreSQL durante la implementación original; aprobar Jest no demuestra las garantías SQL.
 La primera validación real posterior aprobó en PostgreSQL 17.6, con carreras y roles
-efectivos: [registro y límites del laboratorio](../operations/cd-05-07-postgresql-lab.md).
+efectivos.
 Supabase/PostgREST, Auth, RLS, historial completo y Node 18 siguen pendientes.
 
 Se descartaron consultas previas como única garantía (carrera), el índice único de
