@@ -109,7 +109,7 @@ describe('PracticeSlotGenerationService', () => {
 
   it('recalcula y escribe el bloque completo de 10 franjas de 60 minutos', async () => {
     const insert = createChain({ data: Array.from({ length: 10 }, (_, id) => ({ id: String(id) })), error: null });
-    const { service, from, rpc } = harness([...context, { data: { id: 'ins-1', rol: 'instructor' }, error: null }]);
+    const { service, from, rpc } = harness([...context, { data: { id: 'ins-1', rol: 'instructor', activo: true }, error: null }]);
     from.mockReturnValueOnce(insert);
     const result = await service.confirmar(enrollmentId, confirmation);
     expect(result).toMatchObject({ slotsCreados: 10, horasProgramadas: 10, horasRequeridas: 15 });
@@ -129,14 +129,14 @@ describe('PracticeSlotGenerationService', () => {
 
   it('un conflicto previo evita el INSERT, incluida la ocupación de liberado resuelta por SQL', async () => {
     const rpc = jest.fn().mockResolvedValue({ data: [], error: null });
-    const { service, from } = harness([...context, { data: { id: 'ins-1', rol: 'instructor' }, error: null }], rpc);
+    const { service, from } = harness([...context, { data: { id: 'ins-1', rol: 'instructor', activo: true }, error: null }], rpc);
     await expect(service.confirmar(enrollmentId, confirmation)).rejects.toMatchObject({ statusCode: 409 });
     expect(from).toHaveBeenCalledTimes(4);
   });
 
   it('traduce una exclusión perdida en la carrera del INSERT masivo a 409', async () => {
     const insert = createChain({ data: null, error: { code: '23P01', message: 'constraint conflict', details: 'private' } });
-    const { service, from } = harness([...context, { data: { id: 'ins-1', rol: 'instructor' }, error: null }]);
+    const { service, from } = harness([...context, { data: { id: 'ins-1', rol: 'instructor', activo: true }, error: null }]);
     from.mockReturnValueOnce(insert);
     await expect(service.confirmar(enrollmentId, confirmation)).rejects.toMatchObject({
       statusCode: 409, message: 'El instructor ya tiene una práctica que se solapa con este intervalo',

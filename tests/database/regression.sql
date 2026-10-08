@@ -20,7 +20,7 @@ declare
   student1 uuid := '20000000-0000-4000-8000-000000000001';
   student2 uuid := '20000000-0000-4000-8000-000000000002';
   outsider uuid := '20000000-0000-4000-8000-000000000003';
-  first_id uuid; adjacent_id uuid; target uuid; changed public.practice_slots;
+  first_id uuid; adjacent_id uuid; target uuid; cancel_id uuid; changed public.practice_slots;
   version text; n integer; start_at timestamptz; close_at timestamptz;
 begin
   insert into public.practice_slots(cohort_id, instructor_id, scheduled_at)
@@ -102,6 +102,39 @@ begin
   select count(*) into n from public.transition_practice_slot_for_scheduler(target,'complete',version);
   if n <> 1 then raise exception 'finalización no aplicada'; end if;
   perform pg_temp.expect_sqlstate(format('insert into public.practice_slots(cohort_id,instructor_id,scheduled_at) select cohort_id,instructor_id,scheduled_at from public.practice_slots where id=%L', target), '23P01');
+
+  -- Una franja histórica sigue cerrando o completándose tras desactivar.
+  insert into public.practice_slots(cohort_id,instructor_id,scheduled_at,status,student_id)
+    values (cohort,teacher,clock_timestamp()-interval '4 hours','asignado',student1)
+    returning id into first_id;
+  insert into public.practice_slots(cohort_id,instructor_id,scheduled_at,status,student_id)
+    values (cohort,teacher,clock_timestamp()-interval '6 hours','confirmado',student1)
+    returning id into adjacent_id;
+  insert into public.practice_slots(cohort_id,instructor_id,scheduled_at,status,student_id)
+    values (cohort,teacher,clock_timestamp()-interval '8 hours','asignado',student1)
+    returning id into cancel_id;
+  insert into public.practice_slots(cohort_id,instructor_id,scheduled_at,status,student_id)
+    values (cohort,teacher,'2035-03-02T08:00:00Z','asignado',student1)
+    returning id into target;
+  perform pg_temp.expect_sqlstate(format('select public.set_instructor_active(%L,false)', teacher), 'CD024');
+  update public.practice_slots set status='liberado',student_id=null where id=target;
+  if not public.set_instructor_active(teacher,false) then raise exception 'desactivación falló'; end if;
+  perform pg_temp.expect_sqlstate(format('insert into public.practice_slots(cohort_id,instructor_id,scheduled_at) values (%L,%L,%L)', cohort, teacher, '2035-03-01T12:00:00Z'), 'CD023');
+  perform pg_temp.expect_sqlstate(format('update public.practice_slots set instructor_id=%L where instructor_id=%L and scheduled_at=%L', teacher, teacher2, '2035-03-01T08:30:00Z'), 'CD023');
+  perform pg_temp.expect_sqlstate(format('select * from public.act_on_practice_slot(%L,%L,%L)', target, student1, 'claim'), 'CD023');
+  perform public.act_on_practice_slot(cancel_id,student1,'cancel');
+  if (select status from public.practice_slots where id=cancel_id) <> 'liberado'
+    then raise exception 'instructor inactivo bloqueó cancel'; end if;
+  select count(*) into n from public.practice_free_instructors(array['2035-03-01T12:00:00Z'::timestamptz],teacher);
+  if n <> 0 then raise exception 'instructor inactivo aún aparece disponible'; end if;
+  select xmin::text into version from public.practice_slots where id=first_id;
+  select count(*) into n from public.transition_practice_slot_for_scheduler(first_id,'close',version);
+  if n <> 1 or (select status from public.practice_slots where id=first_id) <> 'sin_practica'
+    then raise exception 'instructor inactivo bloqueó close'; end if;
+  select xmin::text into version from public.practice_slots where id=adjacent_id;
+  select count(*) into n from public.transition_practice_slot_for_scheduler(adjacent_id,'complete',version);
+  if n <> 1 or (select status from public.practice_slots where id=adjacent_id) <> 'completado'
+    then raise exception 'instructor inactivo bloqueó complete'; end if;
 
   if has_function_privilege('anon','public.act_on_practice_slot(uuid,uuid,text)','EXECUTE')
     or has_function_privilege('authenticated','public.transition_practice_slot_for_scheduler(uuid,text,text)','EXECUTE') then

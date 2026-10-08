@@ -63,7 +63,7 @@ node tests/database/run.mjs
 ```
 
 Usa un fixture mínimo de users/cohorts/enrollments y aplica las migraciones reales
-005/010/018/019. Valida la duración por defecto y explícita, solapamientos parciales
+005/010/018/019 y, tras las pruebas de rollback, la 021. Valida la duración por defecto y explícita, solapamientos parciales
 por ambas puntas y completos, intervalos contiguos, instructor distinto, liberado,
 completado, sin_practica, cambios de instructor/inicio/duración y disponibilidad.
 Comprueba fallos identificables de precondiciones conservando los registros, permisos

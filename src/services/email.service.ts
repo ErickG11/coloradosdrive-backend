@@ -6,6 +6,7 @@ export interface WelcomeEmailParams {
   to: string;
   nombreCompleto: string;
   temporaryPassword: string;
+  reason?: 'admin_reset';
 }
 
 export interface ManualEnrollmentEmailParams {
@@ -67,6 +68,33 @@ function formatScheduledAt(scheduledAt: string): string {
 // config/mailer.ts directamente) para poder mockearlo en tests.
 export class EmailService {
   constructor(private readonly transporter: Transporter) {}
+
+  async sendInstructorCredentials(params: WelcomeEmailParams): Promise<void> {
+    const login = new URL('/login', env.FRONTEND_URL).toString();
+    const reset = params.reason === 'admin_reset';
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      subject: reset ? 'Restablecimiento de contraseña de instructor' : 'Acceso de instructor a ColoradosDrive',
+      text: [
+        `Hola ${params.nombreCompleto},`,
+        ...(reset ? ['Un administrador solicitó restablecer tu contraseña.'] : []),
+        'Tus credenciales de instructor son:',
+        `Correo: ${params.to}`,
+        `Contraseña temporal: ${params.temporaryPassword}`,
+        reset ? 'Debes cambiarla al ingresar.' : 'Debes cambiarla al ingresar por primera vez.',
+        `Acceder: ${login}`,
+      ].join('\n'),
+      html: [
+        `<p>Hola ${escapeHtml(params.nombreCompleto)},</p>`,
+        ...(reset ? ['<p>Un administrador solicitó restablecer tu contraseña.</p>'] : []),
+        '<p>Tus credenciales de instructor son:</p>',
+        `<p>Correo: ${escapeHtml(params.to)}<br>Contraseña temporal: <strong>${escapeHtml(params.temporaryPassword)}</strong></p>`,
+        reset ? '<p>Debes cambiarla al ingresar.</p>' : '<p>Debes cambiarla al ingresar por primera vez.</p>',
+        `<p><a href="${escapeHtml(login)}">Acceder a ColoradosDrive</a></p>`,
+      ].join('\n'),
+    });
+  }
 
   async sendManualEnrollmentEmail(p: ManualEnrollmentEmailParams): Promise<void> {
     const url = new URL('/login', env.FRONTEND_URL);

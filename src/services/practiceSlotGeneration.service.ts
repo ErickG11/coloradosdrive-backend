@@ -376,7 +376,7 @@ export class PracticeSlotGenerationService {
   private async assertInstructorExists(instructorId: string): Promise<void> {
     const { data, error } = await this.supabase
       .from('users')
-      .select('id, rol')
+      .select('id, rol, activo')
       .eq('id', instructorId)
       .maybeSingle();
     if (error) {
@@ -387,6 +387,9 @@ export class PracticeSlotGenerationService {
     }
     if (data.rol !== 'instructor') {
       throw new AppError('El usuario indicado no tiene rol instructor', 400);
+    }
+    if (!data.activo) {
+      throw new AppError('El instructor indicado está inactivo', 409);
     }
   }
 }
