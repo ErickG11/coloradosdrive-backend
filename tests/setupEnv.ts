@@ -2,6 +2,7 @@
 // Supabase clients are constructed lazily (no network call at creation
 // time), so these values only need to be well-formed, not real.
 process.env.NODE_ENV = 'test';
+process.env.DISABLE_CRON = 'true';
 process.env.PORT = '3000';
 process.env.FRONTEND_URL = 'http://localhost:5173';
 process.env.SUPABASE_URL = 'https://test-project.supabase.co';

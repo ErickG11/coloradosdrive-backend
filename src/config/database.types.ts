@@ -9,6 +9,8 @@
 // para poder embeber instructor/estudiante tipado en el listado, en vez
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
+import type { StudentListResult } from '../models/studentAdmin.model';
+
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
 export type StudentStatus =
   | 'pendiente_verificacion'
@@ -47,6 +49,21 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      list_admin_students: {
+        Args: {
+          p_actor: string;
+          p_q: string | null;
+          p_active: boolean | null;
+          p_course: string | null;
+          p_cohort: string | null;
+          p_pending: boolean | null;
+          p_documents_pending: boolean | null;
+          p_history: boolean;
+          p_page: number;
+          p_page_size: number;
+        };
+        Returns: StudentListResult;
+      };
       find_manual_students: {
         Args: { p_actor: string; p_query: string };
         Returns: { id: string; cedula: string; nombre_completo: string; correo: string }[];
