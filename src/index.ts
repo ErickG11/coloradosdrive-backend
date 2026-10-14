@@ -9,5 +9,9 @@ app.listen(env.PORT, () => {
   console.warn(`ColoradosDrive backend listening on port ${String(env.PORT)} (${env.NODE_ENV})`);
 });
 
-startPracticeSlotCron();
-startSolicitudCleanupCron();
+if (process.env.DISABLE_CRON !== 'true') {
+  startPracticeSlotCron();
+  startSolicitudCleanupCron();
+} else {
+  console.warn('Crons de prácticas y solicitudes desactivados (DISABLE_CRON=true)');
+}
