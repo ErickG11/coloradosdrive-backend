@@ -3,7 +3,7 @@
 ## Estado
 
 Diseño aprobado en dirección; refinado el 14/10/2026. A1 implementada para
-revisión, migración 023 no aplicada. A2 propuesta, no implementada.
+revisión, migración 023 no aplicada. A2 implementada para revisión; 024 no aplicada.
 B (acceso/reservas), C (asignación de cohorte) y D (eliminación) pendientes.
 
 ## Decisión
@@ -19,13 +19,16 @@ desempate por id, filtros combinados sobre la misma matrícula e historial optat
 Activo es del usuario, independiente de matrícula. Sin filtros aparecen alumnos
 sin matrículas. Ficha por lotes y cálculo de abono/checklist reutilizado.
 
-A2 se propone simple: una transacción UPDATE + auditoría de nombres de campos,
+A2 es simple: una transacción UPDATE + auditoría de nombres de campos,
 actor, fecha e identificador, sin valores/hashes. Validación de cédula y unicidad
 antes de Auth; constraint única conserva protección concurrente. Correo solo
 en Auth, actualizado primero, una compensación ante rechazo SQL confirmado.
 Sin operaciones persistentes, tokens, cifrado ni clave de recuperación. Los
-crashes y respuestas inciertas requieren revisión manual; no revertir un commit
-posiblemente confirmado. Detalle: operations/estudiantes-a2-propuesta.md.
+crashes requieren revisión manual. UUID generado en backend y log previo a Auth
+sin valores; ante timeout RPC, consultar auditoría por UUID: presente, no revertir;
+ausente, compensar una vez; consulta fallida, revisión manual sin compensación.
+La ausencia aún puede adelantarse a un commit en curso; no es un fence transaccional.
+Detalle y límites concurrentes: operations/estudiantes-a2-propuesta.md.
 
 Mantener bloqueo optimista en A2: trigger real habilitado en cada UPDATE y
 updated_at con seis decimales. Transportar el string exacto sin Date de JS.

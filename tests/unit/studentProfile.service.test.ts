@@ -1,0 +1,160 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '../../src/config/database.types';
+import { StudentProfileService } from '../../src/services/studentProfile.service';
+import { createSupabaseFromMock } from '../helpers/supabaseMock';
+
+const id = '22222222-2222-4222-8222-222222222222';
+const actor = '11111111-1111-4111-8111-111111111111';
+const version = '2026-10-01T10:00:00.123456+00:00';
+const row = { id, rol: 'estudiante', updated_at: version };
+const ok = (data: unknown) => ({ data, error: null });
+function setup(rows: unknown[] = [row]) {
+  const from = createSupabaseFromMock(rows.map(ok));
+  const rpc = jest.fn().mockResolvedValue(ok({ updatedAt: version, changedFields: ['correo'] }));
+  const getUserById = jest.fn().mockResolvedValue(ok({ user: { email: 'old@example.com' } }));
+  const updateUserById = jest.fn().mockResolvedValue(ok({ user: {} }));
+  const db = { from, rpc, auth: { admin: { getUserById, updateUserById } } };
+  return {
+    from,
+    rpc,
+    getUserById,
+    updateUserById,
+    service: new StudentProfileService(db as unknown as SupabaseClient<Database>),
+  };
+}
+describe('StudentProfileService A2', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'warn').mockImplementation();
+    jest.spyOn(console, 'error').mockImplementation();
+  });
+  afterEach(() => jest.restoreAllMocks());
+  it('passes the exact six-decimal version and a backend UUID; profile-only never calls Auth', async () => {
+    const s = setup();
+    await s.service.update(actor, id, { updatedAt: version, nombreCompleto: 'Nuevo' });
+    expect(s.rpc).toHaveBeenCalledWith(
+      'save_student_profile',
+      expect.objectContaining({
+        p_base_version: version,
+        p_profile: { nombre_completo: 'Nuevo' },
+        p_email_changed: false,
+        p_operation: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      }),
+    );
+    expect(s.getUserById).not.toHaveBeenCalled();
+    expect(s.updateUserById).not.toHaveBeenCalled();
+  });
+  it('rejects invalid cédula before Auth', async () => {
+    const s = setup();
+    await expect(
+      s.service.update(actor, id, {
+        updatedAt: version,
+        cedula: '1710034060',
+        correo: 'new@example.com',
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(s.from).not.toHaveBeenCalled();
+    expect(s.updateUserById).not.toHaveBeenCalled();
+  });
+  it('rejects duplicate cédula across all users before Auth', async () => {
+    const s = setup([row, { id: 'instructor-id' }]);
+    await expect(
+      s.service.update(actor, id, {
+        updatedAt: version,
+        cedula: '1710034065',
+        correo: 'new@example.com',
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(s.getUserById).not.toHaveBeenCalled();
+    expect(s.rpc).not.toHaveBeenCalled();
+  });
+  it('rejects stale or millisecond-truncated versions before Auth', async () => {
+    const s = setup();
+    await expect(
+      s.service.update(actor, id, {
+        updatedAt: new Date(version).toISOString(),
+        correo: 'new@example.com',
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(s.updateUserById).not.toHaveBeenCalled();
+  });
+  it('logs only identifiers and the field before changing Auth', async () => {
+    const s = setup();
+    await s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' });
+    const operation = s.rpc.mock.calls[0][1].p_operation;
+    expect(console.warn).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: 'student_auth_email_update_start',
+        student_id: id,
+        operation_id: operation,
+        campo: 'correo',
+      }),
+    );
+    expect((console.warn as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      s.updateUserById.mock.invocationCallOrder[0],
+    );
+  });
+  it('does not call SQL or compensate on explicit Auth rejection', async () => {
+    const s = setup();
+    s.updateUserById.mockResolvedValue({ data: {}, error: {} });
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(s.rpc).not.toHaveBeenCalled();
+    expect(s.updateUserById).toHaveBeenCalledTimes(1);
+  });
+  it.each(['23505', 'CD409'])('compensates exactly once on SQL rejection %s', async (code) => {
+    const s = setup();
+    s.rpc.mockResolvedValue({ data: null, error: { code } });
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(s.updateUserById).toHaveBeenCalledTimes(2);
+    expect(s.updateUserById).toHaveBeenLastCalledWith(id, {
+      email: 'old@example.com',
+      email_confirm: true,
+    });
+  });
+  it('does not compensate a lost RPC response if audit confirms commit', async () => {
+    const s = setup([row, { student_id: id, actor_id: actor, changed_fields: ['correo'] }]);
+    s.rpc.mockRejectedValue(new Error('timeout'));
+    expect(
+      await s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+    ).toMatchObject({ updatedAt: null, refreshRequired: true, changedFields: ['correo'] });
+    const op = s.rpc.mock.calls[0][1].p_operation;
+    expect(s.from.mock.results[1].value.eq).toHaveBeenCalledWith('operation_id', op);
+    expect(s.updateUserById).toHaveBeenCalledTimes(1);
+  });
+  it('compensates once when audit is absent after timeout', async () => {
+    const s = setup([row, null]);
+    s.rpc.mockResolvedValue({ data: null, error: { code: '57014' } });
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    expect(s.updateUserById).toHaveBeenCalledTimes(2);
+  });
+  it('leaves Auth untouched when confirmation itself is unavailable', async () => {
+    const s = setup([row]);
+    s.rpc.mockRejectedValue(new Error('timeout'));
+    s.from.mockReturnValueOnce(createSupabaseFromMock([ok(row)])()).mockImplementationOnce(() => {
+      throw new Error('network');
+    });
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    expect(s.updateUserById).toHaveBeenCalledTimes(1);
+  });
+  it('reports a failed compensation without retrying', async () => {
+    const s = setup();
+    s.rpc.mockResolvedValue({ data: null, error: { code: 'CD409' } });
+    s.updateUserById
+      .mockResolvedValueOnce(ok({ user: {} }))
+      .mockRejectedValueOnce(new Error('network'));
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    expect(s.updateUserById).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify((console.error as jest.Mock).mock.calls)).not.toMatch(
+      /old@example|new@example/,
+    );
+  });
+});
