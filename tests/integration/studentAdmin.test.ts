@@ -142,7 +142,7 @@ describe('admin estudiantes A', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
-  it('A1 exposes no editing or operation endpoints', async () => {
+  it('rejects invalid editing bodies and exposes no operation endpoints', async () => {
     expect(
       (
         await request(app)
@@ -150,12 +150,52 @@ describe('admin estudiantes A', () => {
           .set('Authorization', token())
           .send({ nombreCompleto: 'Otro' })
       ).status,
-    ).toBe(404);
+    ).toBe(400);
     expect(
       (await request(app).get(`${path}/operaciones/${id}`).set('Authorization', token())).status,
     ).toBe(404);
     expect(updateAuth).not.toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('PATCH requires authentication and admin', async () => {
+    const call = () =>
+      request(app).patch(`${path}/${id}`).send({ updatedAt: version, nombreCompleto: 'Nuevo' });
+    expect((await call()).status).toBe(401);
+    expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
+    from.mockReturnValue(createChain({ data: { debe_cambiar_password: false }, error: null }));
+    expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('PATCH preserves the version and rejects fields outside the profile', async () => {
+    from.mockReturnValue(createChain({ data: user, error: null }));
+    rpc.mockResolvedValue({
+      data: { operationId: id, updatedAt: version, changedFields: ['nombre_completo'] },
+      error: null,
+    });
+    expect(
+      (
+        await request(app)
+          .patch(`${path}/${id}`)
+          .set('Authorization', token())
+          .send({ updatedAt: version, nombreCompleto: 'Nuevo' })
+      ).status,
+    ).toBe(200);
+    expect(rpc).toHaveBeenCalledWith(
+      'save_student_profile',
+      expect.objectContaining({ p_base_version: version }),
+    );
+    rpc.mockClear();
+    expect(
+      (
+        await request(app)
+          .patch(`${path}/${id}`)
+          .set('Authorization', token())
+          .send({ updatedAt: version, activo: false })
+      ).status,
+    ).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
   });
 });
