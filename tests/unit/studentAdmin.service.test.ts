@@ -141,6 +141,29 @@ describe('StudentAdminService', () => {
     expect(s.from).toHaveBeenCalledTimes(2);
   });
 
+  it.each(['rejection', 'network'])('keeps the detail available on Auth %s', async (failure) => {
+    const s = setup([user, []]);
+    if (failure === 'network') s.getUserById.mockRejectedValue(new Error('unavailable'));
+    else s.getUserById.mockResolvedValue({ data: { user: null }, error: { message: 'unavailable' } });
+    const log = jest.spyOn(console, 'warn').mockImplementation();
+    try {
+      expect(await s.service.get(studentId)).toMatchObject({ correo: null, correoDisponible: false });
+      expect(log).toHaveBeenCalledWith(JSON.stringify({ event: 'student_email_unavailable', student_id: studentId }));
+    } finally { log.mockRestore(); }
+  });
+
+  it('hides schema details from the public error and logs the diagnostic code', async () => {
+    const s = setup();
+    s.rpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } });
+    const log = jest.spyOn(console, 'error').mockImplementation();
+    try {
+      await expect(s.service.list(actorId, { page: 1, pageSize: 20 })).rejects.toMatchObject({
+        statusCode: 503, message: 'No se pudo consultar estudiantes. Inténtalo nuevamente',
+      });
+      expect(log).toHaveBeenCalledWith(expect.stringContaining('PGRST202'));
+    } finally { log.mockRestore(); }
+  });
+
   it('returns 404 before Auth if the target is absent or not a student', async () => {
     const s = setup([null]);
     await expect(s.service.get(studentId)).rejects.toMatchObject({ statusCode: 404 });

@@ -20,7 +20,8 @@ export interface StudentDetail {
   activo: boolean;
   status: UserRow['status'];
   mustChangePassword: boolean;
-  correo: string;
+  correo: string | null;
+  correoDisponible: boolean;
   fechaNacimiento: string | null;
   tipoSangre: string | null;
   genero: string | null;
@@ -39,13 +40,11 @@ export interface StudentDetail {
 }
 
 function databaseError(error: Pick<PostgrestError, 'code'>): AppError {
-  if (error.code === '23505') return new AppError('La cédula ya está registrada', 409);
   if (error.code === '42501') return new AppError('Se requiere administrador', 403);
-  if (error.code === 'CD404') return new AppError('Alumno no encontrado', 404);
-  if (error.code === '22023') return new AppError('Datos del perfil inválidos', 400);
-  if (['PGRST202', '42P01', '42883'].includes(error.code))
-    return new AppError('La entrega A requiere la migración de estudiantes aprobada', 503);
-  return new AppError('No se pudo confirmar la operación de estudiantes', 503);
+  if (error.code === '22023') return new AppError('Filtros de estudiantes inválidos', 400);
+  console.error(JSON.stringify({ event: 'student_read_failed', code: error.code,
+    schemaUnavailable: ['PGRST202', '42P01', '42883'].includes(error.code) }));
+  return new AppError('No se pudo consultar estudiantes. Inténtalo nuevamente', 503);
 }
 
 export class StudentAdminService {
@@ -80,13 +79,14 @@ export class StudentAdminService {
     return data;
   }
 
-  private async email(id: string): Promise<string> {
+  private async email(id: string): Promise<string | null> {
     try {
       const { data, error } = await this.db.auth.admin.getUserById(id);
       if (error || !data.user.email) throw new Error('Unavailable');
       return data.user.email;
     } catch {
-      throw new AppError('No se pudo consultar la identidad de Auth', 503);
+      console.warn(JSON.stringify({ event: 'student_email_unavailable', student_id: id }));
+      return null;
     }
   }
 
@@ -128,6 +128,7 @@ export class StudentAdminService {
       status: user.status,
       mustChangePassword: user.debe_cambiar_password,
       correo,
+      correoDisponible: correo !== null,
       fechaNacimiento: user.fecha_nacimiento,
       tipoSangre: user.tipo_sangre,
       genero: user.genero,

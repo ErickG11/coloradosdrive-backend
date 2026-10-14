@@ -44,3 +44,9 @@ impedirán una reversión insegura.
 Chore cron: 57ff189. La rama de A1 lo incorpora como prerrequisito, main intacto.
 El commit original 3a5b05e queda preservado en archive/estudiantes-a-original.
 La edición A2 está propuesta por separado en estudiantes-a2-propuesta.md.
+# Revisión A1
+
+Si Auth no está disponible, la ficha conserva los datos académicos y devuelve
+`correo: null, correoDisponible: false`. Los errores de esquema devuelven un
+503 genérico; el diagnóstico queda en el log sin valores personales.
+
