@@ -15,6 +15,7 @@ import { practiceSlotGenerationRouter } from './practiceSlotGeneration.routes';
 import { publicCourseRouter } from './publicCourse.routes';
 import { solicitudAdminRouter, solicitudRouter } from './solicitud.routes';
 import { userRouter } from './user.routes';
+import { studentAdminRouter } from './studentAdmin.routes';
 
 export const apiRouter = Router();
 
@@ -30,6 +31,7 @@ apiRouter.use('/questions', questionRouter);
 apiRouter.use('/attempts', attemptRouter);
 apiRouter.use('/practice-slots', practiceSlotRouter);
 apiRouter.use('/users', userRouter);
+apiRouter.use('/admin/estudiantes', studentAdminRouter);
 apiRouter.use('/admin/instructores', instructorAdminRouter);
 apiRouter.use('/instructores', instructorSelfRouter);
 apiRouter.use('/solicitudes', solicitudRouter);
