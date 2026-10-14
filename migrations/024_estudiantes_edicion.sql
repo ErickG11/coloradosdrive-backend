@@ -1,4 +1,4 @@
--- Propuesta A2: pendiente de aprobación; no aplicar al proyecto real.
+-- A2: contenido aprobado; aplicación pendiente del dry-run y respaldo del responsable.
 begin;
 set local lock_timeout = '5s';
 
@@ -20,8 +20,6 @@ comment on table public.student_profile_audit is
 alter table public.student_profile_audit enable row level security;
 revoke all on public.student_profile_audit from public, anon, authenticated, service_role;
 grant select, insert on public.student_profile_audit to service_role;
-create index student_profile_audit_student_date_idx
-  on public.student_profile_audit(student_id, created_at desc, operation_id);
 
 create function public.save_student_profile(
   p_actor uuid, p_student uuid, p_operation uuid, p_base_version timestamptz,

@@ -102,46 +102,85 @@ describe('StudentProfileService A2', () => {
     expect(s.rpc).not.toHaveBeenCalled();
     expect(s.updateUserById).toHaveBeenCalledTimes(1);
   });
-  it.each(['23505', 'CD409'])('compensates exactly once on SQL rejection %s', async (code) => {
+  it.each([
+    ['23505', 'users_cedula_unique', 409, 'La cédula ya está registrada'],
+    [
+      '23505',
+      'student_profile_audit_pkey',
+      409,
+      'Conflicto de identificador de guardado. Revisa el alumno',
+    ],
+    ['23505', 'unexpected_unique', 503, 'No se pudo confirmar el guardado del alumno'],
+    ['CD409', '', 409, 'El alumno cambió. Recarga la ficha'],
+    ['22023', '', 400, 'Datos del perfil inválidos'],
+    ['CD404', '', 404, 'Alumno no encontrado'],
+  ])(
+    'compensates once on definitive rejection %s / %s',
+    async (code, constraint, statusCode, message) => {
+      const s = setup();
+      s.rpc.mockResolvedValue({
+        data: null,
+        error: {
+          code,
+          message: `duplicate key value violates unique constraint "${constraint}"`,
+          details: 'private@example.com',
+        },
+      });
+      await expect(
+        s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+      ).rejects.toMatchObject({ statusCode, message });
+      expect(s.updateUserById).toHaveBeenCalledTimes(2);
+      expect(s.updateUserById).toHaveBeenLastCalledWith(id, {
+        email: 'old@example.com',
+        email_confirm: true,
+      });
+      expect(s.from).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify((console.error as jest.Mock).mock.calls)).not.toMatch(
+        /private@example|old@example|new@example/,
+      );
+    },
+  );
+  it.each(['57014', '08006', 'PGRST000', '', '42501', '42P01', '22007', '22001'])(
+    'requires manual review without compensation or audit lookup on %s',
+    async (code) => {
+      const s = setup();
+      s.rpc.mockResolvedValue({ data: null, error: { code } });
+      await expect(
+        s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+      ).rejects.toMatchObject({
+        statusCode: 503,
+        message: expect.stringContaining('Revisar manualmente'),
+      });
+      expect(s.updateUserById).toHaveBeenCalledTimes(1);
+      expect(s.from).toHaveBeenCalledTimes(1);
+      expect(console.error).toHaveBeenCalledWith(
+        JSON.stringify({
+          event: 'student_profile_manual_review_required',
+          student_id: id,
+          operation_id: s.rpc.mock.calls[0][1].p_operation,
+          ...(code ? { code } : {}),
+        }),
+      );
+    },
+  );
+  it('does not compensate or consult audit after an RPC network exception', async () => {
     const s = setup();
-    s.rpc.mockResolvedValue({ data: null, error: { code } });
-    await expect(
-      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
-    ).rejects.toMatchObject({ statusCode: 409 });
-    expect(s.updateUserById).toHaveBeenCalledTimes(2);
-    expect(s.updateUserById).toHaveBeenLastCalledWith(id, {
-      email: 'old@example.com',
-      email_confirm: true,
-    });
-  });
-  it('does not compensate a lost RPC response if audit confirms commit', async () => {
-    const s = setup([row, { student_id: id, actor_id: actor, changed_fields: ['correo'] }]);
     s.rpc.mockRejectedValue(new Error('timeout'));
-    expect(
-      await s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
-    ).toMatchObject({ updatedAt: null, refreshRequired: true, changedFields: ['correo'] });
-    const op = s.rpc.mock.calls[0][1].p_operation;
-    expect(s.from.mock.results[1].value.eq).toHaveBeenCalledWith('operation_id', op);
-    expect(s.updateUserById).toHaveBeenCalledTimes(1);
-  });
-  it('compensates once when audit is absent after timeout', async () => {
-    const s = setup([row, null]);
-    s.rpc.mockResolvedValue({ data: null, error: { code: '57014' } });
     await expect(
       s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
-    ).rejects.toMatchObject({ statusCode: 503 });
-    expect(s.updateUserById).toHaveBeenCalledTimes(2);
-  });
-  it('leaves Auth untouched when confirmation itself is unavailable', async () => {
-    const s = setup([row]);
-    s.rpc.mockRejectedValue(new Error('timeout'));
-    s.from.mockReturnValueOnce(createSupabaseFromMock([ok(row)])()).mockImplementationOnce(() => {
-      throw new Error('network');
+    ).rejects.toMatchObject({
+      statusCode: 503,
+      message: expect.stringContaining('Revisar manualmente'),
     });
-    await expect(
-      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
-    ).rejects.toMatchObject({ statusCode: 503 });
     expect(s.updateUserById).toHaveBeenCalledTimes(1);
+    expect(s.from).toHaveBeenCalledTimes(1);
+    expect(console.error).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: 'student_profile_manual_review_required',
+        student_id: id,
+        operation_id: s.rpc.mock.calls[0][1].p_operation,
+      }),
+    );
   });
   it('reports a failed compensation without retrying', async () => {
     const s = setup();

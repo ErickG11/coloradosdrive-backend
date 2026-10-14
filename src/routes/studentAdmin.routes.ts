@@ -85,7 +85,10 @@ studentAdminRouter.patch(
     }),
     body('updatedAt')
       .isString()
-      .matches(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/),
+      .bail()
+      .matches(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/)
+      .bail()
+      .isISO8601({ strict: true, strictSeparator: true }),
     body('correo').optional().isString().isEmail().isLength({ max: 254 }),
     body('cedula')
       .optional()
@@ -95,14 +98,25 @@ studentAdminRouter.patch(
     body('fechaNacimiento')
       .optional({ nullable: true })
       .isString()
+      .bail()
       .matches(/^\d{4}-\d{2}-\d{2}$/)
-      .isISO8601({ strict: true }),
-    ...['telefono', 'tipoSangre', 'genero', 'ciudadania', 'direccion'].map((field) =>
+      .bail()
+      .isISO8601({ strict: true })
+      .custom((value: string) => !value.startsWith('0000-')),
+    ...Object.entries({
+      telefono: 20,
+      direccion: 500,
+      tipoSangre: 500,
+      genero: 500,
+      ciudadania: 500,
+    }).map(([field, max]) =>
       body(field)
         .optional({ nullable: true })
         .isString()
+        .bail()
         .trim()
-        .isLength({ max: field === 'telefono' ? 20 : 500 }),
+        .isLength({ max })
+          .withMessage(`${field} no puede superar ${String(max)} caracteres`),
     ),
   ],
   validate,

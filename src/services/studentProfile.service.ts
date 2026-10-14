@@ -19,17 +19,18 @@ export type StudentProfilePatch = { updatedAt: string; correo?: string } & Parti
 >;
 export interface StudentProfileResult extends Record<string, unknown> {
   operationId: string;
-  updatedAt: string | null;
+  updatedAt: string;
   changedFields: string[];
 }
 
-function saveError(code: string): AppError {
-  if (code === '23505') return new AppError('La cédula ya está registrada', 409);
+function saveError(code: string, constraint?: string): AppError {
+  if (code === '23505' && constraint === 'users_cedula_unique')
+    return new AppError('La cédula ya está registrada', 409);
+  if (code === '23505' && constraint === 'student_profile_audit_pkey')
+    return new AppError('Conflicto de identificador de guardado. Revisa el alumno', 409);
   if (code === 'CD409') return new AppError('El alumno cambió. Recarga la ficha', 409);
   if (code === 'CD404') return new AppError('Alumno no encontrado', 404);
-  if (code === '42501') return new AppError('Se requiere administrador', 403);
-  if (['22023', '22007', '22008', '23514', '22001'].includes(code))
-    return new AppError('Datos del perfil inválidos', 400);
+  if (code === '22023') return new AppError('Datos del perfil inválidos', 400);
   return new AppError('No se pudo confirmar el guardado del alumno', 503);
 }
 
@@ -118,7 +119,7 @@ export class StudentProfileService {
       }
     }
     let failureCode = '';
-    let uncertain = false;
+    let constraint: string | undefined;
     try {
       const result = await this.db.rpc('save_student_profile', {
         p_actor: actor,
@@ -130,40 +131,25 @@ export class StudentProfileService {
       });
       if (!result.error) return result.data;
       failureCode = result.error.code;
-      uncertain =
-        !failureCode ||
-        !/^[0-9A-Z]{5}$/.test(failureCode) ||
-        failureCode.startsWith('PGRST') ||
-        ['57014', '08000', '08003', '08006', '08001', '08004', '08007', '08P01'].includes(
-          failureCode,
-        );
+      // PostgREST exposes the constraint in message, not as a separate field.
+      // Extract its name only; never log message/details, which can contain values.
+      if (failureCode === '23505')
+        constraint = /unique constraint "([^"]+)"/.exec(result.error.message)?.[1];
     } catch {
-      uncertain = true;
+      log('student_profile_manual_review_required');
+      throw new AppError(
+        'No se pudo confirmar el guardado. Revisar manualmente antes de editar',
+        503,
+      );
     }
     log('student_profile_save_failed', failureCode);
-    if (uncertain) {
-      try {
-        const confirmation = await this.db
-          .from('student_profile_audit')
-          .select('operation_id,student_id,actor_id,changed_fields')
-          .eq('operation_id', operationId)
-          .maybeSingle();
-        if (confirmation.error) throw new Error('unavailable');
-        if (confirmation.data) {
-          if (confirmation.data.student_id !== studentId || confirmation.data.actor_id !== actor)
-            throw new Error('invalid confirmation');
-          log('student_profile_commit_confirmed');
-          return {
-            operationId,
-            changedFields: confirmation.data.changed_fields,
-            updatedAt: null,
-            refreshRequired: true,
-          };
-        }
-      } catch {
-        log('student_profile_confirmation_unavailable');
-        throw new AppError('Guardado incierto. Revisa el alumno antes de volver a editar', 503);
-      }
+    const definitive = ['23505', 'CD409', '22023', 'CD404'].includes(failureCode);
+    if (!definitive) {
+      log('student_profile_manual_review_required', failureCode);
+      throw new AppError(
+        'No se pudo confirmar el guardado. Revisar manualmente antes de editar',
+        503,
+      );
     }
     if (emailChanged && oldEmail) {
       try {
@@ -178,6 +164,6 @@ export class StudentProfileService {
         throw new AppError('No se pudo revertir el correo. Requiere revisión administrativa', 503);
       }
     }
-    throw saveError(failureCode);
+    throw saveError(failureCode, constraint);
   }
 }

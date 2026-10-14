@@ -35,6 +35,11 @@ try {
     null,
   );
   await db.exec(sql);
+  assert.equal(
+    (await one("select to_regclass('public.student_profile_audit_student_date_idx') as value"))
+      .value,
+    null,
+  );
   for (const [n, cedula, role] of [
     [1, '0000000001', 'admin'],
     [2, '1710034065', 'estudiante'],
@@ -93,7 +98,7 @@ try {
   // Unique constraint is the final concurrent cédula safeguard; failure rolls back both writes.
   await assert.rejects(
     save(13, { nombre_completo: 'No guardar', cedula: '0000000003' }, false, current),
-    /duplicate key/,
+    /users_cedula_unique/,
   );
   assert.equal(
     (await one('select nombre_completo from users where id=$1', [id(2)])).nombre_completo,
@@ -103,7 +108,7 @@ try {
   // Audit PK failure AFTER the UPDATE must also roll back the profile.
   await assert.rejects(
     save(10, { nombre_completo: 'No guardar' }, false, current),
-    /duplicate key/,
+    /student_profile_audit_pkey/,
   );
   assert.equal(
     (await one('select nombre_completo from users where id=$1', [id(2)])).nombre_completo,
@@ -117,8 +122,36 @@ try {
     await assert.rejects(save(20, {}), /permission denied/);
     await assert.rejects(db.query('select * from student_profile_audit'), /permission denied/);
   }
+  await db.exec('reset role');
+  const rollback = await readFile(
+    new URL('../../docs/operations/estudiantes-a2-rollback.sql', import.meta.url),
+    'utf8',
+  );
+  await db.exec(rollback);
+  assert.equal(
+    (
+      await one(
+        "select to_regprocedure('public.save_student_profile(uuid,uuid,uuid,timestamptz,jsonb,boolean)') as value",
+      )
+    ).value,
+    null,
+  );
+  await db.exec('set role service_role');
+  assert.equal((await one('select count(*)::int as n from student_profile_audit')).n, 2);
+  assert.equal(
+    (await one('select nombre_completo from users where id=$1', [id(2)])).nombre_completo,
+    'Nuevo',
+  );
+  await assert.rejects(
+    db.query(
+      `insert into student_profile_audit(operation_id,actor_id,student_id,changed_fields)
+    values($1,$2,$3,array['correo'])`,
+      [id(50), id(1), id(2)],
+    ),
+    /permission denied/,
+  );
   console.log(
-    'PASS A2: migration begin/rollback, atomic profile/audit, exact microseconds, no-op, uniqueness, ACL/RLS',
+    'PASS A2: migration begin/rollback, atomic profile/audit, exact microseconds, no-op, named constraints, ACL/RLS, operational rollback preserves audit',
   );
   console.log((await one('select version() as version')).version);
 } finally {
