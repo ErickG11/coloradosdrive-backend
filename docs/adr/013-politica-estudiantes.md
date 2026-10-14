@@ -25,9 +25,10 @@ antes de Auth; constraint única conserva protección concurrente. Correo solo
 en Auth, actualizado primero, una compensación ante rechazo SQL confirmado.
 Sin operaciones persistentes, tokens, cifrado ni clave de recuperación. Los
 crashes requieren revisión manual. UUID generado en backend y log previo a Auth
-sin valores; ante timeout RPC, consultar auditoría por UUID: presente, no revertir;
-ausente, compensar una vez; consulta fallida, revisión manual sin compensación.
-La ausencia aún puede adelantarse a un commit en curso; no es un fence transaccional.
+sin valores. Compensar una vez solo ante rechazos definitivos RPC: 23505, CD409,
+22023 y CD404. Distinguir 23505 de cédula y de auditoría por nombre de restricción.
+Timeout/red u otros errores: 503 para revisar manualmente, sin compensar ni
+consultar auditoría para decidir; una respuesta perdida no demuestra rollback.
 Detalle y límites concurrentes: operations/estudiantes-a2-propuesta.md.
 
 Mantener bloqueo optimista en A2: trigger real habilitado en cada UPDATE y

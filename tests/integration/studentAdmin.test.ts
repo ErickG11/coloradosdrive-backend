@@ -198,4 +198,52 @@ describe('admin estudiantes A', () => {
     ).toBe(400);
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['fechaNacimiento', '2026-02-30'],
+    ['fechaNacimiento', '2026-2-01'],
+    ['fechaNacimiento', '0000-01-01'],
+    ['fechaNacimiento', '2026-01-01T00:00:00Z'],
+    ['updatedAt', '2026-02-30T10:00:00.123456+00:00'],
+    ['updatedAt', 'not-a-date'],
+    ['telefono', 'x'.repeat(21)],
+    ['direccion', 'x'.repeat(501)],
+    ['tipoSangre', 'x'.repeat(501)],
+    ['genero', 'x'.repeat(501)],
+    ['ciudadania', 'x'.repeat(501)],
+    ['telefono', 123],
+    ['direccion', {}],
+  ])('PATCH rejects invalid %s with 400 before Auth or SQL', async (field, value) => {
+    const response = await request(app)
+      .patch(`${path}/${id}`)
+      .set('Authorization', token())
+      .send({ updatedAt: version, correo: 'new@example.com', [field]: value });
+    expect(response.status).toBe(400);
+    expect(from).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+    expect(getAuth).not.toHaveBeenCalled();
+    expect(updateAuth).not.toHaveBeenCalled();
+  });
+
+  it('PATCH accepts a leap date and the exact field length limits', async () => {
+    from.mockReturnValue(createChain({ data: user, error: null }));
+    rpc.mockResolvedValue({
+      data: { operationId: id, updatedAt: version, changedFields: [] },
+      error: null,
+    });
+    const response = await request(app)
+      .patch(`${path}/${id}`)
+      .set('Authorization', token())
+      .send({
+        updatedAt: version,
+        fechaNacimiento: '2000-02-29',
+        telefono: 'x'.repeat(20),
+        direccion: 'x'.repeat(500),
+        tipoSangre: 'x'.repeat(500),
+        genero: 'x'.repeat(500),
+        ciudadania: 'x'.repeat(500),
+      });
+    expect(response.status).toBe(200);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
 });
