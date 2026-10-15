@@ -70,6 +70,15 @@ avisos personales a perfiles inactivos/ausentes. Scheduler no envía correo a
 destinatarios inactivos. Broadcast de cohorte solo lleva {}, manteniendo el evento
 slot-released que el frontend usa para volver a consultar la API.
 
+`release_notified_at=v_now` en set_student_active no suprime avisos del scheduler:
+el scheduler actual (019 y PracticeSlotSchedulerService) no lee ese campo.
+Se conserva la marca usada al cancelar/liberar, pero no acredita un envío.
+El evento de cohorte `slot-released` lo emite PracticeSlotActionService al cancelar;
+B no llama a ese servicio ni emite ese evento al desactivar. La franja liberada
+sí aparece en la siguiente consulta. Al vencer, el scheduler puede cerrarla a
+sin_practica y avisar al instructor; no avisa al antiguo alumno (student_id=NULL).
+No se cambia ese comportamiento ni se añade una notificación en este ajuste.
+
 Límite aceptado: canales ya abiertos pueden recibir señales vacías hasta que expire
 el JWT; sin datos expuestos. No hay rotación de canales ni cambios de frontend.
 Las políticas se recalculan al conectar/renovar token, no en cada mensaje:
@@ -103,10 +112,35 @@ npm.cmd run test:student-access-db
 Antes de aplicar: aprobación explícita sobre SQL final, respaldo restaurable
 confirmado, preflight de solo conteos (estudiantes-b-preflight.sql) y ventana fuera
 de horario para el lock de practice_slots. Ninguna de esas acciones se ejecuta
-contra Supabase en esta entrega. Después, verificar ACL/RLS/advisors y despliegue
-backend antes de UI. No revertir eliminando auditoría o reactivando automáticamente
+contra Supabase en esta entrega. No revertir eliminando auditoría o reactivando automáticamente
 alumnos: una reversión operativa debe conservar historial y recuperación y evaluar
 reservas que ya fueron tomadas por otros alumnos.
+
+Orden de despliegue: aplicar SQL → verificar ACL/RLS/advisors → desplegar backend
+→ frontend después. El dry-run real y el respaldo confirmado preceden la aplicación.
+La propiedad de realtime.messages (supabase_realtime_admin) y el permiso efectivo
+para alterar sus políticas solo se comprueban en el dry-run real; la base aislada
+no reproduce esa propiedad ni los privilegios especiales de Supabase. No cambiar
+el propietario para sortear errores de permisos.
+
+Riesgo bajo de deadlock: una asignación directa puede bloquear primero la franja
+y luego el alumno (trigger), mientras la desactivación bloquea alumno y luego
+franjas. PostgreSQL aborta una transacción (40P01); revisar el resultado y reintentar
+la misma acción. No se agrega infraestructura ni se garantiza ausencia de esa carrera.
+
+Rollback manual: estudiantes-b-rollback.sql restaura función original pública,
+trigger de 020, políticas de 011 y elimina la exclusión por alumno y las RPC de B.
+Usa IF EXISTS o comprobación de firma para poder repetirse; sin CASCADE. Conserva
+student_access_audit y student_practice_recovery, sus filas/RLS/grants, activo y bans.
+Coordinar retirada de endpoints B y pausa de peticiones/scheduler; al restaurar
+las políticas anteriores se retira su comprobación de activo. No usar como forma
+de reactivar alumnos ni perder el bloqueo HTTP de cuentas inactivas sin evaluación.
+
+Verificación local del ajuste: ensayo BEGIN/ROLLBACK del rollback y dos ejecuciones
+consecutivas correctas. Se comparan función original y políticas, se verifica ACL
+de reservas, conservación de ambas tablas/filas/RLS, eliminación de la exclusión
+del alumno y conservación de la del instructor. También se verifica que la marca
+release_notified_at no impide el cierre del scheduler. Todo en PGlite, sin red.
 
 ## Archivos tocados
 
@@ -153,3 +187,4 @@ Documentación:
 - docs/adr/013-politica-estudiantes.md
 - docs/operations/estudiantes-b.md
 - docs/operations/estudiantes-b-preflight.sql
+- docs/operations/estudiantes-b-rollback.sql

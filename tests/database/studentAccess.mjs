@@ -35,6 +35,18 @@ try {
   ]) {
     await db.exec((await file(name)).replace('create extension if not exists "pgcrypto";', ''));
   }
+  const originalAction = (
+    await one(
+      "select pg_get_functiondef('public.act_on_practice_slot(uuid,uuid,text)'::regprocedure) as definition",
+    )
+  ).definition;
+  const policies = async () =>
+    (
+      await db.query(
+        "select policyname,cmd,roles,qual,with_check from pg_policies where schemaname='realtime' and tablename='messages' order by policyname",
+      )
+    ).rows;
+  const originalPolicies = await policies();
   const sql = await file('025_estudiantes_acceso.sql');
   await db.exec(sql.replace(/commit;\s*$/, 'rollback;'));
   assert.equal(
@@ -96,6 +108,13 @@ try {
   assert.deepEqual(
     await one('select student_id,status from practice_slots where id=$1', [id(30)]),
     { student_id: null, status: 'liberado' },
+  );
+  assert.deepEqual(
+    await one(
+      "select release_notified_at is not null as marked, public.practice_slot_transition_due(s,'close',s.scheduled_at) as closes from practice_slots s where id=$1",
+      [id(30)],
+    ),
+    { marked: true, closes: true },
   );
   assert.equal(
     (await one('select attended from practice_slots where id=$1', [id(34)])).attended,
@@ -171,11 +190,112 @@ try {
     ).rows.map((r) => r.relrowsecurity),
     [true, true],
   );
+  // Rollback operativo solo en esta base ficticia: ensayo y repetición sin pérdida.
+  const rollback = await readFile(
+    new URL('../../docs/operations/estudiantes-b-rollback.sql', import.meta.url),
+    'utf8',
+  );
+  const counts = async () =>
+    one(
+      'select (select count(*)::int from student_access_audit) as audit, (select count(*)::int from student_practice_recovery) as recovery',
+    );
+  const preserved = await counts();
+  await db.exec(rollback.replace(/commit;\s*$/, 'rollback;'));
+  assert.notEqual(
+    (await one("select to_regprocedure('private.book_practice_slot(uuid,uuid,text)') as value"))
+      .value,
+    null,
+  );
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await db.exec(rollback);
+    assert.deepEqual(await counts(), preserved);
+    assert.equal(
+      (
+        await one(
+          "select pg_get_functiondef('public.act_on_practice_slot(uuid,uuid,text)'::regprocedure) as definition",
+        )
+      ).definition,
+      originalAction,
+    );
+    assert.deepEqual(await policies(), originalPolicies);
+    assert.deepEqual(
+      await one(
+        "select has_function_privilege('anon','public.act_on_practice_slot(uuid,uuid,text)','execute') as anon, has_function_privilege('authenticated','public.act_on_practice_slot(uuid,uuid,text)','execute') as authenticated, has_function_privilege('service_role','public.act_on_practice_slot(uuid,uuid,text)','execute') as service",
+      ),
+      { anon: false, authenticated: false, service: true },
+    );
+    assert.equal(
+      (await one("select to_regprocedure('private.book_practice_slot(uuid,uuid,text)') as value"))
+        .value,
+      null,
+    );
+    for (const signature of [
+      'public.set_student_active(uuid,uuid,boolean)',
+      'public.restore_student_practice(uuid,uuid,uuid)',
+      'private.student_realtime_account_active()',
+    ]) {
+      assert.equal((await one('select to_regprocedure($1) as value', [signature])).value, null);
+    }
+    assert.equal(
+      (
+        await one(
+          "select count(*)::int as n from pg_constraint where conrelid='public.practice_slots'::regclass and conname='practice_slots_student_interval_excl'",
+        )
+      ).n,
+      0,
+    );
+    assert.equal(
+      (
+        await one(
+          "select count(*)::int as n from pg_constraint where conrelid='public.practice_slots'::regclass and conname='practice_slots_instructor_interval_excl'",
+        )
+      ).n,
+      1,
+    );
+    assert.equal(
+      (
+        await one(
+          "select bool_and(relrowsecurity) as secured from pg_class where oid in ('student_access_audit'::regclass,'student_practice_recovery'::regclass)",
+        )
+      ).secured,
+      true,
+    );
+    assert.equal((await one('select activo from users where id=$1', [id(2)])).activo, false);
+    await db.exec('set role authenticated');
+    await assert.rejects(db.query('select * from student_access_audit'), /permission denied/);
+    await assert.rejects(db.query('select * from student_practice_recovery'), /permission denied/);
+    assert.equal(
+      (await one('select private.can_subscribe_cohort_channel($1) as allowed', [topic])).allowed,
+      true,
+    );
+    await db.exec('reset role');
+  }
+  // Función/trigger originales permiten alumno inactivo, pero conservan control
+  // de rol y de instructor activo. No conservar los cambios de esta comprobación.
+  await db.exec('begin;set local role service_role');
+  assert.equal(
+    (await db.query("select * from act_on_practice_slot($1,$2,'claim')", [id(35), id(2)])).rows
+      .length,
+    1,
+  );
+  await db.exec('rollback');
+  await db.exec('begin;set local role service_role');
+  await assert.rejects(
+    db.query("select * from act_on_practice_slot($1,$2,'claim')", [id(33), id(2)]),
+    /inactivo/,
+  );
+  await db.exec('rollback');
+  await db.exec('begin;set local role service_role');
+  await assert.rejects(
+    db.query('update practice_slots set student_id=$1 where id=$2', [id(1), id(35)]),
+    /rol = estudiante/,
+  );
+  await db.exec('rollback');
   console.log(
     JSON.stringify({
       result: 'PASS',
       checks:
-        '025 BEGIN/ROLLBACK; release/history/audit; inactive booking; restoration/idempotence/conflicts; student exclusion; RLS/Realtime',
+        '025 BEGIN/ROLLBACK; release/history/audit; inactive booking; restoration/idempotence/conflicts; student exclusion; RLS/Realtime; rollback dry-run/repeated/preservation/original booking/trigger/policies',
       engine: (await one('select version() as version')).version,
       network: false,
     }),
