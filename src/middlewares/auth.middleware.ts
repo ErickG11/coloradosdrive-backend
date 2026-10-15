@@ -6,11 +6,8 @@ import { supabaseAdmin } from '../config/supabase';
 import { isRole, type AuthenticatedUser } from '../models/user.model';
 import { AppError } from '../utils/AppError';
 
-// Única ruta que un estudiante con debe_cambiar_password=true puede seguir
-// usando; cualquier otra ruta de estudiante queda bloqueada por
-// assertPasswordNotPendingChange. Se compara contra baseUrl+path (no solo
-// path) para que el chequeo sea correcto sin importar bajo qué router se
-// esté ejecutando authenticate.
+// Las excepciones de contraseña NO eximen de comprobar perfil y activo.
+// Se compara baseUrl+path para cubrir los routers montados.
 const CHANGE_PASSWORD_PATH = '/estudiantes/cambiar-password';
 
 // Solo aplica a rol='estudiante' (ver toAuthenticatedUser): admin/instructor
@@ -21,20 +18,22 @@ async function assertPasswordNotPendingChange(req: Request, studentId: string): 
   const isChangePasswordRequest =
     (req.method === 'POST' && `${req.baseUrl}${req.path}` === CHANGE_PASSWORD_PATH) ||
     (req.method === 'GET' && `${req.baseUrl}${req.path}` === '/estudiantes/account-status');
-  if (isChangePasswordRequest) {
-    return;
-  }
-
   const { data, error } = await supabaseAdmin
     .from('users')
-    .select('debe_cambiar_password')
+    .select('activo,debe_cambiar_password')
     .eq('id', studentId)
+    .eq('rol', 'estudiante')
     .maybeSingle();
 
   if (error) {
-    throw new AppError('No se pudo verificar el estado de la cuenta', 500);
+    throw new AppError('No se pudo verificar el estado de la cuenta', 503);
   }
-  if (data?.debe_cambiar_password) {
+  if (!data?.activo) {
+    throw new AppError('La cuenta del alumno está desactivada o no existe', 403, {
+      code: 'ACCOUNT_INACTIVE',
+    });
+  }
+  if (!isChangePasswordRequest && data.debe_cambiar_password) {
     throw new AppError('Debes cambiar tu contraseña temporal antes de continuar', 403);
   }
 }

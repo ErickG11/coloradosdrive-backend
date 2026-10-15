@@ -32,6 +32,11 @@ describe('integridad de escrituras de práctica', () => {
     expect(() => throwPracticeWriteError(new PostgrestError({ code: '23505', message: 'practice_slots_instructor_no_overlap', details: '', hint: '' })))
       .toThrow('se solapa');
   });
+  it('distingue el solapamiento del alumno sin exponer identificadores SQL', () => {
+    const error = new PostgrestError({ code: '23P01', message: 'practice_slots_student_interval_excl', details: 'private', hint: '' });
+    expect(() => throwPracticeWriteError(error)).toThrow('El alumno ya tiene una práctica que se solapa');
+    try { throwPracticeWriteError(error); } catch (actual) { expect(actual).toMatchObject({ statusCode: 409 }); }
+  });
   it('traduce la restricción de duración sin divulgar detalles SQL', () => {
     expect(() => throwPracticeWriteError(new PostgrestError({ code: '23514', message: 'practice_slots_duration_60', details: '', hint: '' })))
       .toThrow('exactamente 60');

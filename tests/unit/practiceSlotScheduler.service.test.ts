@@ -21,7 +21,7 @@ function harness(phase?: Transition, result: ChainResult = { data: slot, error: 
     }
     return createChain(result);
   });
-  const from = jest.fn().mockReturnValue(createChain({ data: { nombre_completo: 'Usuario de prueba' }, error: null }));
+  const from = jest.fn().mockReturnValue(createChain({ data: { nombre_completo: 'Usuario de prueba', activo: true }, error: null }));
   const getUserById = jest.fn().mockResolvedValue({ data: { user: { email: 'fixture@example.invalid' } }, error: null });
   const email = { sendPracticeConfirmationRequestEmail: jest.fn().mockResolvedValue(undefined),
     sendNoPracticeEmail: jest.fn().mockResolvedValue(undefined) };
@@ -34,6 +34,15 @@ function harness(phase?: Transition, result: ChainResult = { data: slot, error: 
 }
 
 describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
+  it('no envía correo de recordatorio a un alumno inactivo', async () => {
+    const log = jest.spyOn(console, 'error').mockImplementation();
+    try {
+      const h = harness('remind');
+      h.from.mockReturnValue(createChain({ data: { activo: false }, error: null }));
+      await h.service.runOnce();
+      expect(h.email.sendPracticeConfirmationRequestEmail).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
   it('consulta las tres fases en PostgreSQL sin escribir ni notificar si no hay candidatos', async () => {
     const { service, rpc, from, email, realtime } = harness();
     await service.runOnce();

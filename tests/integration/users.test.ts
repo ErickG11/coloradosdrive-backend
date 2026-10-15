@@ -42,7 +42,7 @@ describe('GET /users', () => {
       async (callerRole) => {
         if (callerRole === 'estudiante') {
           mockedFrom.mockReturnValueOnce(
-            createChain({ data: { debe_cambiar_password: false }, error: null }),
+            createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
           );
         }
         const res = await request(app)
