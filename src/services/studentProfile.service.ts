@@ -25,13 +25,21 @@ export interface StudentProfileResult extends Record<string, unknown> {
 
 function saveError(code: string, constraint?: string): AppError {
   if (code === '23505' && constraint === 'users_cedula_unique')
-    return new AppError('La cédula ya está registrada', 409);
+    return new AppError('La cédula ya está registrada', 409, {
+      code: 'CEDULA_DUPLICATE',
+      field: 'cedula',
+    });
   if (code === '23505' && constraint === 'student_profile_audit_pkey')
-    return new AppError('Conflicto de identificador de guardado. Revisa el alumno', 409);
-  if (code === 'CD409') return new AppError('El alumno cambió. Recarga la ficha', 409);
-  if (code === 'CD404') return new AppError('Alumno no encontrado', 404);
-  if (code === '22023') return new AppError('Datos del perfil inválidos', 400);
-  return new AppError('No se pudo confirmar el guardado del alumno', 503);
+    return new AppError('Conflicto de identificador de guardado. Revisa el alumno', 409, {
+      code: 'AUDIT_CONFLICT',
+    });
+  if (code === 'CD409')
+    return new AppError('El alumno cambió. Recarga la ficha', 409, { code: 'VERSION_CONFLICT' });
+  if (code === 'CD404')
+    return new AppError('Alumno no encontrado', 404, { code: 'STUDENT_NOT_FOUND' });
+  if (code === '22023')
+    return new AppError('Datos del perfil inválidos', 400, { code: 'INVALID_FIELD' });
+  return new AppError('No se pudo confirmar el guardado del alumno', 503, { code: 'UNCONFIRMED' });
 }
 
 export class StudentProfileService {
@@ -57,18 +65,22 @@ export class StudentProfileService {
       patch.cedula !== undefined &&
       (typeof patch.cedula !== 'string' || !isValidCedulaEcuatoriana(patch.cedula))
     )
-      throw new AppError('Cédula ecuatoriana inválida', 400);
+      throw new AppError('Cédula ecuatoriana inválida', 400, {
+        code: 'INVALID_FIELD',
+        field: 'cedula',
+      });
     const { data: student, error: readError } = await this.db
       .from('users')
       .select()
       .eq('id', studentId)
       .eq('rol', 'estudiante')
       .maybeSingle();
-    if (readError) throw new AppError('No se pudo consultar el alumno', 503);
-    if (!student) throw new AppError('Alumno no encontrado', 404);
+    if (readError)
+      throw new AppError('No se pudo consultar el alumno', 503, { code: 'UNCONFIRMED' });
+    if (!student) throw new AppError('Alumno no encontrado', 404, { code: 'STUDENT_NOT_FOUND' });
     // Keep PostgreSQL's microseconds: never convert the version through Date.
     if (student.updated_at !== patch.updatedAt)
-      throw new AppError('El alumno cambió. Recarga la ficha', 409);
+      throw new AppError('El alumno cambió. Recarga la ficha', 409, { code: 'VERSION_CONFLICT' });
     if (patch.cedula !== undefined) {
       const { data: duplicate, error } = await this.db
         .from('users')
@@ -76,8 +88,12 @@ export class StudentProfileService {
         .eq('cedula', patch.cedula)
         .neq('id', studentId)
         .maybeSingle();
-      if (error) throw new AppError('No se pudo validar la cédula', 503);
-      if (duplicate) throw new AppError('La cédula ya está registrada', 409);
+      if (error) throw new AppError('No se pudo validar la cédula', 503, { code: 'UNCONFIRMED' });
+      if (duplicate)
+        throw new AppError('La cédula ya está registrada', 409, {
+          code: 'CEDULA_DUPLICATE',
+          field: 'cedula',
+        });
     }
     const profile: Record<string, string | null> = {};
     for (const [field, column] of Object.entries(profileFields)) {
@@ -92,7 +108,7 @@ export class StudentProfileService {
         if (identity.error || !identity.data.user.email) throw new Error('unavailable');
         oldEmail = identity.data.user.email;
       } catch {
-        throw new AppError('No se pudo consultar el correo actual', 503);
+        throw new AppError('No se pudo consultar el correo actual', 503, { code: 'UNCONFIRMED' });
       }
       emailChanged = oldEmail !== patch.correo;
       if (emailChanged) {
@@ -109,12 +125,31 @@ export class StudentProfileService {
             email: patch.correo,
             email_confirm: true,
           });
-          if (auth.error) throw new AppError('Auth rechazó el cambio de correo', 400);
+          if (auth.error) {
+            if (auth.error.code === 'email_exists' || auth.error.code === 'user_already_exists')
+              throw new AppError('El correo ya está registrado', 409, {
+                code: 'EMAIL_DUPLICATE',
+                field: 'correo',
+              });
+            if (
+              auth.error.name === 'AuthRetryableFetchError' ||
+              auth.error.status === 0 ||
+              auth.error.status === 504
+            )
+              throw new AppError(
+                'No se pudo confirmar el cambio en Auth. Revisa la identidad',
+                503,
+                { code: 'UNCONFIRMED' },
+              );
+            throw new AppError('Auth rechazó el cambio de correo', 400, { code: 'AUTH_REJECTED' });
+          }
         } catch (error) {
           log('student_auth_email_update_failed');
           if (error instanceof AppError) throw error;
           // Transport failure in Auth is also ambiguous; no blind second mutation.
-          throw new AppError('No se pudo confirmar el cambio en Auth. Revisa la identidad', 503);
+          throw new AppError('No se pudo confirmar el cambio en Auth. Revisa la identidad', 503, {
+            code: 'UNCONFIRMED',
+          });
         }
       }
     }
@@ -140,6 +175,7 @@ export class StudentProfileService {
       throw new AppError(
         'No se pudo confirmar el guardado. Revisar manualmente antes de editar',
         503,
+        { code: 'UNCONFIRMED' },
       );
     }
     log('student_profile_save_failed', failureCode);
@@ -149,6 +185,7 @@ export class StudentProfileService {
       throw new AppError(
         'No se pudo confirmar el guardado. Revisar manualmente antes de editar',
         503,
+        { code: 'UNCONFIRMED' },
       );
     }
     if (emailChanged && oldEmail) {
@@ -161,7 +198,9 @@ export class StudentProfileService {
         log('student_auth_email_compensated');
       } catch {
         log('student_auth_email_compensation_failed');
-        throw new AppError('No se pudo revertir el correo. Requiere revisión administrativa', 503);
+        throw new AppError('No se pudo revertir el correo. Requiere revisión administrativa', 503, {
+          code: 'UNCONFIRMED',
+        });
       }
     }
     throw saveError(failureCode, constraint);

@@ -18,3 +18,20 @@ export function validate(req: Request, _res: Response, next: NextFunction): void
     typeof firstError.msg === 'string' ? firstError.msg : 'Datos de entrada inválidos';
   next(new AppError(message, 400));
 }
+
+// Structured validation is opt-in for the student PATCH; other contracts stay unchanged.
+export function validateStudentProfile(req: Request, _res: Response, next: NextFunction): void {
+  const result = validationResult(req);
+  if (result.isEmpty()) {
+    next();
+    return;
+  }
+  const [error] = result.array({ onlyFirstError: true });
+  const field = error.type === 'field' && error.path ? error.path : undefined;
+  next(
+    new AppError(typeof error.msg === 'string' ? error.msg : 'Datos de entrada inválidos', 400, {
+      code: 'INVALID_FIELD',
+      ...(field ? { field } : {}),
+    }),
+  );
+}

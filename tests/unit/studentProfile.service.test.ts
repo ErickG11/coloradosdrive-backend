@@ -196,4 +196,35 @@ describe('StudentProfileService A2', () => {
       /old@example|new@example/,
     );
   });
+  it.each([
+    ['email_exists', 409, 'EMAIL_DUPLICATE', 'correo'],
+    ['user_already_exists', 409, 'EMAIL_DUPLICATE', 'correo'],
+    ['validation_failed', 400, 'AUTH_REJECTED', undefined],
+  ])('exposes stable Auth code for %s', async (authCode, statusCode, code, field) => {
+    const s = setup();
+    s.updateUserById.mockResolvedValue({ data: {}, error: { code: authCode } });
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, correo: 'new@example.com' }),
+    ).rejects.toMatchObject({ statusCode, code, field });
+    expect(s.rpc).not.toHaveBeenCalled();
+    expect(s.updateUserById).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    ['23505', 'users_cedula_unique', 'CEDULA_DUPLICATE', 'cedula'],
+    ['CD409', '', 'VERSION_CONFLICT', undefined],
+    ['22023', '', 'INVALID_FIELD', undefined],
+    ['57014', '', 'UNCONFIRMED', undefined],
+  ])('exposes stable RPC code for %s', async (sqlCode, constraint, code, field) => {
+    const s = setup();
+    s.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: sqlCode,
+        message: `duplicate key value violates unique constraint "${constraint}"`,
+      },
+    });
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, nombreCompleto: 'Nuevo' }),
+    ).rejects.toMatchObject({ code, field });
+  });
 });
