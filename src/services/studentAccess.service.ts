@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { AppError } from '../utils/AppError';
+import { assertStudentMutable } from './studentDeletion.service';
 
 export interface PracticeRecovery extends Record<string, unknown> {
   slotId: string;
@@ -57,17 +58,36 @@ export class StudentAccessService {
     }
   }
   async setActive(actor: string, id: string, active: boolean): Promise<StudentAccessResult> {
+    if (active) await assertStudentMutable(this.db, id);
     await this.student(id);
     // Al desactivar cierra primero HTTP; al reactivar, quita primero el ban.
-    if (active) await this.authBan(id, true);
+    if (active) {
+      await this.authBan(id, true);
+      try {
+        await assertStudentMutable(this.db, id);
+      } catch (error) {
+        // D pudo comenzar durante el unban: cerrar de nuevo, nunca reactivar.
+        await this.authBan(id, false);
+        throw error;
+      }
+    }
     try {
       const { error } = await this.db.rpc('set_student_active', {
         p_actor: actor,
         p_student: id,
         p_active: active,
       });
-      if (error) throw new Error('unconfirmed');
-    } catch {
+      if (error) {
+        if (active && error.code === 'CD030') {
+          await this.authBan(id, false);
+          throw new AppError('El alumno tiene una eliminación pendiente', 409, {
+            code: 'DELETION_PENDING',
+          });
+        }
+        throw new Error('unconfirmed');
+      }
+    } catch (error) {
+      if (error instanceof AppError) throw error;
       console.error(
         JSON.stringify({ event: 'student_access_sql_unconfirmed', student_id: id, active }),
       );

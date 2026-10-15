@@ -8,6 +8,7 @@ import type {
   ManualPracticeInput,
 } from '../models/manualEnrollment.model';
 import { AppError } from '../utils/AppError';
+import { assertStudentMutable } from './studentDeletion.service';
 import { manualPracticePlan, type ManualPracticePlan } from '../utils/manualPracticePlan';
 import { SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
 import { applyVotingExemption, normalizeDocuments, validateInitialPayment, type InitialPayment } from '../utils/manualEnrollmentDetails';
@@ -49,6 +50,8 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 export function manualEnrollmentError(error: PostgrestError): Error {
+  if (error.code === 'CD030')
+    return new AppError('El alumno tiene una eliminación pendiente', 409, { code: 'DELETION_PENDING' });
   if (error.code === 'CD023')
     return new AppError('El instructor dejó de estar disponible. Consulta una nueva sugerencia.', 409);
   if (error.code === '23505')
@@ -228,6 +231,7 @@ export class ManualEnrollmentService {
     id: string,
     input: ManualEnrollmentInput,
   ): Promise<ManualEnrollmentResult> {
+    if (input.student.mode === 'existing') await assertStudentMutable(this.db, input.student.id);
     const worker = randomUUID();
     const documents = normalizeDocuments(input.documentos);
     const payment: InitialPayment = input.pago ?? {

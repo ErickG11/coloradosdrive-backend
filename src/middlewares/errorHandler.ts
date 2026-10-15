@@ -17,10 +17,31 @@ export function notFoundHandler(req: Request, _res: Response, next: NextFunction
 
 export function errorHandler(
   err: Error,
-  _req: Request,
+  req: Request,
   res: Response<ErrorResponseBody>,
   _next: NextFunction,
 ): void {
+  // body-parser adjunta el cuerpo a SyntaxError. D nunca lo imprime ni devuelve.
+  if (
+    req.method === 'POST' &&
+    /^\/admin\/estudiantes\/[^/?]+\/eliminar\/?(?:\?|$)/i.test(req.originalUrl) &&
+    !(err instanceof AppError)
+  ) {
+    const invalidJson = 'type' in err && err.type === 'entity.parse.failed';
+    console.error(
+      JSON.stringify({
+        event: 'student_deletion_request_failed',
+        code: invalidJson ? 'INVALID_JSON' : 'INTERNAL_ERROR',
+      }),
+    );
+    res
+      .status(invalidJson ? 400 : 500)
+      .json({
+        status: 'error',
+        message: invalidJson ? 'Cuerpo JSON inválido' : 'Internal server error',
+      });
+    return;
+  }
   const statusCode = err instanceof AppError ? err.statusCode : 500;
   const message =
     err instanceof AppError && err.isOperational ? err.message : 'Internal server error';

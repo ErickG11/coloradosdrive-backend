@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { AppError } from '../utils/AppError';
 import { isValidCedulaEcuatoriana } from '../utils/cedula';
+import { assertStudentMutable } from './studentDeletion.service';
 
 export const profileFields = {
   cedula: 'cedula',
@@ -69,6 +70,7 @@ export class StudentProfileService {
         code: 'INVALID_FIELD',
         field: 'cedula',
       });
+    await assertStudentMutable(this.db, studentId);
     const { data: student, error: readError } = await this.db
       .from('users')
       .select()
@@ -179,6 +181,10 @@ export class StudentProfileService {
       );
     }
     log('student_profile_save_failed', failureCode);
+    if (failureCode === 'CD030')
+      throw new AppError('El alumno tiene una eliminación pendiente', 409, {
+        code: 'DELETION_PENDING',
+      });
     const definitive = ['23505', 'CD409', '22023', 'CD404'].includes(failureCode);
     if (!definitive) {
       log('student_profile_manual_review_required', failureCode);

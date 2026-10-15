@@ -11,6 +11,7 @@
 
 import type { StudentListResult } from '../models/studentAdmin.model';
 import type { PracticeRecovery } from '../services/studentAccess.service';
+import type { StudentDeletionOperation } from '../services/studentDeletion.service';
 import type { StudentProfileResult } from '../services/studentProfile.service';
 
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
@@ -51,6 +52,22 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      begin_student_deletion: {
+        Args: { p_actor: string; p_student: string; p_confirmation: string | null };
+        Returns: StudentDeletionOperation;
+      };
+      advance_student_deletion: {
+        Args: { p_actor: string; p_student: string; p_phase: string; p_version: string; p_next: string };
+        Returns: StudentDeletionOperation;
+      };
+      student_deletion_storage_paths: {
+        Args: { p_actor: string; p_student: string };
+        Returns: string[];
+      };
+      delete_student_data: {
+        Args: { p_actor: string; p_student: string; p_version: string; p_cleaned_paths: string[] };
+        Returns: StudentDeletionOperation;
+      };
       set_student_active: {
         Args: { p_actor: string; p_student: string; p_active: boolean };
         Returns: boolean;
@@ -152,6 +169,12 @@ export interface Database {
       };
     };
     Tables: {
+      student_deletion_operations: {
+        Row: StudentDeletionOperation;
+        Insert: { student_id: string; actor_id: string };
+        Update: never;
+        Relationships: [];
+      };
       student_access_audit: {
         Row: {
           id: string;

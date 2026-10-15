@@ -19,6 +19,7 @@
     "test:students-db": "node tests/database/students.mjs",
     "test:student-profile-db": "node tests/database/studentProfile.mjs",
     "test:student-access-db": "node tests/database/studentAccess.mjs",
+    "test:student-deletion-db": "node tests/database/studentDeletion.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

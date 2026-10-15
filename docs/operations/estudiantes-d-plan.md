@@ -1,7 +1,7 @@
 # Entrega D: eliminación definitiva de alumnos
 
-Estado: orden y confirmación inicial aprobados; plan refinado pendiente de OK.
-Solo documentación; no se implementa ni se crean/aplican migraciones.
+Estado: plan aprobado. D implementada localmente sobre la rama de B; 026 sin aplicar.
+B (025) aplicada y verificada por el responsable; no se ejecuta SQL real en esta entrega.
 Ticket sugerido: «Backend: eliminación definitiva de alumnos confirmada y reintentable».
 
 ## Dependencia y alcance
@@ -19,7 +19,7 @@ Conservar las FKs existentes: users.id → auth.users ON DELETE CASCADE y
 RESTRICT desde matrículas, intentos, prácticas y solicitudes hacia users.
 No eliminar Auth antes de la transacción de datos.
 
-## Endpoints admin propuestos
+## Endpoints admin implementados
 
 Todos con authenticate + requireRole('admin'):
 
@@ -46,7 +46,7 @@ actor del reintento; nunca el body ni mensajes crudos de proveedores.
 
 ## Persistencia mínima: por qué hace falta una tabla
 
-Proponer student_deletion_operations: una fila por student_id UUID, sin FK al
+student_deletion_operations: una fila por student_id UUID, sin FK al
 perfil/Auth que desaparecerán. Campos: actor_id inicial, confirmed_at (marca
 durable de confirmación, sin cédula), fase siguiente, estado pendiente/fallido/
 completo, last_retry_actor_id, last_retry_at, retry_count y updated_at.
@@ -132,7 +132,7 @@ En la transacción, tomar un instante de corte de servidor tras adquirir los loc
   asistencia y metadatos de confirmación/avisos del alumno conforme al contrato
   de liberación existente. No enviar recordatorios al alumno borrado. Que la
   franja sea reclamable sigue sujeto a la ventana actual de cinco minutos.
-- Ya iniciadas o pasadas (scheduled_at <= corte): propuesta para este OK, borrar
+- Ya iniciadas o pasadas (scheduled_at <= corte): política aprobada, borrar
   solo filas todavía vinculadas al alumno. Desvincular completado incumpliría el
   CHECK; convertirlo en sin_practica/liberado falsearía asistencia y resultado.
   Borrar elimina el vínculo y los datos del alumno sin añadir estados/columnas.
@@ -169,7 +169,7 @@ deshabilitado hasta coincidencia exacta. La comprobación del servidor es obliga
 instructor se conservan libres. «Exámenes que haya rendido» son sus intentos y
 respuestas, no exámenes/preguntas compartidos.
 
-## Pruebas y requisitos antes de implementar
+## Pruebas y requisitos de despliegue
 
 Datos ficticios: confirmación errónea sin efectos; activo/inactivo; bloqueo
 incompleto; crash/timeout en cada fase; único reintento automático; reintento por
@@ -184,5 +184,124 @@ manual_enrollment_operations tiene request_hash/response, no request; limpiar su
 fila vinculada y cualquier request que exista entonces. Un RESTRICT de autoría
 inesperado exige revisión sin borrar registros ajenos para satisfacerlo.
 No existe transacción global con Storage/Auth; lo recuperable no es reversible.
-Implementación pendiente de OK de este plan, seguida de revisión de SQL final,
-dry-run con rollback y respaldo restaurable antes de aplicar.
+Implementación local terminada, pendiente de revisión de SQL final, dry-run real
+con rollback y respaldo restaurable confirmado antes de aplicar.
+
+## SQL, ejecución y límites de esta entrega
+
+SQL exacto: migrations/026_estudiantes_eliminacion.sql. No cambia FKs ni agrega
+dependencias, procesos, claves de entorno, tokens, cifrado o índices adicionales.
+Para unos 200 alumnos, el listado de operaciones usa la PK y ordena las pocas filas.
+La tabla tiene RLS, sin políticas públicas, sin FK, SELECT/INSERT/UPDATE solamente
+para service_role y sin DELETE. Solo UUIDs, fechas, fase, estado y contador; sin
+cédula/hash, correo, nombre, rutas, errores crudos ni payloads. Completo se conserva.
+student_profile_audit y student_access_audit conservan sus metadatos sin valores.
+
+Fases persistidas: bloqueo → storage → auth → completo. Storage incluye la limpieza
+y la transacción de datos; esta confirma data_deleted_by/data_deleted_at y phase=auth
+en el mismo commit. Tras Auth, updated_at registra la finalización. Una sola tabla
+es suficiente; no se agrega una segunda auditoría. Cada RPC comprueba admin en BD.
+El bloqueo inicial activo=false comparte transacción con la confirmación durable.
+Se confirma el ban (o Auth ausente) antes de avanzar a Storage. En Auth se usa
+users.id original, persistido como student_id; ausencia 404 cuenta como éxito.
+
+El endpoint POST responde 200 con la operación cuando está completa (incluido
+replay), 400 INVALID_CONFIRMATION si una confirmación nueva no coincide, 404
+STUDENT_NOT_FOUND para UUID sin alumno/operación y 503 DELETION_INCOMPLETE si hay
+que reintentar. Un fallo incierto al iniciar responde 503 UNCONFIRMED sin ejecutar
+efectos externos; consultar el listado antes de repetir. Validaciones de entrada
+devuelven 400. Nunca se reflejan el cuerpo ni mensajes crudos de proveedores.
+Incluso el error del parser JSON se sanitiza para esta ruta antes de log/respuesta.
+El GET devuelve {items,total,page,pageSize}; items tiene los campos de la tabla,
+sin JOIN a users. Filtro `estado` opcional: pendiente/fallido. Por defecto ambos;
+orden updated_at DESC, student_id ASC, page=1, pageSize=20 (máximo 100).
+
+La reanudación registra al último admin y aumenta retry_count; el reintento
+automático no llama otra vez a begin ni aumenta ese contador manual. Hay como
+máximo UNO por petición, compartido entre fases; solo ante red/timeout/errores
+transitorios, rutas cambiadas o CAS contendido. Antes de repetir se reconcilia
+la fase con la fila actual; perder un CAS también consume ese presupuesto. CAS usa
+fase y updated_at exacto (string con microsegundos), de modo que un fallo tardío
+no pisa un avance/reintento ajeno. Peticiones concurrentes pueden repetir las
+APIs externas de forma idempotente; no hay una transacción global ni un lock
+persistente de ejecución. Un límite de ocho pasos evita bucles por contención;
+si no termina, responde 503 y conserva el progreso para el botón del admin.
+
+Guard común previo a Auth en edición/reactivación y matrícula manual existente;
+triggers en UPDATE de campos de perfil, UPDATE de activo=true, INSERT de matrícula
+y vinculación student_id al aprobar solicitud. Bajo lock de users, cierran las
+escrituras que estaban en vuelo al iniciar D. Un unban en vuelo se vuelve a banear
+si los controles posteriores detectan D. La escritura SQL de perfil rechazada
+por D no compensa el correo de una cuenta en eliminación. No se agregan guards a
+subidas ni a prácticas: se mantienen B, las validaciones de solicitudes y sus FKs.
+La transacción bloquea padres/documentos, relee rutas actuales y exige que estén
+en las limpiadas en esa petición; una nueva ruta aborta sin borrar sus filas.
+Una subida ya en curso que pierde su padre falla por FK y usa su compensación
+existente para quitar el objeto subido. No se borran solicitudes por identidad.
+
+Riesgos: deadlocks bajos por órdenes de lock distintos (asignación directa,
+matrícula, solicitud); 40P01/lock_timeout entran en el presupuesto de un reintento.
+Fallo definitivo/RESTRICT deja fallido sin borrar Auth; datos/auditoría hacen rollback
+juntos. Si Storage se limpió antes, su ausencia no se puede revertir: las filas
+quedan como referencias para completar la eliminación. Sin garantía de entrega
+de avisos de franja liberada por D; el inventario se ve al refrescar la API.
+
+No fue posible repetir la inspección del proyecto real: el conector devolvió
+permiso denegado antes de leer esquema/datos. Preflight SOLO CONTEOS:
+estudiantes-d-preflight.sql. Debe confirmar payments ausente, autorías/FKs no
+inventariadas y las relaciones antes de autorizar. El esquema versionado tiene
+request_hash/response en manual_enrollment_operations: borrar la fila entera
+cubre también request si se añadiera. Si aparece payments, 026 y la RPC de datos
+se detienen: hace falta adaptar SQL a su contrato real antes de borrar pagos.
+
+Rollback operativo: estudiantes-d-rollback.sql. Retira RPCs/guards, sin CASCADE;
+conserva operaciones/RLS/grants, activo y bans. Se niega a retirar guards mientras
+haya operaciones pendientes/fallidas. No recupera perfiles, archivos ni Auth.
+Retirar endpoints D y pausar peticiones; no reejecutar 026 sobre la tabla conservada.
+
+Prueba aislada: `$env:DISABLE_CRON='true'; npm.cmd run test:student-deletion-db`.
+Carga migraciones versionadas relevantes en PGlite 0.5.10 / PostgreSQL 18.6;
+prueba 026 con BEGIN/ROLLBACK y rollback operativo con BEGIN/ROLLBACK y repetición.
+Solo datos ficticios, sin .env ni red. No reproduce PostgreSQL 17.6 del proyecto,
+sesiones concurrentes reales ni APIs reales de Auth/Storage (probadas con mocks).
+Prueba confirmación/roles, guards, cambio de rutas, RESTRICT sin pérdida parcial,
+inventario/ajenos, auditoría/reintentos/CAS, ausencia de perfil, completo inmutable,
+permisos/RLS y preflight. Tests Jest cubren endpoints, errores/404/reintento único,
+respuestas perdidas, unban en vuelo y cuerpo ausente de logs, incluso JSON inválido.
+
+Orden pendiente: aprobar SQL + confirmar respaldo → preflight/dry-run real → aplicar
+026 → verificar ACL/RLS/advisors → desplegar backend → frontend después.
+
+## Archivos tocados
+
+Revisar primero 026, StudentDeletionService y los guards de perfil/reactivación:
+contienen confirmación, orden externo, CAS y protección de escrituras en vuelo.
+
+- migrations/026_estudiantes_eliminacion.sql
+- src/services/studentDeletion.service.ts
+- src/services/studentProfile.service.ts
+- src/services/studentAccess.service.ts
+- src/services/manualEnrollment.service.ts
+- src/routes/studentAdmin.routes.ts
+- src/config/database.types.ts
+- src/middlewares/errorHandler.ts
+- package.json
+- tests/database/studentDeletion.mjs
+- tests/unit/studentDeletion.service.test.ts
+- tests/integration/studentDeletion.test.ts
+- tests/unit/studentProfile.service.test.ts
+- tests/unit/studentAccess.service.test.ts
+- tests/unit/manualEnrollment.service.test.ts
+- tests/integration/studentAdmin.test.ts
+- docs/adr/013-politica-estudiantes.md
+- docs/operations/estudiantes-d-plan.md
+- docs/operations/estudiantes-d-preflight.sql
+- docs/operations/estudiantes-d-rollback.sql
+
+Las cuatro pruebas existentes solo adaptan el estado de eliminación ausente o
+añaden casos de carrera de D; no se cambian sus contratos anteriores. La edición
+local previa de 023 se mantiene fuera de esta entrega.
+
+Resultado local final: build y lint correctos; Jest, 45 suites / 630 pruebas
+correctas; `test:student-deletion-db` correcto. El ensayo aislado completo de 026,
+el rollback operativo y el preflight solo usan datos ficticios y no tocan Supabase.
