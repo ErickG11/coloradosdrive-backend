@@ -4,11 +4,9 @@
 
 Diseño aprobado en dirección; A1 y A2 implementadas para revisión en sus ramas.
 Migraciones 023 y 024 aplicadas al proyecto real con aprobación explícita.
-B (025) aplicada y verificada en Supabase según confirmación del responsable.
-C (asignación de cohorte) pendiente. D implementada localmente sobre B; SQL 026 sin aplicar.
-Revisión D: eliminación sin desactivación previa y confirmación por cédula;
-Orden, reutilización de confirmación y política de prácticas pasadas aprobados.
-B precede D; 026 espera revisión final, dry-run real y respaldo antes de aplicar.
+B (025) y D (026) aplicadas en Supabase el 15/10/2026: 025 mediante
+`apply_migration`; 026 manualmente desde SQL Editor, por lo que no figura en el
+historial de migraciones. C (asignación de cohorte) pendiente.
 
 ## Decisión
 
