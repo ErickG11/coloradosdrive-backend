@@ -6,7 +6,8 @@ Diseño aprobado en dirección; A1 y A2 implementadas para revisión en sus rama
 Migraciones 023 y 024 aplicadas al proyecto real con aprobación explícita.
 B (025) y D (026) aplicadas en Supabase el 15/10/2026: 025 mediante
 `apply_migration`; 026 manualmente desde SQL Editor, por lo que no figura en el
-historial de migraciones. C (asignación de cohorte) pendiente.
+historial de migraciones. Backend C implementado para revisión en
+feat/estudiantes-asignacion-cohorte; 027 sin aplicar y frontend pendiente.
 
 ## Decisión
 
@@ -64,8 +65,31 @@ existente por instructor. Preflight repetido, lock fuera de horario y lock_timeo
 La exclusión por alumno está en 025, con lock_timeout=5s y aplicación
 fuera de horario; aborta ante solapamientos existentes, sin normalizar datos.
 
-C asignará cohorte actualizando la matrícula pendiente: validar curso, ventana,
-cupo y abono <= neto bajo locks, sin crear otra matrícula ni prácticas implícitas.
+C actualiza la matrícula pendiente existente, sin otra matrícula ni prácticas
+implícitas. Reutiliza candidatas, sugerencia, regla inclusiva y día civil del
+Sprint 5; opciones limitadas al course_id exacto de la matrícula.
+La regla de ventana vive solo en TypeScript; la RPC la hace cumplir comparando día y versión bajo lock, y solo service_role puede ejecutarla.
+El backend pasa updated_at como texto exacto, incluidos sus microsegundos, sin
+Date. La RPC toma locks alumno → matrícula → cohorte y después lee el día actual
+de America/Guayaquil: si versión o día cambian devuelve 409 COHORT_CHANGED.
+COHORT_WINDOW_CLOSED identifica una ventana ya cerrada al validar en TypeScript.
+Una llamada directa de service_role debe respetar este contrato interno; el body
+HTTP solo permite cohortId, nunca prueba de ventana ni actor suministrados por cliente.
+Dentro de la transacción se comprueban rol estudiante, activo y el guard de D,
+curso exacto, neto/abono NUMERIC y cupo con enforce_cohort_cupo (CD001). El guard
+private.assert_student_not_deleting conserva CD030 → DELETION_PENDING, antes de
+ACCOUNT_INACTIVE. Solo cambian cohorte, total neto, estado y los dos metadatos de
+auditoría UUID/fecha en enrollments (sin FK, sin PII, eliminados junto con D).
+Repetir la misma cohorte ya activa devuelve el resultado sin cambiar auditoría;
+otra cohorte/estado devuelve ENROLLMENT_NOT_PENDING. No hay reasignación en C.
+Errores adicionales: INVALID_FIELD (400), COHORT_COURSE_MISMATCH (400),
+STUDENT_NOT_FOUND/ENROLLMENT_NOT_FOUND/COHORT_NOT_FOUND (404), ACCOUNT_INACTIVE
+(403), DELETION_PENDING/COHORT_FULL/ABONO_EXCEEDS_NET (409). lock_timeout=5s;
+deadlock/espera agotada con rollback confirmado → LOCK_CONFLICT (409); red/timeout
+incierto → UNCONFIRMED (503), recargar sin reenvío automático ni compensaciones.
+Rollback retira solo la RPC y conserva cohort_assigned_by/cohort_assigned_at y
+sus valores. Ensayo secuencial local; último cupo entre dos admins queda como
+prueba manual guiada en operations/estudiantes-c.md, sin simular concurrencia.
 
 D permite eliminar alumnos activos o desactivados; no exige desactivación manual
 previa. POST /admin/estudiantes/:id/eliminar inicia con { confirmacionCedula },
