@@ -54,6 +54,7 @@ individual por la lógica existente; conflictos pendientes de reprogramar.
 Canales ya abiertos pueden recibir señales vacías hasta que expire el JWT; sin datos expuestos.
 La auditoría de acceso solo conserva IDs/acción/fecha; una tabla de recuperación
 guarda las reservas canceladas por desactivación, necesaria al liberar student_id.
+Tras D, student_access_audit conserva solo UUIDs del alumno/actor, acción y fecha, sin valores personales ni FK al perfil.
 No hay procesos nuevos ni claves de entorno nuevas. SQL y verificaciones:
 operations/estudiantes-b.md. Los fallos de reservas no revierten el acceso reactivado;
 los fallos de Auth/BD sí requieren revisión y reintentar la misma acción.
