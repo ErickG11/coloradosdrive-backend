@@ -3,7 +3,7 @@ import { body, param, query } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
-import { validate } from '../middlewares/validate';
+import { validate, validateStudentProfile } from '../middlewares/validate';
 import { StudentAdminService } from '../services/studentAdmin.service';
 import {
   StudentProfileService,
@@ -116,10 +116,10 @@ studentAdminRouter.patch(
         .bail()
         .trim()
         .isLength({ max })
-          .withMessage(`${field} no puede superar ${String(max)} caracteres`),
+        .withMessage(`${field} no puede superar ${String(max)} caracteres`),
     ),
   ],
-  validate,
+  validateStudentProfile,
   asyncHandler(async (req, res) => {
     res.json(
       await profileService.update(actor(req), req.params.id, req.body as StudentProfilePatch),

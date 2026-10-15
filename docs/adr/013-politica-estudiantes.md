@@ -31,6 +31,13 @@ Timeout/red u otros errores: 503 para revisar manualmente, sin compensar ni
 consultar auditoría para decidir; una respuesta perdida no demuestra rollback.
 Detalle y límites concurrentes: operations/estudiantes-a2-propuesta.md.
 
+PATCH expone códigos de error estables además de message: CEDULA_DUPLICATE
+(409, field=cedula), EMAIL_DUPLICATE (409, field=correo), VERSION_CONFLICT (409),
+INVALID_FIELD (400, field si la validación identifica el campo), AUTH_REJECTED
+(400, otros rechazos de Auth) y UNCONFIRMED (503, resultado incierto).
+AUDIT_CONFLICT distingue la PK de auditoría y STUDENT_NOT_FOUND identifica 404.
+No incluir valores del perfil ni detalles crudos de Auth/PostgreSQL en errores.
+
 Mantener bloqueo optimista en A2: trigger real habilitado en cada UPDATE y
 updated_at con seis decimales. Transportar el string exacto sin Date de JS.
 

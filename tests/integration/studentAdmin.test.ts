@@ -219,6 +219,7 @@ describe('admin estudiantes A', () => {
       .set('Authorization', token())
       .send({ updatedAt: version, correo: 'new@example.com', [field]: value });
     expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'INVALID_FIELD', field });
     expect(from).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
     expect(getAuth).not.toHaveBeenCalled();
