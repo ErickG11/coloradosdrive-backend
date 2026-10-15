@@ -2,9 +2,11 @@
 
 ## Estado
 
-Diseño aprobado en dirección; refinado el 14/10/2026. A1 implementada para
-revisión, migración 023 no aplicada. A2 implementada para revisión; 024 no aplicada.
+Diseño aprobado en dirección; A1 y A2 implementadas para revisión en sus ramas.
+Migraciones 023 y 024 aplicadas al proyecto real con aprobación explícita.
 B (acceso/reservas), C (asignación de cohorte) y D (eliminación) pendientes.
+Revisión D: eliminación sin desactivación previa y confirmación por cédula;
+plan actualizado, orden técnico pendiente de OK antes de implementar.
 
 ## Decisión
 
@@ -56,12 +58,46 @@ Esta restricción no se aplica en A1 ni A2.
 C asignará cohorte actualizando la matrícula pendiente: validar curso, ventana,
 cupo y abono <= neto bajo locks, sin crear otra matrícula ni prácticas implícitas.
 
-D admitirá borrado solo de alumnos desactivados. Borrados explícitos en RPC,
-auditoría mínima y manifiesto Storage/Auth antes de borrar; trabajador persistente
-e idempotente, desactivado en tests/local y bajo DISABLE_CRON o flag propio.
-Completo solo tras limpiar APIs externas; pendiente/fallido y reintento manual.
-Solicitudes exclusivamente por FK, no por cédula/correo. Borrar intentos y
-respuestas, conservar exámenes/preguntas compartidos. Mantener auditoría mínima.
+D admitirá eliminación definitiva en una sola acción admin, esté activo o
+desactivado el alumno. No exige ejecutar B antes. Confirmación inicial explícita
+en el cuerpo mediante cédula exacta, verificada por el servidor contra el alumno
+del UUID de la ruta antes de cualquier efecto. No guardar cédula, nombre, correo,
+valores ni hashes de confirmación en auditoría/logs/operación; no ponerlos en URL.
+B conserva su acción independiente y reversible. D es irreversible y no se
+compensa reactivando una cuenta cuyo borrado empezó.
+
+Persistir una única operación y el manifiesto Storage/Auth antes de eliminar.
+El primer paso efectivo es bloquear acceso: activo=false y ban en Auth; ambos
+deben estar confirmados antes de borrar archivos/datos. B debe asegurar también
+middleware, rutas excepcionales y Realtime; un ban no invalida por sí solo JWT
+ya emitidos. Mientras D está pendiente/fallido se impiden reactivación y nuevas
+escrituras asociadas, incluida edición de identidad y subida de documentos.
+
+El orden solicitado Storage → Auth → transacción de datos no es ejecutable con
+las FKs actuales: users.id → auth.users ON DELETE CASCADE, con RESTRICT desde
+enrollments, exam_attempts, practice_slots y solicitudes_inscripcion a users.
+Eliminar Auth antes falla por RESTRICT o elimina el perfil fuera de la RPC final.
+Propuesta mínima PENDIENTE de aprobación: bloqueo → Storage → transacción
+datos/auditoría → Auth → completo. Mantener Auth antes de la transacción exigiría
+rediseñar la FK Auth/perfil, con impacto transversal; no queda decidido ni autorizado.
+
+Operación persistente con estados pendiente/completo/fallido y fase confirmada;
+pasos idempotentes y reintento manual sobre la misma operación, incluso tras
+reinicio. Propuesta pendiente: confirmar cédula al iniciar y reutilizar esa
+confirmación al reintentar la operación ya autorizada (sin conservar su valor).
+Es necesario si el perfil se borró y Auth falló: ya no queda cédula que comparar.
+No interpretar la ausencia del perfil como que todo terminó. Completo solo tras
+confirmar todos los pasos. Trabajador desactivado por defecto en tests/local,
+bajo DISABLE_CRON o flag propio. Purgar rutas temporales al completar; auditoría
+final solo actor, fecha e identificador, sin datos personales del alumno.
+
+Solicitudes exclusivamente ligadas por student_id/FK, no por cédula/correo.
+Borrar sus objetos Storage antes de perder las rutas; en la transacción, borrar
+documentos de solicitudes antes de solicitudes, respuestas antes de intentos,
+prácticas, checklist antes de matrículas y el perfil al final. Limpiar operaciones
+de matrícula manual ligadas explícitamente. Preservar exámenes/preguntas
+compartidos y registros de otras personas. Una FK no contemplada detiene el paso.
+Plan y diálogo aprobado por el solicitante: operations/estudiantes-d-plan.md.
 
 El esquema real inspeccionado no tiene manual_enrollment_operations.request:
 tiene request_hash/response. D repetirá inspección y limpiará la fila vinculada,
