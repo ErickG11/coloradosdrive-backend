@@ -6,7 +6,8 @@ Diseño aprobado en dirección; A1 y A2 implementadas para revisión en sus rama
 Migraciones 023 y 024 aplicadas al proyecto real con aprobación explícita.
 B (acceso/reservas), C (asignación de cohorte) y D (eliminación) pendientes.
 Revisión D: eliminación sin desactivación previa y confirmación por cédula;
-plan actualizado, orden técnico pendiente de OK antes de implementar.
+orden y reutilización de confirmación aprobados; refinamientos pendientes de OK.
+Implementar B y verificar sus controles antes de D; no se inicia D todavía.
 
 ## Decisión
 
@@ -58,46 +59,67 @@ Esta restricción no se aplica en A1 ni A2.
 C asignará cohorte actualizando la matrícula pendiente: validar curso, ventana,
 cupo y abono <= neto bajo locks, sin crear otra matrícula ni prácticas implícitas.
 
-D admitirá eliminación definitiva en una sola acción admin, esté activo o
-desactivado el alumno. No exige ejecutar B antes. Confirmación inicial explícita
-en el cuerpo mediante cédula exacta, verificada por el servidor contra el alumno
-del UUID de la ruta antes de cualquier efecto. No guardar cédula, nombre, correo,
-valores ni hashes de confirmación en auditoría/logs/operación; no ponerlos en URL.
-B conserva su acción independiente y reversible. D es irreversible y no se
-compensa reactivando una cuenta cuyo borrado empezó.
+D permite eliminar alumnos activos o desactivados; no exige desactivación manual
+previa. POST /admin/estudiantes/:id/eliminar inicia con { confirmacionCedula },
+comparada exactamente contra el alumno del UUID antes de efectos. Persistir la
+confirmación por fecha, sin cédula ni hash. No registrar el cuerpo en ningún log,
+traza o error. B sigue independiente y reversible; D iniciada no se revierte.
 
-Persistir una única operación y el manifiesto Storage/Auth antes de eliminar.
-El primer paso efectivo es bloquear acceso: activo=false y ban en Auth; ambos
-deben estar confirmados antes de borrar archivos/datos. B debe asegurar también
-middleware, rutas excepcionales y Realtime; un ban no invalida por sí solo JWT
-ya emitidos. Mientras D está pendiente/fallido se impiden reactivación y nuevas
-escrituras asociadas, incluida edición de identidad y subida de documentos.
+Orden aprobado: bloqueo (activo=false + ban) → Storage → transacción de
+datos/auditoría → Auth → completo. B debe cubrir middleware, rutas excepcionales
+y Realtime: el ban no invalida JWT ya emitidos. Conservar las FKs actuales; Auth
+se elimina después de las referencias RESTRICT y el perfil.
 
-El orden solicitado Storage → Auth → transacción de datos no es ejecutable con
-las FKs actuales: users.id → auth.users ON DELETE CASCADE, con RESTRICT desde
-enrollments, exam_attempts, practice_slots y solicitudes_inscripcion a users.
-Eliminar Auth antes falla por RESTRICT o elimina el perfil fuera de la RPC final.
-Propuesta mínima PENDIENTE de aprobación: bloqueo → Storage → transacción
-datos/auditoría → Auth → completo. Mantener Auth antes de la transacción exigiría
-rediseñar la FK Auth/perfil, con impacto transversal; no queda decidido ni autorizado.
+La misma petición POST, con cuerpo vacío, reanuda una operación confirmada
+pendiente/fallida para cualquier admin autenticado y registra quién reintentó.
+No inicia sin confirmación ni ejecuta de nuevo operaciones completas.
+GET /admin/estudiantes/eliminaciones lista pendientes/fallidas paginadas, incluso
+sin users, por UUID/estado/fase y actores/fechas, sin datos personales del alumno.
+Declarar esa ruta estática antes de /:id.
 
-Operación persistente con estados pendiente/completo/fallido y fase confirmada;
-pasos idempotentes y reintento manual sobre la misma operación, incluso tras
-reinicio. Propuesta pendiente: confirmar cédula al iniciar y reutilizar esa
-confirmación al reintentar la operación ya autorizada (sin conservar su valor).
-Es necesario si el perfil se borró y Auth falló: ya no queda cédula que comparar.
-No interpretar la ausencia del perfil como que todo terminó. Completo solo tras
-confirmar todos los pasos. Trabajador desactivado por defecto en tests/local,
-bajo DISABLE_CRON o flag propio. Purgar rutas temporales al completar; auditoría
-final solo actor, fecha e identificador, sin datos personales del alumno.
+Proponer una única tabla mínima student_deletion_operations sin FK al perfil:
+student_id como PK/Auth ID original, actor inicial, confirmed_at, fase, estado,
+último actor/fecha/contador de reintentos y updated_at. La misma fila registra
+data_deleted_by/data_deleted_at dentro de la transacción como auditoría mínima.
+No guardar copias de identidad, payloads, rutas Storage ni hashes. Es necesaria
+tras borrar users si Auth falla; manual_enrollment_operations es de matrícula
+y se limpia en D, y student_profile_audit es inmutable y solo admite campos de
+perfil. Reutilizarlas cambiaría contratos ajenos y no resuelve las fases de D.
 
-Solicitudes exclusivamente ligadas por student_id/FK, no por cédula/correo.
-Borrar sus objetos Storage antes de perder las rutas; en la transacción, borrar
-documentos de solicitudes antes de solicitudes, respuestas antes de intentos,
-prácticas, checklist antes de matrículas y el perfil al final. Limpiar operaciones
-de matrícula manual ligadas explícitamente. Preservar exámenes/preguntas
-compartidos y registros de otras personas. Una FK no contemplada detiene el paso.
-Plan y diálogo aprobado por el solicitante: operations/estudiantes-d-plan.md.
+Ejecutar por petición del admin, con botón de reintento y como máximo un reintento
+automático transitorio dentro de esa petición, tras comprobar fase/resultado.
+Sin ejecución periódica. Estados pendiente/fallido/completo; fases persistidas
+y transiciones condicionales bajo locks evitan retrocesos por concurrencia.
+Completo solo tras todos los pasos; una respuesta perdida no demuestra rollback.
+Reusar la confirmación inicial sin guardar su valor aunque el perfil ya no exista.
+
+Las rutas de Storage se consultan desde solicitud_documentos y solicitudes
+ligadas exclusivamente por student_id. Limpiar objetos antes de borrar filas,
+conservar las filas hasta confirmar Storage y releerlas en cada reintento.
+Antes de la transacción, verificar que no quedaron rutas nuevas sin limpiar;
+si cambian, no borrar filas y retomar Storage. Auth ID se obtiene del student_id
+de la operación tras desaparecer el perfil; no duplicarlo en otra columna.
+
+Bloqueos específicos de D solo en entradas admin de edición, reactivación y
+creación de matrículas, incluida aprobación que matrícula. Guard común y control
+de concurrencia en esos puntos; el resto se cubre con activo=false/ban y B.
+Conservar controles actuales de solicitudes y probar escrituras ya en curso,
+sin ampliar por defecto bloqueos D a subidas ni a todos los endpoints.
+
+practice_slots es inventario del instructor/cohorte. D conserva las franjas
+futuras: student_id=NULL, status=liberado y limpiar metadatos del alumno.
+No existe estado libre. Propuesta para aprobación: borrar franjas ya iniciadas/
+pasadas aún vinculadas al alumno (scheduled_at <= corte de servidor bajo locks).
+Desvincular completado rompe el CHECK de alumno obligatorio; convertirlo en
+sin_practica falsea la asistencia. Borrar evita nueva maquinaria, con el costo
+de perder esa franja del historial del instructor. Eliminar recuperación B del
+alumno; no tocar franjas ya liberadas y reservadas después por otra persona.
+
+En la transacción: documentos de solicitudes antes de solicitudes; respuestas
+antes de intentos; prácticas según lo anterior; checklist antes de matrículas;
+operaciones manuales vinculadas; perfil al final. Reutilizar cascadas pertinentes.
+Preservar exámenes/preguntas compartidos y registros ajenos; un RESTRICT inesperado
+detiene el paso. Plan y diálogo: operations/estudiantes-d-plan.md.
 
 El esquema real inspeccionado no tiene manual_enrollment_operations.request:
 tiene request_hash/response. D repetirá inspección y limpiará la fila vinculada,
@@ -108,7 +130,7 @@ incluido request si aparece. No hay payments hoy; adaptar D cuando RF-04 exista.
 No existe transacción global con Auth/Storage. Ban/eliminación no invalidan
 retroactivamente JWT ni garantizan desconectar canales Realtime ya abiertos.
 La garantía de recuperación de edición tras crash se reduce al adoptar A2 simple;
-el trabajador de borrado D conserva persistencia por su alcance distinto.
+D conserva solo un registro mínimo para reanudación manual después de reinicios.
 
 Aplicar SQL requiere aprobación del texto final, prueba aislada, respaldo
 restaurable confirmado y ventana de ejecución; aprobar diseño no autoriza aplicar.

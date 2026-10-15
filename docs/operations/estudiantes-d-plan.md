@@ -1,28 +1,158 @@
 # Entrega D: eliminación definitiva de alumnos
 
-Estado: revisión de diseño; pendiente de OK antes de implementar. Solo se
-actualiza documentación. No hay código, migraciones nuevas ni cambios de datos.
+Estado: orden y confirmación inicial aprobados; plan refinado pendiente de OK.
+Solo documentación; no se implementa ni se crean/aplican migraciones.
 Ticket sugerido: «Backend: eliminación definitiva de alumnos confirmada y reintentable».
-Backend primero, SQL revisado/pruebas/PR/merge/tag y después frontend.
 
-## Acción y confirmación
+## Dependencia y alcance
 
-Disponible para admin sobre un alumno activo o desactivado. B se mantiene como
-desactivar/reactivar independiente y reversible; no es un requisito previo.
+Implementar y verificar B antes de D: activo/ban, middleware, rutas excepcionales,
+Realtime, cancelación/recuperación de reservas y demás alcance de B. El ban no
+invalida JWT ya emitidos. B sigue siendo una acción independiente y reversible;
+el admin no necesita desactivar previamente para usar D.
+Cada entrega conserva SQL revisado, pruebas, PR/merge/tag y después frontend.
+C mantiene su alcance independiente.
 
-Contrato propuesto: DELETE /admin/estudiantes/:id, authenticate + requireRole('admin'),
-cuerpo { "confirmacionCedula": "<cédula escrita>" }. El servidor compara exactamente
-contra la cédula actual del alumno identificado por UUID, bajo control de concurrencia.
-Campo ausente/no coincidente: rechazo sin iniciar operación ni bloquear acceso.
-No usar cédula como identificador de URL, clave idempotente ni criterio para buscar
-solicitudes. No registrar el cuerpo, valores ni hashes de la confirmación.
+D inicia una sola acción admin irreversible. Orden aprobado:
+bloqueo → Storage → transacción de datos/auditoría → Auth → completo.
+Conservar las FKs existentes: users.id → auth.users ON DELETE CASCADE y
+RESTRICT desde matrículas, intentos, prácticas y solicitudes hacia users.
+No eliminar Auth antes de la transacción de datos.
 
-El diálogo tendrá exactamente este contenido, con el nombre del alumno mostrado
-solo en pantalla y el botón deshabilitado hasta que coincida la cédula:
+## Endpoints admin propuestos
+
+Todos con authenticate + requireRole('admin'):
+
+- POST /admin/estudiantes/:id/eliminar. Inicio con cuerpo
+  { "confirmacionCedula": "<cédula escrita>" }; comparar exactamente con la cédula
+  actual del alumno del UUID antes de cualquier efecto. Ausente/no coincidente:
+  rechazo sin crear operación ni bloquear acceso. No guardar valor ni hash.
+- El mismo POST, cuerpo vacío {}, reanuda únicamente un registro ya confirmado
+  en estado pendiente o fallido. No iniciar una eliminación nueva sin cédula.
+  Reutilizar la confirmación inicial y registrar al admin que reintenta.
+  Una operación completa solo devuelve «ya completada», sin ejecución ni cambios.
+- GET /admin/estudiantes/eliminaciones. Listado paginado, por defecto pendiente
+  y fallido; estado opcional pendiente/fallido, page/pageSize y orden estable
+  updated_at/student_id. Registrar esta ruta estática antes de GET /:id.
+  Devolver UUID del alumno, estado, siguiente fase, actor inicial, fecha de
+  confirmación y último admin/fecha/contador de reintentos. Sin JOIN obligatorio
+  a users: debe funcionar después de borrar el perfil. Sin cédulas, nombres,
+  correos ni rutas Storage. La UI ofrece «Reintentar eliminación».
+
+No registrar el cuerpo de POST en logs, errores, trazas ni instrumentación.
+El backend actual no tiene un logger de cuerpos; D mantendrá esa propiedad.
+Logs operacionales permitidos: identificadores, fase, código seguro de error y
+actor del reintento; nunca el body ni mensajes crudos de proveedores.
+
+## Persistencia mínima: por qué hace falta una tabla
+
+Proponer student_deletion_operations: una fila por student_id UUID, sin FK al
+perfil/Auth que desaparecerán. Campos: actor_id inicial, confirmed_at (marca
+durable de confirmación, sin cédula), fase siguiente, estado pendiente/fallido/
+completo, last_retry_actor_id, last_retry_at, retry_count y updated_at.
+Para la auditoría transaccional: data_deleted_by y data_deleted_at registran
+quién ejecutó efectivamente el borrado de datos y cuándo. La misma fila sirve
+como registro de operación y auditoría mínima; no crear otra tabla de auditoría.
+Al completar, updated_at registra la finalización y la fila deja de mutarse.
+
+Es necesaria para recuperar Auth pendiente y listar el trabajo tras borrar users.
+No reutilizar manual_enrollment_operations: es idempotencia de matrícula, con
+estados y campos obligatorios distintos, y D elimina las operaciones vinculadas.
+No reutilizar student_profile_audit: es auditoría inmutable de campos editados,
+con CHECK de nombres de campo; no representa fases, confirmación ni reintentos.
+Generalizarlas ampliaría contratos ya entregados y mezclaría responsabilidades.
+
+No persistir rutas Storage, copias de Auth ID, payloads, perfiles, datos personales
+del alumno ni hashes de cédula. El UUID del alumno es el Auth ID original.
+Conservar solo identificadores/fechas operativos y de auditoría. RLS activo y
+acceso exclusivo backend; SQL exacto y permisos se propondrán para aprobación.
+Cada reintento manual actualiza último actor/fecha/contador y emite un log
+estructurado con ese actor. No se propone un historial ilimitado dentro de la fila.
+
+## Ejecución por petición y reintentos
+
+1. Validar confirmación y reservar la fila de operación bajo concurrencia. Marcar
+   confirmed_at antes de iniciar efectos. No duplicar la operación por alumno.
+2. Primer paso efectivo: activo=false y ban en Auth; confirmar ambos antes de
+   borrar archivos o datos. No compensar reactivando si un paso posterior falla.
+3. Consultar solicitudes exclusivamente por student_id y sus storage_path en
+   solicitud_documentos. Leer y eliminar los objetos antes de la transacción;
+   conservar sus filas/rutas en la base hasta confirmar la limpieza de Storage.
+   Ante crash o fallo, releer esas mismas filas al reintentar y eliminar otra vez:
+   un objeto ya ausente cuenta como éxito confirmado. No buscar por cédula/correo.
+4. Transacción con locks y lock_timeout: verificar fase y que siguen cubiertas las
+   rutas actuales; si aparecieron rutas no limpiadas, no borrar sus filas y volver
+   al paso Storage. Documentos de solicitudes → solicitudes; respuestas → intentos;
+   tratamiento de prácticas abajo; checklist → matrículas; operaciones de
+   matrícula manual vinculadas; perfil al final. Incluir pagos si ya existen.
+   Confirmar auditoría y fase Auth en la misma transacción. Ante rollback, no
+   avanzar de fase. Un RESTRICT inesperado detiene la operación, sin borrar ajenos.
+5. Eliminar Auth usando el student_id persistido, aunque el perfil ya no exista.
+   Si falla, conservar la fase Auth. Marcar completo solo tras confirmar ausencia
+   de esa cuenta y éxito de todos los pasos.
+
+Cada paso es repetible. El estado durable indica qué falta, no se interpreta un
+timeout como rollback ni la ausencia del perfil como finalización. Cambiar de fase
+con condiciones y locks evita regresiones por peticiones concurrentes; las APIs
+externas pueden repetirse de forma idempotente. Un fallo tardío no debe sobrescribir
+un avance posterior. Registrar reintentos solo sobre estados pendiente/fallido.
+
+No hay ejecución periódica: la petición del admin ejecuta la secuencia. Reiniciar
+Railway no pierde fase/estado; el botón retoma la misma operación confirmada.
+Como máximo un reintento automático por petición, solo ante fallo transitorio y
+después de reconciliar resultado/fase. No repetir por validación o permisos, ni
+crear bucles; si persiste el fallo, registrar fallido y ofrecer reintento manual.
+Una petición interrumpida puede quedar pendiente hasta que otro admin la retome.
+Una operación completa no se reintenta.
+
+## Bloqueos acotados
+
+Consultar eliminación pendiente/fallida solo en las entradas admin que editan al
+alumno, reactivan su cuenta o crean matrículas (incluida aprobación de solicitudes
+cuando termina matriculando). Reutilizar un guard común en esos flujos y proteger
+su escritura contra una carrera con el inicio de D; no ampliar el bloqueo a cada
+endpoint. El resto de accesos lo cubren activo=false, ban y middleware de B.
+Mantener las comprobaciones actuales de solicitudes que ya no admiten documentos.
+Probar peticiones que estaban en curso al bloquear y releer/validar rutas antes
+de eliminar filas; no añadir por defecto nuevos bloqueos a subidas o prácticas.
+«Cancelar» solo cierra el diálogo antes de confirmar; D iniciada no es reversible.
+
+## Prácticas: conservar inventario futuro
+
+El modelo real es inventario del instructor: instructor_id y cohort_id obligatorios,
+scheduled_at, duración 60 minutos y student_id opcional. La UI del instructor lista
+todas sus franjas. Estados libres existentes: disponible/liberado; no existe libre.
+El CHECK permite student_id NULL solo en disponible/liberado/sin_practica;
+asignado/confirmado/completado requieren alumno. attended no nulo exige completado.
+
+En la transacción, tomar un instante de corte de servidor tras adquirir los locks:
+
+- Futuras (scheduled_at > corte), aún vinculadas al alumno: conservar la fila,
+  instructor, cohorte y horario. Poner student_id=NULL y status=liberado; limpiar
+  asistencia y metadatos de confirmación/avisos del alumno conforme al contrato
+  de liberación existente. No enviar recordatorios al alumno borrado. Que la
+  franja sea reclamable sigue sujeto a la ventana actual de cinco minutos.
+- Ya iniciadas o pasadas (scheduled_at <= corte): propuesta para este OK, borrar
+  solo filas todavía vinculadas al alumno. Desvincular completado incumpliría el
+  CHECK; convertirlo en sin_practica/liberado falsearía asistencia y resultado.
+  Borrar elimina el vínculo y los datos del alumno sin añadir estados/columnas.
+  Costo: se pierde esa franja del historial/estadísticas del instructor. No se
+  vuelve a ofrecer un horario ya iniciado ni se borra una cohorte/instructor.
+- Limpiar los registros de recuperación de B ligados al alumno. Si B ya liberó
+  una franja y otra persona la reservó, no tocar esa nueva reserva ni su historial.
+
+Revisar anomalías temporales/estados en preflight y no tocar franjas ajenas.
+Los exámenes/preguntas compartidos se conservan; se borran intentos y respuestas.
+
+## Diálogo
+
+Mantener el texto proporcionado, con nombre solo en pantalla y el botón
+deshabilitado hasta coincidencia exacta. La comprobación del servidor es obligatoria.
 
 > Eliminar definitivamente a [Nombre del alumno]
 >
 > Esta acción no se puede deshacer. Se eliminarán:
+>
 > - Su cuenta de acceso
 > - Sus matrículas y checklist de documentos
 > - Los exámenes que haya rendido
@@ -35,80 +165,24 @@ solo en pantalla y el botón deshabilitado hasta que coincida la cédula:
 >
 > [Cancelar]   [Eliminar definitivamente]
 
-«Exámenes que haya rendido» se refiere a intentos/respuestas del alumno; los
-exámenes y preguntas compartidos se conservan. Deshabilitar el botón no sustituye
-la comprobación del servidor.
+«Sus prácticas» elimina su vinculación y sus datos; las franjas futuras del
+instructor se conservan libres. «Exámenes que haya rendido» son sus intentos y
+respuestas, no exámenes/preguntas compartidos.
 
-## Orden: decisión pendiente
+## Pruebas y requisitos antes de implementar
 
-Orden solicitado: bloqueo → Storage de solicitudes ligadas → Auth → transacción
-de datos. La inspección de metadatos del proyecto real confirma un impedimento:
-users_id_fkey enlaza users.id con auth.users(id) ON DELETE CASCADE; las FKs de
-matrículas, intentos, prácticas y solicitudes hacia users son ON DELETE RESTRICT.
-No se puede eliminar Auth conservando esas relaciones para una transacción posterior.
+Datos ficticios: confirmación errónea sin efectos; activo/inactivo; bloqueo
+incompleto; crash/timeout en cada fase; único reintento automático; reintento por
+otro admin registrado; operaciones completas no ejecutadas otra vez; listado sin
+perfil; auditoría única; cuerpo/cédula ausentes de logs y persistencia; carreras de
+peticiones, edición/reactivación/matrícula y subidas en curso; liberación futura,
+borrado pasado/iniciado, asistencia y CHECKs; reserva reutilizada por otro alumno
+intacta; Storage ya ausente y rutas reconsultadas después de fallo.
 
-Propuesta mínima para aprobación: bloqueo → Storage → transacción de datos y
-auditoría → Auth → completo. Conserva las FKs existentes. Alternativa para mantener
-Auth antes: rediseñar el vínculo FK Auth/perfil y revisar los otros flujos de
-creación/eliminación de usuarios. No se implementará ninguna opción sin OK.
-
-## Ejecución y reintentos propuestos
-
-1. Validar rol, alumno y confirmación; persistir una operación única por alumno,
-   actor y manifiesto mínimo con Auth ID y rutas exactas de Storage. Resolver
-   llamadas concurrentes sobre la misma operación. No duplicar auditoría.
-2. Bloquear acceso con activo=false y ban en Auth; no continuar a eliminación
-   hasta confirmar ambos. Ante fallo, conservar lo confirmado y permitir reintento.
-   B debe estar listo: sesiones ya emitidas, rutas excepcionales y Realtime.
-3. Limpiar solo objetos de solicitudes relacionadas explícitamente por student_id.
-   Usar el manifiesto persistido, no búsquedas por coincidencias personales.
-4. Orden de la transacción propuesta: documentos de solicitudes → solicitudes;
-   respuestas de intentos → intentos; prácticas; checklist → matrículas;
-   operaciones de matrícula manual vinculadas; perfil al final. Auditoría y avance
-   de la operación se confirman en esa transacción. FKs CASCADE se reutilizan
-   cuando corresponde; un RESTRICT inesperado provoca rollback, no una cascada ampliada.
-5. Eliminar Auth y marcar completo solo tras confirmar que todo terminó. Si Auth
-   falla, el perfil ya no permite acceso y la operación sigue recuperable por UUID.
-   No llamar a una RPC de edición, recrear al usuario ni reactivar para compensar.
-
-Estados persistentes: pendiente, fallido, completo, más fase/checkpoints de cada
-paso. Recursos ya eliminados cuentan como éxito cuando se confirma su ausencia;
-errores de permisos/red/servicio no cuentan como ausencia. Confirmar el resultado
-antes de avanzar; un timeout no prueba que el paso no ocurrió. Reintentar sin
-duplicar efectos ni registros. Reinicios de Railway no pierden el progreso.
-
-Pendiente de aprobación junto con el orden: verificar cédula al iniciar y permitir
-reanudar la misma operación ya confirmada mediante su operationId, admin autenticado
-y botón de reintento. No volver a exigir una cédula contra un perfil ya inexistente
-ni conservarla para comparaciones futuras. Una nueva operación sí exige confirmación.
-Una operación completa devuelve su resultado de forma idempotente.
-
-La UI debe mostrar fallo/progreso y permitir reintento de operaciones aunque el
-perfil ya no exista. Mientras haya eliminación en curso, bloquear reactivación,
-edición de identidad, matrículas/prácticas nuevas y nuevas subidas asociadas para
-evitar que aparezcan recursos fuera del manifiesto. D no ofrece «cancelar» después
-de iniciar; el botón Cancelar del diálogo solo cierra antes de confirmar.
-
-Trabajador persistente bajo DISABLE_CRON/flag propio, apagado por defecto en
-tests/local y sin procesar el proyecto real desde local. Auditoría final: quién,
-cuándo e identificador; sin datos personales del alumno. Borrar el manifiesto de
-rutas al completar. No hacer una copia del perfil en la operación.
-
-## Pruebas y límites
-
-Tests con alumnos/archivos/Auth ficticios: alumno activo e inactivo, confirmación
-errónea sin efectos, no avanzar si el bloqueo falla, error/crash/timeout en cada
-fase, reintentos concurrentes y tras reinicio, recursos ya ausentes, auditoría única,
-acceso denegado durante fallos, y conservación de recursos de otras personas.
-Probar FKs/orden/rollback en base aislada antes de proponer SQL final.
-
-Repetir inventario de esquema antes de D: hoy no hay payments; incluirlos si RF-04
-los introduce. manual_enrollment_operations tiene request_hash/response, no request;
-limpiar la operación vinculada y cualquier request que exista entonces. No borrar
-por coincidencias de cédula/correo. Referencias de autoría inesperadas requieren
-revisión, sin borrar registros ajenos para satisfacer una FK.
-
-No hay transacción global entre PostgreSQL, Storage y Auth. El bloqueo inicial,
-los checkpoints y la idempotencia hacen recuperable un borrado parcial; no lo
-convierten en reversible. SQL final y aplicación requieren aprobación explícita,
-dry-run con rollback y respaldo restaurable confirmado.
+Repetir inventario antes de D: hoy no hay payments; incluirlos si RF-04 los agrega.
+manual_enrollment_operations tiene request_hash/response, no request; limpiar su
+fila vinculada y cualquier request que exista entonces. Un RESTRICT de autoría
+inesperado exige revisión sin borrar registros ajenos para satisfacerlo.
+No existe transacción global con Storage/Auth; lo recuperable no es reversible.
+Implementación pendiente de OK de este plan, seguida de revisión de SQL final,
+dry-run con rollback y respaldo restaurable antes de aplicar.
