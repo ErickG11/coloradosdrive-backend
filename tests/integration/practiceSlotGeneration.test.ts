@@ -55,7 +55,7 @@ describe('generador de práctica (admin)', () => {
         // authenticate consulta debe_cambiar_password para rol=estudiante
         // antes de que RBAC llegue a rechazarlo (ver auth.middleware.ts).
         mockedFrom.mockReturnValueOnce(
-          createChain({ data: { debe_cambiar_password: false }, error: null }),
+          createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
         );
       }
       const res = await request(app)

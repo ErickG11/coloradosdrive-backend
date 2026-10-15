@@ -5,6 +5,7 @@ import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate, validateStudentProfile } from '../middlewares/validate';
 import { StudentAdminService } from '../services/studentAdmin.service';
+import { StudentAccessService } from '../services/studentAccess.service';
 import {
   StudentProfileService,
   profileFields,
@@ -16,6 +17,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const studentAdminRouter = Router();
 const service = new StudentAdminService(supabaseAdmin);
 const profileService = new StudentProfileService(supabaseAdmin);
+const accessService = new StudentAccessService(supabaseAdmin);
 studentAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 function actor(req: Request): string {
@@ -70,6 +72,27 @@ studentAdminRouter.get(
 );
 
 const id = param('id').isUUID();
+for (const [action, active] of [
+  ['desactivar', false],
+  ['reactivar', true],
+] as const) {
+  studentAdminRouter.post(
+    `/:id/${action}`,
+    [param('id').isUUID()],
+    validate,
+    asyncHandler(async (req, res) => {
+      res.json(await accessService.setActive(actor(req), req.params.id, active));
+    }),
+  );
+}
+studentAdminRouter.get(
+  '/:id/reservas-pendientes',
+  [param('id').isUUID()],
+  validate,
+  asyncHandler(async (req, res) => {
+    res.json(await accessService.reservations(req.params.id));
+  }),
+);
 studentAdminRouter.patch(
   '/:id',
   [

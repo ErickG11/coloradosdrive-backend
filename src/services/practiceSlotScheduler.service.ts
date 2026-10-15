@@ -105,14 +105,14 @@ export class PracticeSlotSchedulerService {
   private async getUserContact(userId: string): Promise<{ nombreCompleto: string; email: string }> {
     const { data: userRow, error: userError } = await this.supabase
       .from('users')
-      .select('nombre_completo')
+      .select('nombre_completo,activo')
       .eq('id', userId)
       .maybeSingle();
     if (userError) {
       throw userError;
     }
-    if (!userRow) {
-      throw new Error('Usuario no encontrado');
+    if (!userRow?.activo) {
+      throw new Error('Destinatario inactivo o inexistente');
     }
 
     const { data: authUser, error: authError } = await this.supabase.auth.admin.getUserById(userId);

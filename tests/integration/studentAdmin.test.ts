@@ -60,7 +60,7 @@ describe('admin estudiantes A', () => {
       kind === 'list' ? request(app).get(path) : request(app).get(`${path}/${id}`);
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(createChain({ data: { debe_cambiar_password: false }, error: null }));
+    from.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
     expect(getAuth).not.toHaveBeenCalled();
@@ -164,7 +164,7 @@ describe('admin estudiantes A', () => {
       request(app).patch(`${path}/${id}`).send({ updatedAt: version, nombreCompleto: 'Nuevo' });
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(createChain({ data: { debe_cambiar_password: false }, error: null }));
+    from.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
   });

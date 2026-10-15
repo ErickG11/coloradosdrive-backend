@@ -10,6 +10,7 @@
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
 import type { StudentListResult } from '../models/studentAdmin.model';
+import type { PracticeRecovery } from '../services/studentAccess.service';
 import type { StudentProfileResult } from '../services/studentProfile.service';
 
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
@@ -50,6 +51,14 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      set_student_active: {
+        Args: { p_actor: string; p_student: string; p_active: boolean };
+        Returns: boolean;
+      };
+      restore_student_practice: {
+        Args: { p_actor: string; p_student: string; p_slot: string };
+        Returns: PracticeRecovery;
+      };
       save_student_profile: {
         Args: {
           p_actor: string;
@@ -143,6 +152,33 @@ export interface Database {
       };
     };
     Tables: {
+      student_access_audit: {
+        Row: {
+          id: string;
+          student_id: string;
+          actor_id: string;
+          action: string;
+          created_at: string;
+        };
+        Insert: { student_id: string; actor_id: string; action: string };
+        Update: never;
+        Relationships: [];
+      };
+      student_practice_recovery: {
+        Row: {
+          student_id: string;
+          slot_id: string;
+          cohort_id: string;
+          instructor_id: string;
+          scheduled_at: string;
+          status: string;
+          reason: string | null;
+          updated_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       student_profile_audit: {
         Row: {
           operation_id: string;
