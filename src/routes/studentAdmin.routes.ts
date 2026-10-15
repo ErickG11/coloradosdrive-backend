@@ -7,6 +7,7 @@ import { validate, validateStudentProfile } from '../middlewares/validate';
 import { StudentAdminService } from '../services/studentAdmin.service';
 import { StudentAccessService } from '../services/studentAccess.service';
 import { StudentDeletionService } from '../services/studentDeletion.service';
+import { StudentCohortService } from '../services/studentCohort.service';
 import {
   StudentProfileService,
   profileFields,
@@ -20,6 +21,7 @@ const service = new StudentAdminService(supabaseAdmin);
 const profileService = new StudentProfileService(supabaseAdmin);
 const accessService = new StudentAccessService(supabaseAdmin);
 const deletionService = new StudentDeletionService(supabaseAdmin);
+const cohortService = new StudentCohortService(supabaseAdmin);
 studentAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 function actor(req: Request): string {
@@ -74,6 +76,41 @@ studentAdminRouter.get(
 );
 
 const id = param('id').isUUID();
+const cohortPath = '/:id/matriculas/:enrollmentId';
+studentAdminRouter.get(
+  `${cohortPath}/cohortes`,
+  [param('id').isUUID(), param('enrollmentId').isUUID()],
+  validateStudentProfile,
+  asyncHandler(async (req, res) => {
+    res.json(await cohortService.options(req.params.id, req.params.enrollmentId));
+  }),
+);
+studentAdminRouter.post(
+  `${cohortPath}/asignar-cohorte`,
+  [
+    param('id').isUUID(),
+    param('enrollmentId').isUUID(),
+    body().custom(
+      (value: unknown) =>
+        !!value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        Object.keys(value).every((key) => key === 'cohortId'),
+    ),
+    body('cohortId').isUUID().withMessage('Selecciona una cohorte válida'),
+  ],
+  validateStudentProfile,
+  asyncHandler(async (req, res) => {
+    res.json(
+      await cohortService.assign(
+        actor(req),
+        req.params.id,
+        req.params.enrollmentId,
+        (req.body as { cohortId: string }).cohortId,
+      ),
+    );
+  }),
+);
 // Ruta estática antes de /:id: también funciona sin perfil.
 studentAdminRouter.get(
   '/eliminaciones',
