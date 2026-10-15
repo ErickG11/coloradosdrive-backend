@@ -170,7 +170,7 @@ describe('admin estudiantes A', () => {
   });
 
   it('PATCH preserves the version and rejects fields outside the profile', async () => {
-    from.mockReturnValue(createChain({ data: user, error: null }));
+    from.mockImplementation((table:string)=>createChain({data:table==='student_deletion_operations'?null:user,error:null}));
     rpc.mockResolvedValue({
       data: { operationId: id, updatedAt: version, changedFields: ['nombre_completo'] },
       error: null,
@@ -227,7 +227,7 @@ describe('admin estudiantes A', () => {
   });
 
   it('PATCH accepts a leap date and the exact field length limits', async () => {
-    from.mockReturnValue(createChain({ data: user, error: null }));
+    from.mockImplementation((table:string)=>createChain({data:table==='student_deletion_operations'?null:user,error:null}));
     rpc.mockResolvedValue({
       data: { operationId: id, updatedAt: version, changedFields: [] },
       error: null,

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import { StudentProfileService } from '../../src/services/studentProfile.service';
-import { createSupabaseFromMock } from '../helpers/supabaseMock';
+import { createChain, createSupabaseFromMock } from '../helpers/supabaseMock';
 
 const id = '22222222-2222-4222-8222-222222222222';
 const actor = '11111111-1111-4111-8111-111111111111';
@@ -9,7 +9,12 @@ const version = '2026-10-01T10:00:00.123456+00:00';
 const row = { id, rol: 'estudiante', updated_at: version };
 const ok = (data: unknown) => ({ data, error: null });
 function setup(rows: unknown[] = [row]) {
-  const from = createSupabaseFromMock(rows.map(ok));
+  const reads = createSupabaseFromMock(rows.map(ok));
+  const from = jest.fn((table: string) =>
+    table === 'student_deletion_operations'
+      ? createChain(ok(null))
+      : (reads(table) as ReturnType<typeof createChain>),
+  );
   const rpc = jest.fn().mockResolvedValue(ok({ updatedAt: version, changedFields: ['correo'] }));
   const getUserById = jest.fn().mockResolvedValue(ok({ user: { email: 'old@example.com' } }));
   const updateUserById = jest.fn().mockResolvedValue(ok({ user: {} }));
@@ -28,6 +33,14 @@ describe('StudentProfileService A2', () => {
     jest.spyOn(console, 'error').mockImplementation();
   });
   afterEach(() => jest.restoreAllMocks());
+  it('si D comienza después de Auth, el guard SQL rechaza sin compensar una identidad en eliminación', async () => {
+    const s = setup();
+    s.rpc.mockResolvedValue({ data: null, error: { code: 'CD030' } });
+    await expect(
+      s.service.update(actor, id, { updatedAt: version, correo: 'fixture@example.test' }),
+    ).rejects.toMatchObject({ statusCode: 409, code: 'DELETION_PENDING' });
+    expect(s.updateUserById).toHaveBeenCalledTimes(1);
+  });
   it('passes the exact six-decimal version and a backend UUID; profile-only never calls Auth', async () => {
     const s = setup();
     await s.service.update(actor, id, { updatedAt: version, nombreCompleto: 'Nuevo' });
@@ -134,7 +147,7 @@ describe('StudentProfileService A2', () => {
         email: 'old@example.com',
         email_confirm: true,
       });
-      expect(s.from).toHaveBeenCalledTimes(1);
+      expect(s.from).toHaveBeenCalledTimes(2);
       expect(JSON.stringify((console.error as jest.Mock).mock.calls)).not.toMatch(
         /private@example|old@example|new@example/,
       );
@@ -152,7 +165,7 @@ describe('StudentProfileService A2', () => {
         message: expect.stringContaining('Revisar manualmente'),
       });
       expect(s.updateUserById).toHaveBeenCalledTimes(1);
-      expect(s.from).toHaveBeenCalledTimes(1);
+      expect(s.from).toHaveBeenCalledTimes(2);
       expect(console.error).toHaveBeenCalledWith(
         JSON.stringify({
           event: 'student_profile_manual_review_required',
@@ -173,7 +186,7 @@ describe('StudentProfileService A2', () => {
       message: expect.stringContaining('Revisar manualmente'),
     });
     expect(s.updateUserById).toHaveBeenCalledTimes(1);
-    expect(s.from).toHaveBeenCalledTimes(1);
+    expect(s.from).toHaveBeenCalledTimes(2);
     expect(console.error).toHaveBeenCalledWith(
       JSON.stringify({
         event: 'student_profile_manual_review_required',

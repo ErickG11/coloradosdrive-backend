@@ -46,7 +46,7 @@ const op: ManualOperation = {
 describe('Idempotencia y estado recuperable de confirmación', () => {
   it('incluye checklist y abono en el hash canónico de la solicitud', async () => {
     const rpc = jest.fn().mockResolvedValue({ data: { ...op, claimed: false }, error: null });
-    const db = { rpc } as unknown as SupabaseClient<Database>;
+    const db = { rpc,from:jest.fn(()=>createChain({data:null,error:null})) } as unknown as SupabaseClient<Database>;
     const service = new ManualEnrollmentService(db, {} as EmailService);
     await service.confirm('admin', 'op', input);
     await service.confirm('admin', 'op', { ...input,
@@ -64,6 +64,7 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
       return Promise.resolve({ data: false, error: null });
     });
     const from = jest.fn((table: string) => {
+      if (table==='student_deletion_operations') return createChain({data:null,error:null});
       if (table === 'manual_course_catalog')
         return createChain({ data: [{ tipo: 'A', course_id: 'a' }], error: null });
       if (table === 'cohorts') return createChain({ data: [], error: null });
@@ -142,7 +143,7 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
     const rpc = jest.fn().mockResolvedValue({ data: { ...op, claimed: false }, error: null }),
       createUser = jest.fn(),
       sendManualEnrollmentEmail = jest.fn();
-    const db = { rpc, auth: { admin: { createUser } } } as unknown as SupabaseClient<Database>;
+    const db = { rpc, from:jest.fn(()=>createChain({data:null,error:null})), auth: { admin: { createUser } } } as unknown as SupabaseClient<Database>;
     const service = new ManualEnrollmentService(db, {
       sendManualEnrollmentEmail,
     } as unknown as EmailService);
@@ -159,6 +160,7 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
     async (phase) => {
       const createUser = jest.fn(),
         db = {
+          from:jest.fn(()=>createChain({data:null,error:null})),
           rpc: jest.fn().mockResolvedValue({ data: { ...op, phase, claimed: false }, error: null }),
           auth: { admin: { createUser } },
         } as unknown as SupabaseClient<Database>;
@@ -171,6 +173,7 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
   it('clave con otro payload no ejecuta Auth', async () => {
     const createUser = jest.fn(),
       db = {
+        from:jest.fn(()=>createChain({data:null,error:null})),
         rpc: jest.fn().mockResolvedValue({
           data: null,
           error: { code: 'CD021', message: 'Clave utilizada con otra operación' },
@@ -189,7 +192,7 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
       .mockResolvedValueOnce({ data: { ...op, phase: 'needs_review' }, error: null });
     const chain = createChain({ data: { id: 'op' }, error: null });
     const deleteUser = jest.fn(),
-      from = jest.fn().mockReturnValue(chain);
+      from = jest.fn((table:string)=>table==='student_deletion_operations'?createChain({data:null,error:null}):chain);
     const db = {
       rpc,
       from,
@@ -215,7 +218,7 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
       .mockResolvedValueOnce({ data: { ...op, phase: 'processing', claimed: true }, error: null })
       .mockResolvedValueOnce({ data: op, error: null });
     const deleteUser = jest.fn(),
-      db = { rpc, auth: { admin: { deleteUser } } } as unknown as SupabaseClient<Database>;
+      db = { rpc, from:jest.fn(()=>createChain({data:null,error:null})), auth: { admin: { deleteUser } } } as unknown as SupabaseClient<Database>;
     expect(
       await new ManualEnrollmentService(db, {} as EmailService).confirm('admin', 'op', {
         ...input,
@@ -230,7 +233,7 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
       .mockResolvedValueOnce({ data: { ...op, phase: 'processing', claimed: true }, error: null })
       .mockResolvedValueOnce({ data: null, error: { code: 'connection_lost' } });
     const deleteUser = jest.fn(),
-      db = { rpc, auth: { admin: { deleteUser } } } as unknown as SupabaseClient<Database>;
+      db = { rpc, from:jest.fn(()=>createChain({data:null,error:null})), auth: { admin: { deleteUser } } } as unknown as SupabaseClient<Database>;
     await expect(
       new ManualEnrollmentService(db, {} as EmailService).confirm('admin', 'op', {
         ...input,

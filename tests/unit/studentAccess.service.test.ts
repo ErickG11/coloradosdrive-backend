@@ -1,11 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import { StudentAccessService } from '../../src/services/studentAccess.service';
-import { createSupabaseFromMock } from '../helpers/supabaseMock';
+import { createChain, createSupabaseFromMock } from '../helpers/supabaseMock';
 const student = '22222222-2222-4222-8222-222222222222',
   actor = '11111111-1111-4111-8111-111111111111';
 function setup(rows: unknown[] = [{ id: student }]) {
-  const from = createSupabaseFromMock(rows.map((data) => ({ data, error: null })));
+  const reads = createSupabaseFromMock(rows.map((data) => ({ data, error: null })));
+  const from = jest.fn((table: string) =>
+    table === 'student_deletion_operations'
+      ? createChain({ data: null, error: null })
+      : (reads(table) as ReturnType<typeof createChain>),
+  );
   const rpc = jest.fn().mockResolvedValue({ data: true, error: null });
   const updateUserById = jest.fn().mockResolvedValue({ data: { user: {} }, error: null });
   const db = { from, rpc, auth: { admin: { updateUserById } } };
