@@ -14,6 +14,8 @@ try {
   for (const name of [
     '001_init.sql',
     '002_enrollments_monto.sql',
+    '004_exams.sql',
+    '005_practice_slots.sql',
     '006_matricula_v2_schema.sql',
     '013_enrollment_status_pendiente_cohorte.sql',
     '014_enrollments_pendiente_cohorte_shape_y_cupo.sql',
@@ -162,6 +164,122 @@ try {
   );
   assert.equal((await list({ page: 100 })).total, 4);
 
+  // 028: ejecutar exclusivamente en esta base efímera, nunca en Supabase.
+  await db.exec('reset role');
+  const improved = await file('028_estudiantes_busqueda_mejorada.sql');
+  const rlsBefore = (
+    await db.query(
+      "select relname,relrowsecurity,relforcerowsecurity from pg_class where relnamespace='public'::regnamespace and relkind='r' order by relname",
+    )
+  ).rows;
+  await db.exec(improved.replace(/commit;\s*$/, 'rollback;'));
+  assert.equal(
+    (await scalar("select to_regprocedure('public.student_requirements(jsonb)') as value")).value,
+    null,
+  );
+  await db.exec(improved);
+  assert.deepEqual(
+    (
+      await db.query(
+        "select relname,relrowsecurity,relforcerowsecurity from pg_class where relnamespace='public'::regnamespace and relkind='r' order by relname",
+      )
+    ).rows,
+    rlsBefore,
+  );
+  await db.exec('set role service_role');
+  assert.equal((await list({ q: '%' })).total, 0);
+  assert.equal((await list({ q: '_' })).total, 0);
+  assert.equal((await list({ q: "' OR true --" })).total, 0);
+  await db.exec('reset role');
+  await db.query('update users set nombre_completo=$1 where id=$2', ['José Álvarez', id(2)]);
+  await db.exec('set role service_role');
+  assert.equal((await list({ q: 'JOSE ALVAREZ' })).items[0].id, id(2));
+  assert.equal((await list({ q: 'Jose\u0301 A\u0301lvarez' })).items[0].id, id(2));
+  assert.equal((await list({ q: '123-4567' })).total, 1);
+  assert.equal((await list({ q: '0000000002' })).total, 1);
+  const selected = await list({ cohort: id(30), size: 1, page: 100, q: 'sin coincidencias' });
+  assert.equal(selected.total, 0);
+  assert.equal(selected.items.length, 0);
+  assert.deepEqual(selected.cohortSummary, {
+    id: id(30),
+    name: 'A',
+    activeStudents: 1,
+    matchingActiveStudents: 0,
+    usedCapacity: 1,
+    totalCapacity: 20,
+  });
+  assert.equal((await list()).cohortSummary, null);
+  assert.equal((await list({ cohort: id(30), size: 1 })).cohortSummary.matchingActiveStudents, 1);
+  await db.exec('reset role');
+  await db.query('update users set activo=false where id=$1', [id(2)]);
+  await db.exec('set role service_role');
+  assert.deepEqual((await list({ cohort: id(30), active: false })).cohortSummary, {
+    id: id(30),
+    name: 'A',
+    activeStudents: 0,
+    matchingActiveStudents: 0,
+    usedCapacity: 1,
+    totalCapacity: 20,
+  });
+  await db.exec('reset role');
+  await db.query('update users set activo=true where id=$1', [id(2)]);
+  await db.exec('set role service_role');
+  let req = (await list({ cohort: id(30) })).items[0].requirements;
+  assert.deepEqual(req.pending, ['Documentos entregados', 'Exámenes definitivos aprobados']);
+  assert.equal(req.unavailable.length, 2); // pagos sin vencimientos, práctica sin objetivo
+  await db.exec('reset role');
+  await db.query('update enrollments set monto_abonado=100,horas_practica_objetivo=1 where id=$1', [
+    id(40),
+  ]);
+  for (const tipo of ['papeleta_votacion', 'tipo_sangre', 'titulo_bachiller']) {
+    await db.query(
+      "insert into enrollment_documents(enrollment_id,tipo,estado) values($1,$2,'no_aplica')",
+      [id(40), tipo],
+    );
+  }
+  await db.query(
+    "insert into exams(id,course_id,title,type,time_limit_minutes,passing_score_percent,is_published) values($1,$2,'Final','definitivo',30,70,true)",
+    [id(60), id(20)],
+  );
+  await db.query(
+    "insert into exam_attempts(exam_id,student_id,status,score_percent,passed,completed_at) values($1,$2,'completado',80,true,now())",
+    [id(60), id(2)],
+  );
+  await db.query(
+    "insert into practice_slots(cohort_id,instructor_id,student_id,scheduled_at,duration_minutes,status,attended) values($1,$2,$3,now()-interval '2 days',60,'completado',false)",
+    [id(30), id(6), id(2)],
+  );
+  await db.exec('set role service_role');
+  req = (await list({ cohort: id(30) })).items[0].requirements;
+  assert.deepEqual(req, { pending: ['Horas de práctica cubiertas'], unavailable: [] });
+  await db.exec('reset role');
+  await db.query('update practice_slots set attended=true where student_id=$1', [id(2)]);
+  await db.exec('set role service_role');
+  assert.deepEqual((await list({ cohort: id(30) })).items[0].requirements, {
+    pending: [],
+    unavailable: [],
+  });
+  for (const role of ['anon', 'authenticated']) {
+    await db.exec('reset role; set role ' + role);
+    await assert.rejects(list(), /permission denied/);
+    await assert.rejects(db.query("select public.student_search_key('a')"), /permission denied/);
+    await assert.rejects(db.query("select public.student_requirements('[]')"), /permission denied/);
+  }
+  await db.exec('reset role');
+  const reversal = await readFile(
+    new URL('../../docs/operations/estudiantes-busqueda-rollback.sql', import.meta.url),
+    'utf8',
+  );
+  await db.exec(reversal);
+  assert.equal(
+    (await scalar("select to_regprocedure('public.student_search_key(text)') as value")).value,
+    null,
+  );
+  await db.exec('set role service_role');
+  assert.equal((await list({ q: 'JOSE' })).total, 0); // vuelve la búsqueda anterior
+  await db.exec('reset role');
+  await db.exec(improved); // también valida reaplicación tras rollback
+
   const original = '2026-10-01T10:00:00.123456+00:00';
   await db.exec('reset role');
   await db.query('insert into auth.users values ($1)', [id(7)]);
@@ -208,7 +326,8 @@ try {
     JSON.stringify({
       result: 'PASS',
       engine: (await scalar('select version() as v')).v,
-      checks: 'A1 begin/rollback, reversal, filters, stable pagination, ACL, timestamp precision',
+      checks:
+        'A1 + 028: Unicode/literal search, requirements, cohort counts, ACL, rollback, reapply, pagination, timestamp precision',
       wire,
       milliseconds,
       network: false,
