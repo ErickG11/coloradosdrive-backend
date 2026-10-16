@@ -151,13 +151,16 @@ describe('admin estudiantes A', () => {
   it('returns the existing expanded profile without enrollments', async () => {
     from
       .mockReturnValueOnce(createChain({ data: user, error: null }))
-      .mockReturnValueOnce(createChain({ data: [], error: null }));
+      .mockReturnValueOnce(createChain({ data: [], error: null }))
+      .mockReturnValue(createChain({ data: [], error: null }));
     getAuth.mockResolvedValue({ data: { user: { email: 'auth@example.com' } }, error: null });
     const res = await request(app).get(`${path}/${id}`).set('Authorization', token());
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       id,
       correo: 'auth@example.com',
+      graduation: { pendingCount: null, enrollments: [] },
+      practiceSchedule: { upcoming: [], recent: [], recovery: [] },
       enrollments: [],
       updatedAt: version,
     });

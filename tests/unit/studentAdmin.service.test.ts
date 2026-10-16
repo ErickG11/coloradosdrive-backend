@@ -1,7 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import { StudentAdminService } from '../../src/services/studentAdmin.service';
-import { createSupabaseFromMock } from '../helpers/supabaseMock';
+import {
+  createChain,
+  createSupabaseFromMock,
+  type SupabaseChainMock,
+} from '../helpers/supabaseMock';
 
 const studentId = '22222222-2222-4222-8222-222222222222';
 const actorId = '11111111-1111-4111-8111-111111111111';
@@ -26,7 +30,9 @@ const user = {
 const result = (data: unknown) => ({ data, error: null });
 
 function setup(rows: unknown[] = [user]) {
-  const from = createSupabaseFromMock(rows.map(result));
+  const from = createSupabaseFromMock(
+    [...rows, ...Array.from({ length: 4 }, () => [])].map(result),
+  );
   const getUserById = jest
     .fn()
     .mockResolvedValue({ data: { user: { email: 'old@example.com' } }, error: null });
@@ -37,7 +43,10 @@ function setup(rows: unknown[] = [user]) {
     );
   const rpc = jest.fn();
   const db = { from, rpc, auth: { admin: { getUserById, updateUserById } } };
-  const service = new StudentAdminService(db as unknown as SupabaseClient<Database>);
+  const service = new StudentAdminService(
+    db as unknown as SupabaseClient<Database>,
+    () => new Date('2026-10-16T15:00:00Z'),
+  );
   return { service, db, rpc, from, getUserById, updateUserById };
 }
 
@@ -146,13 +155,13 @@ describe('StudentAdminService', () => {
     });
     expect(detail.enrollments[1]).toMatchObject({ saldo: null, montoAbonado: 500, cohorte: null });
     expect(s.getUserById).toHaveBeenCalledTimes(1);
-    expect(s.from).toHaveBeenCalledTimes(5);
+    expect(s.from).toHaveBeenCalledTimes(9);
   });
 
   it('keeps students without enrollments in the detail', async () => {
     const s = setup([user, []]);
     expect((await s.service.get(studentId)).enrollments).toEqual([]);
-    expect(s.from).toHaveBeenCalledTimes(2);
+    expect(s.from).toHaveBeenCalledTimes(4);
   });
 
   it.each(['rejection', 'network'])('keeps the detail available on Auth %s', async (failure) => {
@@ -194,4 +203,115 @@ describe('StudentAdminService', () => {
     await expect(s.service.get(studentId)).rejects.toMatchObject({ statusCode: 404 });
     expect(s.getUserById).not.toHaveBeenCalled();
   });
+});
+
+describe('Ficha consolidada', () => {
+  it('calcula pagos, prácticas y exámenes en lotes y expone solo el nombre del instructor', async () => {
+    const enrollment = {
+      id: 'e1',
+      student_id: studentId,
+      course_id: 'c1',
+      course_type: 'A',
+      cohort_id: 'h1',
+      status: 'activo',
+      fecha_inscripcion: version,
+      monto_total: '100',
+      monto_abonado: '30',
+      descuento: '0',
+      horas_practica_objetivo: 10,
+    };
+    const slots = Array.from({ length: 6 }, (_, i) => ({
+      id: 's' + String(i),
+      cohort_id: 'h1',
+      instructor_id: 'teacher',
+      scheduled_at: '2026-10-15T15:00:00Z',
+      duration_minutes: 60,
+      status: 'completado',
+      attended: true,
+    }));
+    const s = setup([
+      user,
+      [enrollment],
+      ['cedula', 'papeleta_votacion', 'tipo_sangre', 'titulo_bachiller'].map((tipo) => ({
+        enrollment_id: 'e1',
+        tipo,
+        estado: tipo === 'cedula' ? 'pendiente' : 'entregado',
+      })),
+      [{ id: 'c1', nombre: 'Curso de prueba', tipo: 'A' }],
+      [{ id: 'h1', nombre: 'Cohorte de prueba' }],
+      [
+        { id: 'x1', course_id: 'c1' },
+        { id: 'x2', course_id: 'c1' },
+      ],
+      [{ exam_id: 'x1', status: 'completado', passed: true }],
+      slots,
+      [],
+      [
+        {
+          id: 'teacher',
+          nombre_completo: 'Instructor de prueba',
+          cedula: 'NO-EXPONER',
+          telefono: 'NO-EXPONER',
+        },
+      ],
+    ]);
+    const detail = await s.service.get(studentId);
+    expect(detail.graduation.pendingCount).toBe(4);
+    expect(detail.graduation.enrollments[0].checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'practice', detail: '6 de 10 horas' }),
+        expect.objectContaining({
+          key: 'payments',
+          detail: 'Saldo pendiente $70.00; abonado $30.00',
+        }),
+        expect.objectContaining({ key: 'exams', detail: '1 de 2 aprobados' }),
+      ]),
+    );
+    expect(detail.practiceSchedule.recent).toHaveLength(6);
+    expect(detail.practiceSchedule.recent[0].instructor).toBe('Instructor de prueba');
+    expect(JSON.stringify(detail)).not.toContain('NO-EXPONER');
+    expect(detail.updatedAt).toBe(version);
+    expect(s.from.mock.calls.map(([table]) => String(table))).toEqual([
+      'users',
+      'enrollments',
+      'enrollment_documents',
+      'courses',
+      'cohorts',
+      'exams',
+      'exam_attempts',
+      'practice_slots',
+      'student_practice_recovery',
+      'users',
+    ]);
+    const chain = (table: string): SupabaseChainMock =>
+      s.from.mock.results[s.from.mock.calls.findIndex(([name]) => name === table)]
+        .value as SupabaseChainMock;
+    expect(chain('exams').eq).toHaveBeenCalledWith('type', 'definitivo');
+    expect(chain('exams').eq).toHaveBeenCalledWith('is_published', true);
+    expect(chain('exam_attempts').eq).toHaveBeenCalledWith('student_id', studentId);
+    expect(chain('practice_slots').eq).toHaveBeenCalledWith('student_id', studentId);
+    expect(chain('student_practice_recovery').eq).toHaveBeenCalledWith('student_id', studentId);
+    expect(s.from.mock.results[9].value.select).toHaveBeenCalledWith('id,nombre_completo');
+    expect(s.rpc).not.toHaveBeenCalled();
+    expect(s.updateUserById).not.toHaveBeenCalled();
+  });
+  it.each(['practice_slots', 'student_practice_recovery'])(
+    'si falla %s no presenta requisitos incompletos como cumplidos',
+    async (table) => {
+      const s = setup([user, []]);
+      // Primeras dos respuestas son perfil y matrículas; después consultas del horario.
+      s.from.mockReset().mockImplementation((name: string) =>
+        createChain({
+          data: name === 'users' ? user : [],
+          error: name === table ? { code: '42P01' } : null,
+        }),
+      );
+      const log = jest.spyOn(console, 'error').mockImplementation();
+      try {
+        await expect(s.service.get(studentId)).rejects.toMatchObject({ statusCode: 503 });
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
 });
