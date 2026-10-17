@@ -20,6 +20,7 @@ export interface StudentListResult extends Record<string, unknown> {
     telefono: string | null;
     activo: boolean;
     createdAt: string;
+    requirements?: { pending: string[]; unavailable: string[] };
     matchingEnrollments: {
       id: string;
       courseId: string;
@@ -28,6 +29,14 @@ export interface StudentListResult extends Record<string, unknown> {
       status: Database['public']['Tables']['enrollments']['Row']['status'];
     }[];
   }[];
+  cohortSummary?: {
+    id: string;
+    name: string;
+    activeStudents: number;
+    matchingActiveStudents: number;
+    usedCapacity: number;
+    totalCapacity: number;
+  } | null;
   total: number;
   page: number;
   pageSize: number;

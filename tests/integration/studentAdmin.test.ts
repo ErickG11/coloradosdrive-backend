@@ -60,11 +60,46 @@ describe('admin estudiantes A', () => {
       kind === 'list' ? request(app).get(path) : request(app).get(`${path}/${id}`);
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
+    from.mockReturnValue(
+      createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+    );
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
     expect(getAuth).not.toHaveBeenCalled();
     expect(updateAuth).not.toHaveBeenCalled();
+  });
+
+  it('returns requirements and cohort totals in the same list request', async () => {
+    const payload = {
+      items: [
+        { id, requirements: { pending: ['Documentos entregados'], unavailable: ['Pagos al día'] } },
+      ],
+      total: 1,
+      page: 2,
+      pageSize: 20,
+      cohortSummary: {
+        id,
+        name: 'A',
+        activeStudents: 24,
+        matchingActiveStudents: 1,
+        usedCapacity: 25,
+        totalCapacity: 30,
+      },
+    };
+    rpc.mockResolvedValue({ data: payload, error: null });
+    const response = await request(app)
+      .get(path)
+      .query({ q: 'JOSÉ', cohortId: id, page: 2 })
+      .set('Authorization', token());
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(payload);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith(
+      'list_admin_students',
+      expect.objectContaining({ p_q: 'JOSÉ', p_cohort: id, p_page: 2 }),
+    );
+    expect(getAuth).not.toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
   });
 
   it('parses list filters independently and does not touch Auth', async () => {
@@ -164,13 +199,17 @@ describe('admin estudiantes A', () => {
       request(app).patch(`${path}/${id}`).send({ updatedAt: version, nombreCompleto: 'Nuevo' });
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
+    from.mockReturnValue(
+      createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+    );
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
   });
 
   it('PATCH preserves the version and rejects fields outside the profile', async () => {
-    from.mockImplementation((table:string)=>createChain({data:table==='student_deletion_operations'?null:user,error:null}));
+    from.mockImplementation((table: string) =>
+      createChain({ data: table === 'student_deletion_operations' ? null : user, error: null }),
+    );
     rpc.mockResolvedValue({
       data: { operationId: id, updatedAt: version, changedFields: ['nombre_completo'] },
       error: null,
@@ -227,7 +266,9 @@ describe('admin estudiantes A', () => {
   });
 
   it('PATCH accepts a leap date and the exact field length limits', async () => {
-    from.mockImplementation((table:string)=>createChain({data:table==='student_deletion_operations'?null:user,error:null}));
+    from.mockImplementation((table: string) =>
+      createChain({ data: table === 'student_deletion_operations' ? null : user, error: null }),
+    );
     rpc.mockResolvedValue({
       data: { operationId: id, updatedAt: version, changedFields: [] },
       error: null,
