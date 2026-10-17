@@ -7,6 +7,8 @@ interface ErrorResponseBody {
   status: 'error';
   message: string;
   stack?: string;
+  code?: string;
+  field?: string;
 }
 
 export function notFoundHandler(req: Request, _res: Response, next: NextFunction): void {
@@ -28,6 +30,10 @@ export function errorHandler(
   }
 
   const body: ErrorResponseBody = { status: 'error', message };
+  if (err instanceof AppError && err.code) {
+    body.code = err.code;
+    if (err.field) body.field = err.field;
+  }
   if (!isProduction) {
     body.stack = err.stack;
   }

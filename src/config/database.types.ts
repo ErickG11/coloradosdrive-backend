@@ -10,6 +10,7 @@
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
 import type { StudentListResult } from '../models/studentAdmin.model';
+import type { StudentProfileResult } from '../services/studentProfile.service';
 
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
 export type StudentStatus =
@@ -49,6 +50,17 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      save_student_profile: {
+        Args: {
+          p_actor: string;
+          p_student: string;
+          p_operation: string;
+          p_base_version: string;
+          p_profile: Record<string, string | null>;
+          p_email_changed: boolean;
+        };
+        Returns: StudentProfileResult;
+      };
       list_admin_students: {
         Args: {
           p_actor: string;
@@ -131,6 +143,24 @@ export interface Database {
       };
     };
     Tables: {
+      student_profile_audit: {
+        Row: {
+          operation_id: string;
+          actor_id: string;
+          student_id: string;
+          changed_fields: string[];
+          created_at: string;
+        };
+        Insert: {
+          operation_id: string;
+          actor_id: string;
+          student_id: string;
+          changed_fields: string[];
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
       manual_course_catalog: {
         Row: { tipo: CourseType; course_id: string };
         Insert: { tipo: CourseType; course_id: string };
