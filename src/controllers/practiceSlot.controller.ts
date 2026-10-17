@@ -11,6 +11,7 @@ import type {
 } from '../models/practiceSlot.model';
 import { PracticeSlotService } from '../services/practiceSlot.service';
 import { AppError } from '../utils/AppError';
+import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
 
 const practiceSlotService = new PracticeSlotService(supabaseAdmin);
 
@@ -42,7 +43,12 @@ export async function listPracticeSlots(
   }
 
   if (req.user.role === 'instructor') {
-    const slots = await practiceSlotService.listSlotsForInstructor(req.user.id);
+    const from = typeof req.query.from === 'string'
+      ? normalizePracticeScheduledAt(req.query.from) : undefined;
+    const to = typeof req.query.to === 'string'
+      ? normalizePracticeScheduledAt(req.query.to) : undefined;
+    const slots = await practiceSlotService.listSlotsForInstructor(req.user.id,
+      from !== undefined && to !== undefined ? { from, to } : undefined);
     res.status(200).json(slots);
     return;
   }

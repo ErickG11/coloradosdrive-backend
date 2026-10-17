@@ -265,12 +265,17 @@ export class PracticeSlotService {
   // RF-03: "acceso de solo lectura a su disponibilidad semanal y a los
   // estudiantes asignados" - todas sus franjas, en cualquier estado, no
   // solo asignado/confirmado.
-  async listSlotsForInstructor(instructorId: string): Promise<PracticeSlotWithNames[]> {
-    const { data, error } = await this.supabase
+  async listSlotsForInstructor(
+    instructorId: string,
+    range?: { from: string; to: string },
+  ): Promise<PracticeSlotWithNames[]> {
+    let query = this.supabase
       .from('practice_slots')
       .select(SELECT_WITH_NAMES)
       .eq('instructor_id', instructorId)
-      .order('scheduled_at', { ascending: true })
+      .order('scheduled_at', { ascending: true });
+    if (range) query = query.gte('scheduled_at', range.from).lt('scheduled_at', range.to);
+    const { data, error } = await query
       .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
 
     if (error) {
