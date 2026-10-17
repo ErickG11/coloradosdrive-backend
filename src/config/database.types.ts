@@ -52,12 +52,29 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      assign_pending_enrollment_cohort: {
+        Args: {
+          p_actor: string;
+          p_student: string;
+          p_enrollment: string;
+          p_cohort: string;
+          p_cohort_version: string;
+          p_validated_day: string;
+        };
+        Returns: Database['public']['Tables']['enrollments']['Row'];
+      };
       begin_student_deletion: {
         Args: { p_actor: string; p_student: string; p_confirmation: string | null };
         Returns: StudentDeletionOperation;
       };
       advance_student_deletion: {
-        Args: { p_actor: string; p_student: string; p_phase: string; p_version: string; p_next: string };
+        Args: {
+          p_actor: string;
+          p_student: string;
+          p_phase: string;
+          p_version: string;
+          p_next: string;
+        };
         Returns: StudentDeletionOperation;
       };
       student_deletion_storage_paths: {
@@ -379,6 +396,8 @@ export interface Database {
       };
       enrollments: {
         Row: {
+          cohort_assigned_by: string | null;
+          cohort_assigned_at: string | null;
           id: string;
           course_id: string;
           course_type: CourseType;
