@@ -70,7 +70,7 @@ describe('practice-slots student actions', () => {
   });
 
   function authenticateStudent() {
-    mockedFrom.mockReturnValue(createChain({ data: { debe_cambiar_password: false }, error: null }));
+    mockedFrom.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
     return `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`;
   }
 
@@ -140,7 +140,7 @@ describe('practice-slots student actions', () => {
       .set('Authorization', authenticateStudent());
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'liberado', studentId: null, confirmedAt: null, confirmationNotifiedAt: null });
-    expect(httpSend).toHaveBeenCalledWith('slot-released', { slotId, scheduledAt: '2026-03-01T10:00:00.000Z' });
+    expect(httpSend).toHaveBeenCalledWith('slot-released', {});
   });
 
   it('una franja reclamada de nuevo no hereda el ciclo anterior devuelto por PostgreSQL', async () => {
@@ -167,7 +167,7 @@ describe('practice-slots student actions', () => {
   describe('PATCH /practice-slots/:id/attendance (instructor)', () => {
     it('con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
-        createChain({ data: { debe_cambiar_password: false }, error: null }),
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
       );
       const res = await request(app)
         .patch(`/practice-slots/${slotId}/attendance`)

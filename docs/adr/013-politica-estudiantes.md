@@ -4,10 +4,9 @@
 
 Diseño aprobado en dirección; A1 y A2 implementadas para revisión en sus ramas.
 Migraciones 023 y 024 aplicadas al proyecto real con aprobación explícita.
-B (acceso/reservas), C (asignación de cohorte) y D (eliminación) pendientes.
-Revisión D: eliminación sin desactivación previa y confirmación por cédula;
-orden y reutilización de confirmación aprobados; refinamientos pendientes de OK.
-Implementar B y verificar sus controles antes de D; no se inicia D todavía.
+B (025) y D (026) aplicadas en Supabase el 15/10/2026: 025 mediante
+`apply_migration`; 026 manualmente desde SQL Editor, por lo que no figura en el
+historial de migraciones. C (asignación de cohorte) pendiente.
 
 ## Decisión
 
@@ -44,17 +43,26 @@ No incluir valores del perfil ni detalles crudos de Auth/PostgreSQL en errores.
 Mantener bloqueo optimista en A2: trigger real habilitado en cada UPDATE y
 updated_at con seis decimales. Transportar el string exacto sin Date de JS.
 
-B bloqueará acceso del alumno inactivo o sin perfil, incluidas rutas excepcionales
+B implementada en feat/estudiantes-desactivar-reactivar; SQL 025 aplicada y
+verificada por el responsable. B bloquea acceso del alumno inactivo o sin perfil, incluidas rutas excepcionales
 y autorizaciones Realtime, combinando activo y ban en Auth. Desactivación:
 cancelar solo reservas futuras con motivo trazable, conservar matrícula, cupo,
 abono, prácticas pasadas y asistencia. Reactivación: acceso primero y recuperación
 individual por la lógica existente; conflictos pendientes de reprogramar.
+Canales ya abiertos pueden recibir señales vacías hasta que expire el JWT; sin datos expuestos.
+La auditoría de acceso solo conserva IDs/acción/fecha; una tabla de recuperación
+guarda las reservas canceladas por desactivación, necesaria al liberar student_id.
+Tras D, student_access_audit conserva solo UUIDs del alumno/actor, acción y fecha, sin valores personales ni FK al perfil.
+No hay procesos nuevos ni claves de entorno nuevas. SQL y verificaciones:
+operations/estudiantes-b.md. Los fallos de reservas no revierten el acceso reactivado;
+los fallos de Auth/BD sí requieren revisión y reintentar la misma acción.
 
 Se cierra la decisión pendiente de prácticas simultáneas: un alumno no puede
 tener prácticas solapadas, incluso entre cursos A/B. B añadirá exclusión GiST
 por alumno, bloques de 60 minutos e intervalos [inicio,fin), junto a la exclusión
 existente por instructor. Preflight repetido, lock fuera de horario y lock_timeout.
-Esta restricción no se aplica en A1 ni A2.
+La exclusión por alumno está en 025, con lock_timeout=5s y aplicación
+fuera de horario; aborta ante solapamientos existentes, sin normalizar datos.
 
 C asignará cohorte actualizando la matrícula pendiente: validar curso, ventana,
 cupo y abono <= neto bajo locks, sin crear otra matrícula ni prácticas implícitas.
@@ -77,7 +85,7 @@ GET /admin/estudiantes/eliminaciones lista pendientes/fallidas paginadas, inclus
 sin users, por UUID/estado/fase y actores/fechas, sin datos personales del alumno.
 Declarar esa ruta estática antes de /:id.
 
-Proponer una única tabla mínima student_deletion_operations sin FK al perfil:
+Una única tabla mínima student_deletion_operations en 026, sin FK al perfil:
 student_id como PK/Auth ID original, actor inicial, confirmed_at, fase, estado,
 último actor/fecha/contador de reintentos y updated_at. La misma fila registra
 data_deleted_by/data_deleted_at dentro de la transacción como auditoría mínima.
@@ -108,7 +116,7 @@ sin ampliar por defecto bloqueos D a subidas ni a todos los endpoints.
 
 practice_slots es inventario del instructor/cohorte. D conserva las franjas
 futuras: student_id=NULL, status=liberado y limpiar metadatos del alumno.
-No existe estado libre. Propuesta para aprobación: borrar franjas ya iniciadas/
+No existe estado libre. Política aprobada: borrar franjas ya iniciadas/
 pasadas aún vinculadas al alumno (scheduled_at <= corte de servidor bajo locks).
 Desvincular completado rompe el CHECK de alumno obligatorio; convertirlo en
 sin_practica falsea la asistencia. Borrar evita nueva maquinaria, con el costo
@@ -129,6 +137,10 @@ incluido request si aparece. No hay payments hoy; adaptar D cuando RF-04 exista.
 
 No existe transacción global con Auth/Storage. Ban/eliminación no invalidan
 retroactivamente JWT ni garantizan desconectar canales Realtime ya abiertos.
+En D, la fase storage incluye limpieza de archivos y la transacción; esta última
+confirma atómicamente la auditoría y la siguiente fase auth. No se persiste un manifiesto.
+Guard previo a Auth y triggers acotados impiden edición/reactivación/matrícula
+durante D (409 DELETION_PENDING); un unban en vuelo se cierra de nuevo al detectar D.
 La garantía de recuperación de edición tras crash se reduce al adoptar A2 simple;
 D conserva solo un registro mínimo para reanudación manual después de reinicios.
 

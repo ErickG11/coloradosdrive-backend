@@ -60,7 +60,7 @@ describe('admin estudiantes A', () => {
       kind === 'list' ? request(app).get(path) : request(app).get(`${path}/${id}`);
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(createChain({ data: { debe_cambiar_password: false }, error: null }));
+    from.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
     expect(getAuth).not.toHaveBeenCalled();
@@ -164,13 +164,13 @@ describe('admin estudiantes A', () => {
       request(app).patch(`${path}/${id}`).send({ updatedAt: version, nombreCompleto: 'Nuevo' });
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(createChain({ data: { debe_cambiar_password: false }, error: null }));
+    from.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
   });
 
   it('PATCH preserves the version and rejects fields outside the profile', async () => {
-    from.mockReturnValue(createChain({ data: user, error: null }));
+    from.mockImplementation((table:string)=>createChain({data:table==='student_deletion_operations'?null:user,error:null}));
     rpc.mockResolvedValue({
       data: { operationId: id, updatedAt: version, changedFields: ['nombre_completo'] },
       error: null,
@@ -227,7 +227,7 @@ describe('admin estudiantes A', () => {
   });
 
   it('PATCH accepts a leap date and the exact field length limits', async () => {
-    from.mockReturnValue(createChain({ data: user, error: null }));
+    from.mockImplementation((table:string)=>createChain({data:table==='student_deletion_operations'?null:user,error:null}));
     rpc.mockResolvedValue({
       data: { operationId: id, updatedAt: version, changedFields: [] },
       error: null,
