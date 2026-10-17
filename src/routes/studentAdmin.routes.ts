@@ -1,15 +1,21 @@
 import { Router, type Request } from 'express';
-import { param, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
-import { validate } from '../middlewares/validate';
+import { validate, validateStudentProfile } from '../middlewares/validate';
 import { StudentAdminService } from '../services/studentAdmin.service';
+import {
+  StudentProfileService,
+  profileFields,
+  type StudentProfilePatch,
+} from '../services/studentProfile.service';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 
 export const studentAdminRouter = Router();
 const service = new StudentAdminService(supabaseAdmin);
+const profileService = new StudentProfileService(supabaseAdmin);
 studentAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 function actor(req: Request): string {
@@ -64,6 +70,62 @@ studentAdminRouter.get(
 );
 
 const id = param('id').isUUID();
+studentAdminRouter.patch(
+  '/:id',
+  [
+    id,
+    body().custom((input: unknown) => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+      const value = input as Record<string, unknown>;
+      return (
+        Object.keys(value).every((key) =>
+          ['updatedAt', 'correo', ...Object.keys(profileFields)].includes(key),
+        ) && Object.keys(value).some((key) => key !== 'updatedAt')
+      );
+    }),
+    body('updatedAt')
+      .isString()
+      .bail()
+      .matches(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/)
+      .bail()
+      .isISO8601({ strict: true, strictSeparator: true }),
+    body('correo').optional().isString().isEmail().isLength({ max: 254 }),
+    body('cedula')
+      .optional()
+      .isString()
+      .matches(/^\d{10}$/),
+    body('nombreCompleto').optional().isString().trim().isLength({ min: 1, max: 200 }),
+    body('fechaNacimiento')
+      .optional({ nullable: true })
+      .isString()
+      .bail()
+      .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .bail()
+      .isISO8601({ strict: true })
+      .custom((value: string) => !value.startsWith('0000-')),
+    ...Object.entries({
+      telefono: 20,
+      direccion: 500,
+      tipoSangre: 500,
+      genero: 500,
+      ciudadania: 500,
+    }).map(([field, max]) =>
+      body(field)
+        .optional({ nullable: true })
+        .isString()
+        .bail()
+        .trim()
+        .isLength({ max })
+        .withMessage(`${field} no puede superar ${String(max)} caracteres`),
+    ),
+  ],
+  validateStudentProfile,
+  asyncHandler(async (req, res) => {
+    res.json(
+      await profileService.update(actor(req), req.params.id, req.body as StudentProfilePatch),
+    );
+  }),
+);
 studentAdminRouter.get(
   '/:id',
   [id],
