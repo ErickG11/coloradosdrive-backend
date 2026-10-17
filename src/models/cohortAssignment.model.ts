@@ -19,8 +19,12 @@ export interface CandidateCohort {
 
 export type AssignmentWarning = 'matricula_por_cerrar';
 
+export interface CohortCandidateSnapshot extends CandidateCohort {
+  courseId: string;
+  updatedAt: string;
+}
+
 // Sin cohorte elegible, el postulante queda pendiente de cohorte: no es un
 // error, es un resultado válido (el admin la asignará manualmente después).
 export type AssignmentResult =
-  | { cohortId: string; warning: AssignmentWarning | null }
-  | { cohortId: null };
+  { cohortId: string; warning: AssignmentWarning | null } | { cohortId: null };

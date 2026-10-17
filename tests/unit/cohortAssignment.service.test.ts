@@ -2,7 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../../src/config/database.types';
 import type { CandidateCohort } from '../../src/models/cohortAssignment.model';
-import { assignCohort, CohortAssignmentService } from '../../src/services/cohortAssignment.service';
+import {
+  assignCohort,
+  CohortAssignmentService,
+  isCohortWindowOpen,
+  schoolToday,
+} from '../../src/services/cohortAssignment.service';
 import { createSupabaseFromMock, type ChainResult } from '../helpers/supabaseMock';
 
 const day = (value: string): Date => new Date(`${value}T00:00:00Z`);
@@ -22,6 +27,22 @@ function buildCandidate(overrides: Partial<CandidateCohort> = {}): CandidateCoho
 }
 
 describe('assignCohort (función pura)', () => {
+  it('comparte la ventana inclusiva y el día civil de Guayaquil cerca de medianoche UTC', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-01-16T04:59:59Z'));
+    try {
+      const candidate = buildCandidate({
+        fechaInicioMatricula: new Date('2026-01-15T05:00:00Z'),
+        fechaFinMatricula: new Date('2026-01-15T05:00:00Z'),
+      });
+      expect(isCohortWindowOpen(schoolToday(), candidate)).toBe(true);
+      expect(assignCohort(schoolToday(), [candidate]).cohortId).toBe(candidate.id);
+      jest.setSystemTime(new Date('2026-01-16T05:00:00Z'));
+      expect(isCohortWindowOpen(schoolToday(), candidate)).toBe(false);
+      expect(assignCohort(schoolToday(), [candidate]).cohortId).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
   it('asigna la única candidata elegible', () => {
     const result = assignCohort(day('2026-01-15'), [buildCandidate()]);
     expect(result).toEqual({ cohortId: 'cohort-1', warning: null });
@@ -139,7 +160,9 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
   }
 
   function buildService(results: ChainResult[]): CohortAssignmentService {
-    const supabase = { from: createSupabaseFromMock(results) } as unknown as SupabaseClient<Database>;
+    const supabase = {
+      from: createSupabaseFromMock(results),
+    } as unknown as SupabaseClient<Database>;
     return new CohortAssignmentService(supabase);
   }
 

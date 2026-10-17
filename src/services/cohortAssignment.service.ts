@@ -6,6 +6,7 @@ import type {
   AssignmentResult,
   AssignmentWarning,
   CandidateCohort,
+  CohortCandidateSnapshot,
 } from '../models/cohortAssignment.model';
 import { parseFechaCivil, SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
 
@@ -33,16 +34,23 @@ export function isCupoExceededError(error: unknown): boolean {
 // filtradas por curso, con su ocupación actual), decide a cuál asignar al
 // postulante. Sin I/O, fácil de testear exhaustivamente sin mockear nada.
 // ---------------------------------------------------------------------
+export function isCohortWindowOpen(
+  today: Date,
+  cohort: Pick<CandidateCohort, 'fechaInicioMatricula' | 'fechaFinMatricula'>,
+): boolean {
+  return (
+    today.getTime() >= cohort.fechaInicioMatricula.getTime() &&
+    today.getTime() <= cohort.fechaFinMatricula.getTime()
+  );
+}
+
 export function assignCohort(
   today: Date,
   candidates: CandidateCohort[],
   warningThresholdDays: number = DEFAULT_WARNING_THRESHOLD_DAYS,
 ): AssignmentResult {
   const eligible = candidates.filter(
-    (c) =>
-      today.getTime() >= c.fechaInicioMatricula.getTime() &&
-      today.getTime() <= c.fechaFinMatricula.getTime() &&
-      c.cupoOcupado < c.cupoMaximo,
+    (c) => isCohortWindowOpen(today, c) && c.cupoOcupado < c.cupoMaximo,
   );
 
   if (eligible.length === 0) {
@@ -96,6 +104,8 @@ export interface AssignCohortForCourseResult {
 type CohortCandidateRow = Pick<
   Database['public']['Tables']['cohorts']['Row'],
   | 'id'
+  | 'course_id'
+  | 'updated_at'
   | 'nombre'
   | 'precio'
   | 'cupo_maximo'
@@ -113,7 +123,7 @@ export class CohortAssignmentService {
     today: Date = schoolToday(),
     excludeCohortIds: readonly string[] = [],
   ): Promise<AssignCohortForCourseResult> {
-    const candidates = await this.fetchCandidates(courseId, excludeCohortIds);
+    const candidates = await this.candidatesForCourse(courseId, excludeCohortIds);
     const result = assignCohort(today, candidates);
 
     if (result.cohortId === null) {
@@ -129,14 +139,14 @@ export class CohortAssignmentService {
     };
   }
 
-  private async fetchCandidates(
+  async candidatesForCourse(
     courseId: string,
-    excludeCohortIds: readonly string[],
-  ): Promise<CandidateCohort[]> {
+    excludeCohortIds: readonly string[] = [],
+  ): Promise<CohortCandidateSnapshot[]> {
     const { data, error } = await this.supabase
       .from('cohorts')
       .select(
-        'id, nombre, precio, cupo_maximo, fecha_inicio_matricula, fecha_fin_matricula, fecha_inicio_curso, created_at',
+        'id, course_id, updated_at, nombre, precio, cupo_maximo, fecha_inicio_matricula, fecha_fin_matricula, fecha_inicio_curso, created_at',
       )
       .eq('course_id', courseId);
     if (error) {
@@ -153,6 +163,8 @@ export class CohortAssignmentService {
 
     return cohortRows.map((row) => ({
       id: row.id,
+      courseId: row.course_id,
+      updatedAt: row.updated_at,
       nombre: row.nombre,
       precio: Number(row.precio),
       cupoMaximo: row.cupo_maximo,
@@ -191,6 +203,6 @@ export class CohortAssignmentService {
 // riesgo de un desfase de un día cerca de la medianoche — Ecuador es
 // UTC-5, así que la segunda mitad de cada día civil local cae en el día
 // siguiente en UTC.
-function schoolToday(): Date {
+export function schoolToday(): Date {
   return DateTime.now().setZone(SCHOOL_TIMEZONE).startOf('day').toJSDate();
 }
