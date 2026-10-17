@@ -16,6 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "jest",
+    "test:students-db": "node tests/database/students.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
@@ -35,6 +36,7 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "@eslint/js": "^9.9.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",

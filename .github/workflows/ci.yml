@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    env:
+      DISABLE_CRON: 'true'
 
     steps:
       - name: Checkout
@@ -28,6 +30,9 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Student migration (isolated PostgreSQL)
+        run: npm run test:students-db
 
       - name: Build
         run: npm run build

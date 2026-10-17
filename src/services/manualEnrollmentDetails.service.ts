@@ -23,45 +23,69 @@ export interface ManualEnrollmentDetails {
   }[];
 }
 
+type DetailsEnrollment = Pick<
+  Database['public']['Tables']['enrollments']['Row'],
+  'id' | 'student_id' | 'cohort_id' | 'monto_total' | 'descuento' | 'monto_abonado'
+>;
+type DetailsDocument = Pick<
+  Database['public']['Tables']['enrollment_documents']['Row'],
+  'tipo' | 'estado' | 'fecha_marcado' | 'marcado_por'
+>;
+
+export function summarizeEnrollmentDetails(
+  enrollment: DetailsEnrollment,
+  documents: DetailsDocument[],
+): ManualEnrollmentDetails {
+  const net = enrollment.monto_total === null ? null : Number(enrollment.monto_total);
+  const discount = Number(enrollment.descuento);
+  const paid = Number(enrollment.monto_abonado);
+  return {
+    enrollmentId: enrollment.id,
+    studentId: enrollment.student_id,
+    cohortId: enrollment.cohort_id,
+    montoTotal: net,
+    descuento: discount,
+    precioBruto: net === null ? null : net + discount,
+    montoAbonado: paid,
+    saldo: net === null ? null : Math.round((net - paid) * 100) / 100,
+    documentosPendientes: documents.filter((document) => document.estado === 'pendiente').length,
+    documentos: documents.map((document) => ({
+      tipo: document.tipo,
+      estado: document.estado,
+      fechaMarcado: document.fecha_marcado,
+      marcadoPor: document.marcado_por,
+    })),
+  };
+}
+
 export class ManualEnrollmentDetailsService {
   constructor(private readonly db: SupabaseClient<Database>) {}
 
   async get(id: string): Promise<ManualEnrollmentDetails> {
-    const { data: enrollment, error } = await this.db.from('enrollments')
+    const { data: enrollment, error } = await this.db
+      .from('enrollments')
       .select('id,student_id,cohort_id,monto_total,descuento,monto_abonado')
-      .eq('id', id).maybeSingle();
+      .eq('id', id)
+      .maybeSingle();
     if (error) throw error;
     if (!enrollment) throw new AppError('Matrícula no encontrada', 404);
     const { data: documents, error: documentsError } = await this.db
-      .from('enrollment_documents').select()
-      .eq('enrollment_id', id).order('tipo');
+      .from('enrollment_documents')
+      .select()
+      .eq('enrollment_id', id)
+      .order('tipo');
     if (documentsError) throw documentsError;
-    const net = enrollment.monto_total === null ? null : Number(enrollment.monto_total);
-    const discount = Number(enrollment.descuento);
-    const paid = Number(enrollment.monto_abonado);
-    return {
-      enrollmentId: enrollment.id,
-      studentId: enrollment.student_id,
-      cohortId: enrollment.cohort_id,
-      montoTotal: net,
-      descuento: discount,
-      precioBruto: net === null ? null : net + discount,
-      montoAbonado: paid,
-      saldo: net === null ? null : Math.round((net - paid) * 100) / 100,
-      documentosPendientes: documents.filter((document) => document.estado === 'pendiente').length,
-      documentos: documents.map((document) => ({
-        tipo: document.tipo,
-        estado: document.estado,
-        fechaMarcado: document.fecha_marcado,
-        marcadoPor: document.marcado_por,
-      })),
-    };
+    return summarizeEnrollmentDetails(enrollment, documents);
   }
 
-  async update(actor: string, id: string, fields: {
-    documentos?: DocumentInput[];
-    pago?: InitialPayment;
-  }): Promise<ManualEnrollmentDetails> {
+  async update(
+    actor: string,
+    id: string,
+    fields: {
+      documentos?: DocumentInput[];
+      pago?: InitialPayment;
+    },
+  ): Promise<ManualEnrollmentDetails> {
     if (fields.documentos) validateDocumentUpdates(fields.documentos);
     const { error } = await this.db.rpc('update_manual_enrollment_details', {
       p_enrollment: id,
