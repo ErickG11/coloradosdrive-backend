@@ -7,6 +7,13 @@ import {
   type ManualEnrollmentDetails,
 } from './manualEnrollmentDetails.service';
 
+import {
+  studentGraduation,
+  studentSchedule,
+  type StudentGraduation,
+  type StudentSchedule,
+} from './studentGraduation';
+
 type UserRow = Database['public']['Tables']['users']['Row'];
 type EnrollmentRow = Database['public']['Tables']['enrollments']['Row'];
 type CourseRow = Database['public']['Tables']['courses']['Row'];
@@ -29,6 +36,8 @@ export interface StudentDetail {
   direccion: string | null;
   createdAt: string;
   updatedAt: string;
+  graduation: StudentGraduation;
+  practiceSchedule: StudentSchedule;
   enrollments: (ManualEnrollmentDetails & {
     status: EnrollmentRow['status'];
     courseId: string;
@@ -42,13 +51,21 @@ export interface StudentDetail {
 function databaseError(error: Pick<PostgrestError, 'code'>): AppError {
   if (error.code === '42501') return new AppError('Se requiere administrador', 403);
   if (error.code === '22023') return new AppError('Filtros de estudiantes inválidos', 400);
-  console.error(JSON.stringify({ event: 'student_read_failed', code: error.code,
-    schemaUnavailable: ['PGRST202', '42P01', '42883'].includes(error.code) }));
+  console.error(
+    JSON.stringify({
+      event: 'student_read_failed',
+      code: error.code,
+      schemaUnavailable: ['PGRST202', '42P01', '42883'].includes(error.code),
+    }),
+  );
   return new AppError('No se pudo consultar estudiantes. Inténtalo nuevamente', 503);
 }
 
 export class StudentAdminService {
-  constructor(private readonly db: SupabaseClient<Database>) {}
+  constructor(
+    private readonly db: SupabaseClient<Database>,
+    private readonly now = (): Date => new Date(),
+  ) {}
 
   async list(actor: string, query: StudentListQuery): Promise<StudentListResult> {
     const { data, error } = await this.db.rpc('list_admin_students', {
@@ -92,7 +109,7 @@ export class StudentAdminService {
 
   async get(id: string): Promise<StudentDetail> {
     const user = await this.user(id);
-    const correo = await this.email(id);
+    const email = this.email(id);
     const { data: enrollments, error } = await this.db
       .from('enrollments')
       .select()
@@ -100,10 +117,19 @@ export class StudentAdminService {
       .order('fecha_inscripcion', { ascending: false })
       .order('id');
     if (error) throw databaseError(error);
+    const correo = await email;
     const enrollmentIds = enrollments.map((e) => e.id);
     const courseIds = [...new Set(enrollments.map((e) => e.course_id))];
     const cohortIds = [...new Set(enrollments.flatMap((e) => (e.cohort_id ? [e.cohort_id] : [])))];
-    const [documentsResult, coursesResult, cohortsResult] = await Promise.all([
+    const [
+      documentsResult,
+      coursesResult,
+      cohortsResult,
+      examsResult,
+      attemptsResult,
+      slotsResult,
+      recoveryResult,
+    ] = await Promise.all([
       enrollmentIds.length
         ? this.db.from('enrollment_documents').select().in('enrollment_id', enrollmentIds)
         : Promise.resolve({ data: [], error: null }),
@@ -116,10 +142,64 @@ export class StudentAdminService {
             .select('id,nombre,fecha_inicio_curso,fecha_fin_curso')
             .in('id', cohortIds)
         : Promise.resolve({ data: [], error: null }),
+      courseIds.length
+        ? this.db
+            .from('exams')
+            .select('id,course_id')
+            .in('course_id', courseIds)
+            .eq('type', 'definitivo')
+            .eq('is_published', true)
+        : Promise.resolve({ data: [], error: null }),
+      courseIds.length
+        ? this.db.from('exam_attempts').select('exam_id,status,passed').eq('student_id', id)
+        : Promise.resolve({ data: [], error: null }),
+      this.db
+        .from('practice_slots')
+        .select('id,cohort_id,instructor_id,scheduled_at,duration_minutes,status,attended')
+        .eq('student_id', id)
+        .order('scheduled_at')
+        .order('id'),
+      this.db
+        .from('student_practice_recovery')
+        .select('slot_id,cohort_id,instructor_id,scheduled_at,status,reason')
+        .eq('student_id', id)
+        .in('status', ['cancelada_por_desactivacion', 'pendiente_reprogramar'])
+        .order('scheduled_at')
+        .order('slot_id'),
     ]);
-    for (const result of [documentsResult, coursesResult, cohortsResult])
+    for (const result of [
+      documentsResult,
+      coursesResult,
+      cohortsResult,
+      examsResult,
+      attemptsResult,
+      slotsResult,
+      recoveryResult,
+    ])
       if (result.error) throw databaseError(result.error);
+    const slots = slotsResult.data ?? [];
+    const recovery = recoveryResult.data ?? [];
+    const instructorIds = [
+      ...new Set([...slots.map((s) => s.instructor_id), ...recovery.map((r) => r.instructor_id)]),
+    ];
+    const instructors = instructorIds.length
+      ? await this.db
+          .from('users')
+          .select('id,nombre_completo')
+          .in('id', instructorIds)
+          .eq('rol', 'instructor')
+      : { data: [], error: null };
+    if (instructors.error) throw databaseError(instructors.error);
     return {
+      graduation: studentGraduation(
+        enrollments,
+        documentsResult.data ?? [],
+        coursesResult.data ?? [],
+        examsResult.data ?? [],
+        attemptsResult.data ?? [],
+        slots,
+      ),
+      practiceSchedule: studentSchedule(slots, recovery, instructors.data, this.now()),
       id: user.id,
       cedula: user.cedula,
       nombreCompleto: user.nombre_completo,
