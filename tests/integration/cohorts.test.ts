@@ -46,7 +46,7 @@ describe('cohorts endpoints', () => {
 
     it('POST /cohorts con rol no-admin responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
-        createChain({ data: { debe_cambiar_password: false }, error: null }),
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
       );
       const res = await request(app)
         .post('/cohorts')
@@ -64,7 +64,7 @@ describe('cohorts endpoints', () => {
 
     it('PATCH /cohorts/:id con rol no-admin responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
-        createChain({ data: { debe_cambiar_password: false }, error: null }),
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
       );
       const res = await request(app)
         .patch('/cohorts/11111111-1111-4111-8111-111111111111')

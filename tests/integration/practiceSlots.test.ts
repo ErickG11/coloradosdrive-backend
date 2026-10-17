@@ -78,7 +78,7 @@ describe('practice-slots endpoints', () => {
 
     it('POST con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
-        createChain({ data: { debe_cambiar_password: false }, error: null }),
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
       );
       const res = await request(app)
         .post('/practice-slots')
@@ -98,7 +98,7 @@ describe('practice-slots endpoints', () => {
 
     it('DELETE con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
-        createChain({ data: { debe_cambiar_password: false }, error: null }),
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
       );
       const res = await request(app)
         .delete(`/practice-slots/${slotId}`)
@@ -316,7 +316,7 @@ describe('practice-slots endpoints', () => {
 
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
       mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [], error: null }));
 
       const res = await request(app)
@@ -339,7 +339,7 @@ describe('practice-slots endpoints', () => {
         error: null,
       });
       mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(freeSlots)
         .mockReturnValueOnce(ownSlots);
@@ -376,7 +376,7 @@ describe('practice-slots endpoints', () => {
       });
       const chain = createChain({ data: [releasedByStudentA], error: null });
       mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(chain)
         .mockReturnValueOnce(createChain({ data: [], error: null }));
@@ -400,7 +400,7 @@ describe('practice-slots endpoints', () => {
           instructor: { nombre_completo: 'Bruno Salas', activo: false } }),
       ], error: null });
       mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(freeSlots)
         .mockReturnValueOnce(ownSlots);
@@ -422,7 +422,7 @@ describe('practice-slots endpoints', () => {
         buildSlotRowWithNames({ id: 'liberada-activa', status: 'liberado' }),
       ], error: null });
       mockedFrom
-        .mockReturnValueOnce(createChain({ data: { debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(freeSlots)
         .mockReturnValueOnce(createChain({ data: [], error: null }));

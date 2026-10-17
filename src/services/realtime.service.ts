@@ -28,9 +28,23 @@ export class RealtimeService {
     event: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
+    const personal = /^user-(.+)-practice-slots$/.exec(channelName);
+    if (personal) {
+      const { data, error } = await this.supabase
+        .from('users')
+        .select('activo')
+        .eq('id', personal[1])
+        .maybeSingle();
+      if (error) throw new Error('No se pudo verificar el destinatario Realtime');
+      if (!data?.activo) return;
+    }
     const channel = this.supabase.channel(channelName, { config: { private: true } });
     try {
-      const result = await channel.httpSend(event, payload);
+      // Los clientes de cohorte solo necesitan invalidar/refrescar por HTTP autorizado.
+      const result = await channel.httpSend(
+        event,
+        channelName.startsWith('cohort-') ? {} : payload,
+      );
       if (!result.success) {
         throw new Error(
           `Broadcast a "${channelName}" falló (status ${String(result.status)}): ${result.error}`,

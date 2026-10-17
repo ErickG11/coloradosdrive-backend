@@ -115,7 +115,7 @@ describe('authenticate middleware', () => {
       app_metadata: { role: 'estudiante' },
     });
     mockedFrom.mockReturnValueOnce(
-      createChain({ data: { debe_cambiar_password: false }, error: null }),
+      createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
     );
 
     const req = buildRequest('Bearer valid.token.here', 'GET', '/');
@@ -136,7 +136,7 @@ describe('authenticate middleware', () => {
       app_metadata: { role: 'estudiante' },
     });
     mockedFrom.mockReturnValueOnce(
-      createChain({ data: { debe_cambiar_password: true }, error: null }),
+      createChain({ data: { activo: true, debe_cambiar_password: true }, error: null }),
     );
 
     const req = buildRequest('Bearer valid.token.here', 'GET', '/exams');
@@ -148,7 +148,7 @@ describe('authenticate middleware', () => {
     expect(req.user).toBeUndefined();
   });
 
-  it('exempts POST /estudiantes/cambiar-password from the block, without querying the DB', async () => {
+  it('exempts password change only after checking the active account', async () => {
     mockedVerify.mockResolvedValue({
       sub: 'user-123',
       email: 'estudiante@example.com',
@@ -156,18 +156,43 @@ describe('authenticate middleware', () => {
     });
 
     const req = buildRequest('Bearer valid.token.here', 'POST', '/cambiar-password');
+    mockedFrom.mockReturnValueOnce(
+      createChain({ data: { activo: true, debe_cambiar_password: true }, error: null }),
+    );
     (req as unknown as { baseUrl: string }).baseUrl = '/estudiantes';
     await authenticate(req, res, next);
 
     expect(next).toHaveBeenCalledWith();
-    expect(mockedFrom).not.toHaveBeenCalled();
+    expect(mockedFrom).toHaveBeenCalledTimes(1);
   });
   it('permite consultar solo el estado propio con JWT antes de cambiar contraseña', async () => {
     mockedVerify.mockResolvedValue({ sub: 'user-123', app_metadata: { role: 'estudiante' } });
     const req = buildRequest('Bearer valid.token.here', 'GET', '/account-status');
+    mockedFrom.mockReturnValueOnce(
+      createChain({ data: { activo: true, debe_cambiar_password: true }, error: null }),
+    );
     (req as unknown as { baseUrl: string }).baseUrl = '/estudiantes';
     await authenticate(req, res, next);
     expect(next).toHaveBeenCalledWith();
-    expect(mockedFrom).not.toHaveBeenCalled();
+    expect(mockedFrom).toHaveBeenCalledTimes(1);
   });
+  it.each(['/account-status', '/cambiar-password', '/exams'])(
+    'blocks inactive and missing profiles on %s',
+    async (path) => {
+      for (const data of [null, { activo: false, debe_cambiar_password: false }]) {
+        mockedVerify.mockResolvedValue({ sub: 'fixture', app_metadata: { role: 'estudiante' } });
+        mockedFrom.mockReturnValueOnce(createChain({ data, error: null }));
+        const req = buildRequest(
+          'Bearer token',
+          path === '/cambiar-password' ? 'POST' : 'GET',
+          path,
+        );
+        (req as unknown as { baseUrl: string }).baseUrl = '/estudiantes';
+        next.mockClear();
+        await authenticate(req, res, next);
+        expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'ACCOUNT_INACTIVE' });
+        expect(req.user).toBeUndefined();
+      }
+    },
+  );
 });
