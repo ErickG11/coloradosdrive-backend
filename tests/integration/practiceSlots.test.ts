@@ -465,6 +465,69 @@ describe('practice-slots endpoints', () => {
       // mockAuthToken siempre resuelve sub: 'test-user-id' - la query se
       // filtra por el id del propio token, no por un instructorId ajeno.
       expect(chain.eq).toHaveBeenCalledWith('instructor_id', studentId);
+      expect(chain.gte).not.toHaveBeenCalled();
+      expect(chain.lt).not.toHaveBeenCalled();
+    });
+
+    it('instructor: aplica el rango semiabierto a sus propias franjas con offset explícito', async () => {
+      const chain = createChain({ data: [buildSlotRowWithNames({ student: { nombre_completo: 'Ana Torres' } })], error: null });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(chain);
+
+      const res = await request(app).get('/practice-slots')
+        .query({ from: '2026-03-09T00:00:00-05:00', to: '2026-03-16T00:00:00-05:00', instructorId })
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([expect.objectContaining({ studentName: 'Ana Torres' })]);
+      expect(chain.eq).toHaveBeenCalledWith('instructor_id', studentId);
+      expect(chain.eq).not.toHaveBeenCalledWith('instructor_id', instructorId);
+      expect(chain.gte).toHaveBeenCalledWith('scheduled_at', '2026-03-09T05:00:00.000Z');
+      expect(chain.lt).toHaveBeenCalledWith('scheduled_at', '2026-03-16T05:00:00.000Z');
+      expect(chain.order).toHaveBeenCalledWith('scheduled_at', { ascending: true });
+    });
+
+    it.each([
+      [{ from: '2026-03-09T00:00:00Z' }, 'from y to deben enviarse juntos'],
+      [{ to: '2026-03-16T00:00:00Z' }, 'from y to deben enviarse juntos'],
+      [{ from: '2026-03-09T00:00:00', to: '2026-03-16T00:00:00Z' }, 'from debe ser'],
+      [{ from: '2026-03-09T00:00:00Z', to: '2026-03-16T00:00:00' }, 'to debe ser'],
+      [{ from: '2026-03-16T00:00:00Z', to: '2026-03-09T00:00:00Z' }, 'from debe ser anterior'],
+      [{ from: '2026-03-09T00:00:00Z', to: '2026-03-09T00:00:00Z' }, 'from debe ser anterior'],
+      [{ from: '2026-03-09T00:00:00Z', to: '2026-05-11T00:00:00Z' }, '62 días'],
+      [{ from: '2026-03-09T00:00:00.000001Z', to: '2026-05-10T00:00:00.000002Z' }, '62 días'],
+    ])('instructor: rechaza rango inválido %p antes de consultar franjas', async (range, message) => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
+      const res = await request(app).get('/practice-slots').query(range)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain(message);
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
+    });
+
+    it('instructor: acepta exactamente 62 días, incluso con microsegundos', async () => {
+      const chain = createChain({ data: [], error: null });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(chain);
+      const res = await request(app).get('/practice-slots')
+        .query({ from: '2026-03-09T00:00:00.000001Z', to: '2026-05-10T00:00:00.000001Z' })
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
+      expect(res.status).toBe(200);
+      expect(chain.gte).toHaveBeenCalledWith('scheduled_at', '2026-03-09T00:00:00.000001Z');
+      expect(chain.lt).toHaveBeenCalledWith('scheduled_at', '2026-05-10T00:00:00.000001Z');
+    });
+
+    it('admin: los filtros from y to no cambian el listado actual', async () => {
+      const chain = createChain({ data: [buildSlotRowWithNames()], error: null });
+      mockedFrom.mockReturnValueOnce(chain);
+      const res = await request(app).get('/practice-slots')
+        .query({ from: 'sin-zona', to: 'sin-zona' })
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+      expect(res.status).toBe(200);
+      expect(chain.gte).not.toHaveBeenCalled();
+      expect(chain.lt).not.toHaveBeenCalled();
     });
   });
 

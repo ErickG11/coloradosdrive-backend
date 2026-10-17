@@ -49,6 +49,11 @@ const updateValidators = [
     .withMessage('Las prácticas deben durar exactamente 60 minutos'),
 ];
 
+function isInstructorUser(user: unknown): boolean {
+  return typeof user === 'object' && user !== null && 'role' in user
+    && user.role === 'instructor';
+}
+
 const listValidators = [
   query('cohortId').optional().isUUID().withMessage('cohortId debe ser un UUID válido'),
   query('instructorId').optional().isUUID().withMessage('instructorId debe ser un UUID válido'),
@@ -56,6 +61,39 @@ const listValidators = [
     .optional()
     .isIn(PRACTICE_SLOT_STATUSES)
     .withMessage('status debe ser un estado válido'),
+  query('from').if((_value, { req }) => isInstructorUser(req.user)).optional()
+    .custom((value: unknown) => { normalizePracticeScheduledAt(value); return true; })
+    .withMessage('from debe ser una fecha y hora ISO 8601 con zona explícita'),
+  query('to').if((_value, { req }) => isInstructorUser(req.user)).optional()
+    .custom((value: unknown) => { normalizePracticeScheduledAt(value); return true; })
+    .withMessage('to debe ser una fecha y hora ISO 8601 con zona explícita'),
+  query().custom((_value, { req }) => {
+    if (!isInstructorUser(req.user)) return true;
+    const { from, to } = req.query ?? {};
+    if (from === undefined && to === undefined) return true;
+    if (typeof from !== 'string' || typeof to !== 'string')
+      throw new Error('from y to deben enviarse juntos');
+    // Normalizar a UTC conserva los microsegundos de PostgreSQL.
+    let normalizedFrom: string;
+    let normalizedTo: string;
+    try {
+      normalizedFrom = normalizePracticeScheduledAt(from);
+      normalizedTo = normalizePracticeScheduledAt(to);
+    } catch {
+      return true; // Los validadores de cada campo comunican el error.
+    }
+    const micros = (iso: string): bigint => {
+      const match = /^(.+)\.(\d+)Z$/.exec(iso);
+      if (!match) throw new Error('Formato de fecha inválido');
+      const [, seconds, fraction] = match;
+      return BigInt(Date.parse(`${seconds}Z`)) * 1000n + BigInt(fraction.padEnd(6, '0'));
+    };
+    const span = micros(normalizedTo) - micros(normalizedFrom);
+    if (span <= 0n) throw new Error('from debe ser anterior a to');
+    if (span > 62n * 24n * 60n * 60n * 1_000_000n)
+      throw new Error('El rango no puede superar 62 días');
+    return true;
+  }),
 ];
 
 // RF-03: el admin gestiona franjas (crear/editar/eliminar); estudiante e
