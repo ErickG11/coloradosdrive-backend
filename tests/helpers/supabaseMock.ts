@@ -19,6 +19,7 @@ export interface SupabaseChainMock {
   or: jest.Mock;
   is: jest.Mock;
   lte: jest.Mock;
+  gte: jest.Mock;
   lt: jest.Mock;
   neq: jest.Mock;
   not: jest.Mock;
@@ -46,6 +47,7 @@ export function createChain(result: ChainResult): SupabaseChainMock {
   chain.or = jest.fn().mockReturnValue(chain);
   chain.is = jest.fn().mockReturnValue(chain);
   chain.lte = jest.fn().mockReturnValue(chain);
+  chain.gte = jest.fn().mockReturnValue(chain);
   chain.lt = jest.fn().mockReturnValue(chain);
   chain.neq = jest.fn().mockReturnValue(chain);
   chain.not = jest.fn().mockReturnValue(chain);
