@@ -19,8 +19,11 @@ export function validate(req: Request, _res: Response, next: NextFunction): void
   next(new AppError(message, 400));
 }
 
-// Structured validation is opt-in for the student PATCH; other contracts stay unchanged.
-export function validateStudentProfile(req: Request, _res: Response, next: NextFunction): void {
+// Validación estructurada opcional: además del mensaje devuelve `code`
+// (INVALID_FIELD) y `field` (el campo que falló) para que el cliente pueda
+// marcarlo. Solo la usan las rutas que lo piden (alumnos y cohortes); el
+// resto de contratos sigue con `validate` y no cambia.
+export function validateFields(req: Request, _res: Response, next: NextFunction): void {
   const result = validationResult(req);
   if (result.isEmpty()) {
     next();
@@ -35,3 +38,6 @@ export function validateStudentProfile(req: Request, _res: Response, next: NextF
     }),
   );
 }
+
+// Nombre histórico usado por las rutas de alumnos.
+export const validateStudentProfile = validateFields;
