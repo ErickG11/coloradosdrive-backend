@@ -74,7 +74,12 @@ export class CohortService {
     const { data, error } = await this.supabase
       .from('cohorts')
       .select()
-      .order('fecha_inicio_curso', { ascending: false });
+      .order('fecha_inicio_curso', { ascending: false })
+      // Desempate fijo (5.2): sin él, las cohortes con la misma fecha de
+      // inicio salían en orden indefinido. Alumnos y Horarios de práctica
+      // usan esta misma lista: el criterio principal no cambia.
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true });
 
     if (error) {
       throw error;
