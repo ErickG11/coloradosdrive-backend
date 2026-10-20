@@ -26,7 +26,7 @@ type Mode = 'create' | 'update';
 const isNumberLike = (value: unknown): boolean =>
   typeof value === 'number' || typeof value === 'string';
 const isPresent = (value: unknown): boolean =>
-  value !== undefined && value !== null && value !== '';
+  value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
 
 // En crear, el campo es obligatorio; en actualizar solo se valida si viene
 // (null o '' cuentan como enviados y se rechazan).
