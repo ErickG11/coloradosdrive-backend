@@ -186,6 +186,7 @@ describe('cohorts endpoints', () => {
       ['precio ausente', { precio: undefined }, 'precio', 'El precio es obligatorio.'],
       ['precio vacío', { precio: '' }, 'precio', 'El precio es obligatorio.'],
       ['precio null', { precio: null }, 'precio', 'El precio es obligatorio.'],
+      ['precio solo espacios', { precio: '   ' }, 'precio', 'El precio es obligatorio.'],
       ['precio negativo', { precio: -1 }, 'precio', 'El precio debe estar entre 0 y 9999.99.'],
       ['precio 10000', { precio: 10000 }, 'precio', 'El precio debe estar entre 0 y 9999.99.'],
       ['precio enorme', { precio: 1e21 }, 'precio', 'El precio debe estar entre 0 y 9999.99.'],
@@ -408,11 +409,22 @@ describe('cohorts endpoints', () => {
     });
 
     it('permite el mismo nombre en otro curso (la búsqueda se limita al curso)', async () => {
-      mockSuccessfulCreate([]);
+      const otherCourse = '33333333-3333-4333-8333-333333333333';
+      const namesChain = createChain({ data: [], error: null });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: { id: otherCourse }, error: null }))
+        .mockReturnValueOnce(namesChain)
+        .mockReturnValueOnce(
+          createChain({ data: cohortRow({ course_id: otherCourse }), error: null }),
+        );
 
-      const res = await post({ ...validCohortBody, nombre: '200' });
+      const res = await post({ ...validCohortBody, courseId: otherCourse });
 
       expect(res.status).toBe(201);
+      expect(namesChain.select).toHaveBeenCalledWith('id,nombre');
+      expect(namesChain.eq).toHaveBeenCalledTimes(1);
+      expect(namesChain.eq).toHaveBeenCalledWith('course_id', otherCourse);
+      expect(namesChain.neq).not.toHaveBeenCalled();
     });
 
     it('responde 404 con código y campo si el curso no existe', async () => {
@@ -630,14 +642,41 @@ describe('cohorts endpoints', () => {
     });
 
     it('guardar con su propio nombre no choca consigo misma', async () => {
+      const namesChain = createChain({ data: [], error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: cohortRow({ id: cohortId }), error: null }))
-        .mockReturnValueOnce(createChain({ data: [], error: null }))
+        .mockReturnValueOnce(namesChain)
         .mockReturnValueOnce(createChain({ data: cohortRow({ id: cohortId }), error: null }));
 
       const res = await patch({ ...validCohortBody });
 
       expect(res.status).toBe(200);
+      expect(namesChain.eq).toHaveBeenCalledWith('course_id', validCohortBody.courseId);
+      expect(namesChain.neq).toHaveBeenCalledWith('id', cohortId);
+    });
+
+    it('rechaza con 409 mover la cohorte a otro curso que ya tiene ese nombre', async () => {
+      const otherCourse = '33333333-3333-4333-8333-333333333333';
+      const namesChain = createChain({
+        data: [{ id: 'otra', nombre: validCohortBody.nombre.toUpperCase() }],
+        error: null,
+      });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: cohortRow({ id: cohortId }), error: null }))
+        .mockReturnValueOnce(namesChain);
+
+      const res = await patch({ courseId: otherCourse });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message: 'Ya existe una cohorte con ese nombre en este curso.',
+        code: 'COHORT_NAME_DUPLICATE',
+        field: 'nombre',
+      });
+      expect(namesChain.eq).toHaveBeenCalledWith('course_id', otherCourse);
+      expect(namesChain.eq).not.toHaveBeenCalledWith('course_id', validCohortBody.courseId);
+      expect(namesChain.neq).toHaveBeenCalledWith('id', cohortId);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
 
     it('traduce un CHECK violado en el UPDATE a 400 con campo', async () => {
