@@ -97,8 +97,9 @@ try {
     [23, 10, 100, 10],
   ]) {
     await db.query(
-      "insert into cohorts(id,course_id,nombre,precio,cupo_maximo,fecha_inicio_curso,fecha_fin_curso,fecha_inicio_matricula,fecha_fin_matricula,updated_at) values($1,$2,'Fixture',$3,$4,'2099-01-01','2099-12-31','2020-01-01','2099-01-01','2026-01-01T00:00:00.123456Z')",
-      [id(n), id(course), price, cupo],
+      "insert into cohorts(id,course_id,nombre,precio,cupo_maximo,fecha_inicio_curso,fecha_fin_curso,fecha_inicio_matricula,fecha_fin_matricula,updated_at) values($1,$2,$5,$3,$4,'2099-01-01','2099-12-31','2020-01-01','2099-01-01','2026-01-01T00:00:00.123456Z')",
+      // 029: el nombre es único por curso.
+      [id(n), id(course), price, cupo, `Fixture ${n}`],
     );
   }
   for (const n of [2, 3, 4, 5, 6, 7])

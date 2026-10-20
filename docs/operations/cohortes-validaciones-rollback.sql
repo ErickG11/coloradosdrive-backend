@@ -1,0 +1,18 @@
+-- Reversión MANUAL de 029, con aprobación. No toca datos: solo retira los
+-- CHECK y el índice único que agregó 029. Se conservan los mínimos previos
+-- (cohorts_precio_non_negative, cohorts_cupo_positive y las dos reglas de
+-- fechas de 012). Tras revertir, el servidor sigue validando los mismos
+-- límites y el nombre único (comprobación previa), pero sin la red de
+-- seguridad de la base frente a dos altas simultáneas.
+begin;
+set local lock_timeout = '5s';
+drop index if exists public.cohorts_course_nombre_unique;
+alter table public.cohorts
+  drop constraint if exists cohorts_nombre_longitud,
+  drop constraint if exists cohorts_precio_maximo,
+  drop constraint if exists cohorts_cupo_maximo_rango,
+  drop constraint if exists cohorts_vehiculos_rango,
+  drop constraint if exists cohorts_aulas_rango,
+  drop constraint if exists cohorts_curso_no_antes_matricula;
+notify pgrst, 'reload schema';
+commit;
