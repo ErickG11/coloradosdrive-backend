@@ -76,6 +76,16 @@ comment on constraint cohorts_aulas_rango on public.cohorts is
 comment on constraint cohorts_curso_no_antes_matricula on public.cohorts is
   'El curso no puede terminar antes de que abra la matrícula. Sí se permite que la matrícula cierre después de que empiece el curso.';
 
+-- Actualiza los comentarios de 012 («Sin validación»): ahora tienen límites.
+comment on column public.cohorts.numero_vehiculos is
+  'Metadata informativa para el oficio a la ANT; no se usa en lógica de negocio. Opcional; entero de 0 a 100 (servidor y cohorts_vehiculos_rango).';
+comment on column public.cohorts.numero_aulas is
+  'Metadata informativa para el oficio a la ANT; no se usa en lógica de negocio. Opcional; entero de 0 a 100 (servidor y cohorts_aulas_rango).';
+comment on column public.cohorts.tipo_modalidad is
+  'Metadata informativa para el oficio a la ANT; no se usa en lógica de negocio. Opcional; hasta 100 caracteres (validado solo en el servidor).';
+comment on column public.cohorts.horarios_capacitacion_teoria is
+  'Metadata informativa para el oficio a la ANT; no se usa en lógica de negocio. Opcional; hasta 500 caracteres (validado solo en el servidor).';
+
 create unique index cohorts_course_nombre_unique
   on public.cohorts (course_id, lower(btrim(nombre)));
 comment on index public.cohorts_course_nombre_unique is
