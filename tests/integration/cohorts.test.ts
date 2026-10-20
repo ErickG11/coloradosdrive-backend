@@ -144,5 +144,20 @@ describe('cohorts endpoints', () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     });
+
+    it('conserva fecha_inicio_curso desc y desempata por created_at desc e id asc', async () => {
+      const chain = createChain({ data: [], error: null });
+      mockedFrom.mockReturnValueOnce(chain);
+
+      await request(app)
+        .get('/cohorts')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+
+      expect(chain.order.mock.calls).toEqual([
+        ['fecha_inicio_curso', { ascending: false }],
+        ['created_at', { ascending: false }],
+        ['id', { ascending: true }],
+      ]);
+    });
   });
 });
