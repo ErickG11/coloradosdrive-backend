@@ -27,6 +27,20 @@ const countNewObjects = async () =>
       [NEW_CONSTRAINTS],
     )
   ).n;
+const COMMENTED = [
+  'numero_vehiculos',
+  'numero_aulas',
+  'tipo_modalidad',
+  'horarios_capacitacion_teoria',
+];
+const columnComments = async () =>
+  (
+    await db.query(
+      `select a.attname as col, col_description(a.attrelid, a.attnum) as c from pg_attribute a
+        where a.attrelid='public.cohorts'::regclass and a.attname = any($1::text[]) order by 1`,
+      [COMMENTED],
+    )
+  ).rows;
 let seq = 100;
 async function insertCohort(overrides = {}) {
   const row = {
@@ -132,10 +146,21 @@ try {
   assert.equal(Number(rowsOf('huerfanas')[0].huerfanas), 0);
 
   // BEGIN…ROLLBACK no persiste nada; luego se aplica de verdad.
+  const comments012 = await columnComments();
+  assert.ok(comments012.every((r) => r.c.includes('Sin validación')));
   await db.exec(migration.replace(/commit;\s*$/, 'rollback;'));
   assert.equal(await countNewObjects(), 0);
   await db.exec(migration);
   assert.equal(await countNewObjects(), 7);
+  const comments029 = await columnComments();
+  assert.equal(comments029.length, 4);
+  assert.ok(comments029.every((r) => !r.c.includes('Sin validación')));
+  assert.match(comments029.find((r) => r.col === 'numero_vehiculos').c, /0 a 100/);
+  assert.match(comments029.find((r) => r.col === 'tipo_modalidad').c, /100 caracteres/);
+  assert.match(
+    comments029.find((r) => r.col === 'horarios_capacitacion_teoria').c,
+    /500 caracteres/,
+  );
 
   await db.exec('begin');
   // Nombre único por curso, sin mayúsculas ni espacios extremos.
@@ -172,6 +197,11 @@ try {
   // Rollback operativo: retira todo y deja los mínimos; luego 029 se reaplica.
   await db.exec(rollback);
   assert.equal(await countNewObjects(), 0);
+  assert.deepEqual(
+    await columnComments(),
+    comments012,
+    'El rollback restaura los comentarios de 012',
+  );
   assert.equal(
     (
       await one(`select count(*)::int as n from pg_constraint where conrelid='public.cohorts'::regclass
