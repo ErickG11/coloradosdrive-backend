@@ -28,6 +28,12 @@ const DEFAULTS: Record<string, PostgresErrorOverride> = {
     message: 'Los datos no cumplen las reglas de validación.',
     code: 'CHECK_VIOLATION',
   },
+  // ON DELETE RESTRICT responde 23001 (restrict_violation), no 23503.
+  '23001': {
+    status: 409,
+    message: 'El registro está relacionado con otros datos y no se puede completar la operación.',
+    code: 'FOREIGN_KEY_VIOLATION',
+  },
   '23503': {
     status: 409,
     message: 'El registro está relacionado con otros datos y no se puede completar la operación.',
@@ -45,7 +51,7 @@ export function postgresConstraintName(error: unknown): string | undefined {
 
 /**
  * Devuelve un AppError 4xx si `error` es un error de PostgreSQL conocido
- * (22003, 23505, 23514, 23503); si no, null para que el llamador lo relance
+ * (22003, 23505, 23514, 23503, 23001); si no, null para que el llamador lo relance
  * tal cual (sigue siendo 500). `byConstraint` permite un mensaje y campo
  * concretos por restricción.
  */
