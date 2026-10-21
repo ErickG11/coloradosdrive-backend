@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { body, param, type ValidationChain } from 'express-validator';
 
-import { createCohort, listCohorts, updateCohort } from '../controllers/cohort.controller';
+import {
+  createCohort,
+  getCohort,
+  listCohorts,
+  updateCohort,
+} from '../controllers/cohort.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validateFields } from '../middlewares/validate';
@@ -20,6 +25,8 @@ export const cohortRouter = Router();
 cohortRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 type Mode = 'create' | 'update';
+
+const idParam = (): ValidationChain => param('id').isUUID().withMessage(M.idInvalido);
 
 // Los validadores estándar de express-validator recorren los arreglos
 // elemento a elemento (y aceptan []): los números se exigen escalares.
@@ -67,7 +74,18 @@ export function cohortValidators(mode: Mode): ValidationChain[] {
       .withMessage(message);
 
   return [
-    ...(mode === 'update' ? [param('id').isUUID().withMessage(M.idInvalido)] : []),
+    ...(mode === 'update'
+      ? [
+          idParam(),
+          // 4.1: versión base obligatoria (el `updatedAt` exacto del GET).
+          body('updatedAt')
+            .isString()
+            .withMessage(M.versionFaltante)
+            .bail()
+            .isISO8601({ strict: true })
+            .withMessage(M.versionFaltante),
+        ]
+      : []),
     required('courseId', mode)
       .isString()
       .withMessage(M.cursoInvalido)
@@ -116,4 +134,5 @@ export function cohortValidators(mode: Mode): ValidationChain[] {
 
 cohortRouter.post('/', cohortValidators('create'), validateFields, asyncHandler(createCohort));
 cohortRouter.get('/', asyncHandler(listCohorts));
+cohortRouter.get('/:id', idParam(), validateFields, asyncHandler(getCohort));
 cohortRouter.patch('/:id', cohortValidators('update'), validateFields, asyncHandler(updateCohort));

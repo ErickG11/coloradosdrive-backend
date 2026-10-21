@@ -21,6 +21,9 @@ import { mockAuthToken } from '../helpers/tokens';
 const mockedFrom = supabaseAdmin.from as jest.Mock;
 const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
+// Versión tal cual la devuelve PostgREST (microsegundos).
+const VERSION = '2026-01-01T00:00:00.123456+00:00';
+
 const validCohortBody = {
   courseId: '11111111-1111-4111-8111-111111111111',
   nombre: 'Cohorte Marzo 2026',
@@ -518,7 +521,7 @@ describe('cohorts endpoints', () => {
       request(app)
         .patch(`/cohorts/${id}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
-        .send(body);
+        .send({ updatedAt: VERSION, ...body });
 
     it('responde 400 en español si el id no es un UUID', async () => {
       const res = await patch({ precio: 100 }, 'no-es-uuid');
@@ -663,6 +666,8 @@ describe('cohorts endpoints', () => {
       });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: cohortRow({ id: cohortId }), error: null }))
+        // Sin alumnos: el cambio de curso está permitido (L4b).
+        .mockReturnValueOnce(createChain({ data: [], error: null }))
         .mockReturnValueOnce(namesChain);
 
       const res = await patch({ courseId: otherCourse });
@@ -676,7 +681,7 @@ describe('cohorts endpoints', () => {
       expect(namesChain.eq).toHaveBeenCalledWith('course_id', otherCourse);
       expect(namesChain.eq).not.toHaveBeenCalledWith('course_id', validCohortBody.courseId);
       expect(namesChain.neq).toHaveBeenCalledWith('id', cohortId);
-      expect(mockedFrom).toHaveBeenCalledTimes(2);
+      expect(mockedFrom).toHaveBeenCalledTimes(3);
     });
 
     it('traduce un CHECK violado en el UPDATE a 400 con campo', async () => {
@@ -702,6 +707,343 @@ describe('cohorts endpoints', () => {
       });
     });
   });
+
+  describe('L4b: GET /cohorts/:id', () => {
+    const cohortId = '22222222-2222-4222-8222-222222222222';
+    const get = (id = cohortId) =>
+      request(app)
+        .get(`/cohorts/${id}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+
+    it('sin token responde 401 y con rol instructor 403', async () => {
+      expect((await request(app).get(`/cohorts/${cohortId}`)).status).toBe(401);
+      const res = await request(app)
+        .get(`/cohorts/${cohortId}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`);
+      expect(res.status).toBe(403);
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('responde 400 en español si el id no es un UUID', async () => {
+      const res = await get('abc');
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        message: 'La cohorte indicada no es válida.',
+        code: 'INVALID_FIELD',
+        field: 'id',
+      });
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('responde 404 si no existe', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }));
+
+      const res = await get();
+
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({
+        message: 'Cohorte no encontrada.',
+        code: 'COHORT_NOT_FOUND',
+      });
+    });
+
+    it('devuelve la cohorte con su versión exacta y los alumnos por estado', async () => {
+      const enrollmentsChain = createChain({
+        data: [
+          { status: 'activo' },
+          { status: 'finalizado' },
+          { status: 'activo' },
+          { status: 'retirado' },
+        ],
+        error: null,
+      });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: cohortRow({ id: cohortId }), error: null }))
+        .mockReturnValueOnce(enrollmentsChain);
+
+      const res = await get();
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: cohortId,
+        precio: 150,
+        updatedAt: VERSION,
+        alumnos: { total: 4, activos: 2, finalizados: 1, retirados: 1 },
+      });
+      expect(enrollmentsChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
+    });
+  });
+
+  describe('L4b: PATCH /cohorts/:id con versión, curso, cupo y franjas', () => {
+    const cohortId = '22222222-2222-4222-8222-222222222222';
+    const otherCourse = '33333333-3333-4333-8333-333333333333';
+    const raw = (body: Record<string, unknown>) =>
+      request(app)
+        .patch(`/cohorts/${cohortId}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+        .send(body);
+    const patch = (body: Record<string, unknown>) => raw({ updatedAt: VERSION, ...body });
+    const current = (overrides: Record<string, unknown> = {}) =>
+      createChain({ data: cohortRow({ id: cohortId, ...overrides }), error: null });
+    const enrollments = (...statuses: string[]) =>
+      createChain({ data: statuses.map((status) => ({ status })), error: null });
+    const updated = (overrides: Record<string, unknown> = {}) =>
+      createChain({
+        data: cohortRow({
+          id: cohortId,
+          updated_at: '2026-01-02T10:00:00.654321+00:00',
+          ...overrides,
+        }),
+        error: null,
+      });
+
+    it.each<[string, Record<string, unknown>]>([
+      ['falta updatedAt', { precio: 100 }],
+      ['updatedAt null', { precio: 100, updatedAt: null }],
+      ['updatedAt no es fecha', { precio: 100, updatedAt: 'ayer' }],
+    ])('responde 400 si %s, sin consultar la base', async (_label, body) => {
+      const res = await raw(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        message: 'Falta la versión de la cohorte. Recarga la página e inténtalo de nuevo.',
+        code: 'INVALID_FIELD',
+        field: 'updatedAt',
+      });
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('responde 400 si solo llega la versión (nada que guardar)', async () => {
+      const res = await patch({});
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        message: 'No hay cambios que guardar.',
+        code: 'NO_CHANGES',
+      });
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('guarda con un único UPDATE condicionado a la versión y devuelve la nueva', async () => {
+      const updateChain = updated({ nombre: 'Cohorte Abril' });
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(createChain({ data: [], error: null }))
+        .mockReturnValueOnce(updateChain);
+
+      const res = await patch({ nombre: 'Cohorte Abril' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        nombre: 'Cohorte Abril',
+        updatedAt: '2026-01-02T10:00:00.654321+00:00',
+      });
+      expect(updateChain.update).toHaveBeenCalledTimes(1);
+      expect(updateChain.update).toHaveBeenCalledWith({ nombre: 'Cohorte Abril' });
+      expect(updateChain.eq.mock.calls).toEqual([
+        ['id', cohortId],
+        ['updated_at', VERSION],
+      ]);
+    });
+
+    it('responde 409 si otra persona guardó antes (la versión ya no coincide)', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(createChain({ data: null, error: null }))
+        .mockReturnValueOnce(current({ updated_at: '2026-01-02T10:00:00.654321+00:00' }));
+
+      const res = await patch({ precio: 120 });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message: 'La cohorte cambió desde que abriste la edición. Recarga para ver los cambios.',
+        code: 'VERSION_CONFLICT',
+      });
+    });
+
+    it('responde 404 si la cohorte desapareció entre la lectura y el UPDATE', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(createChain({ data: null, error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
+
+      const res = await patch({ precio: 120 });
+
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe('COHORT_NOT_FOUND');
+    });
+
+    it('bloquea el cambio de curso si hay alumnos asociados de cualquier estado', async () => {
+      const enrollmentsChain = enrollments('finalizado', 'retirado');
+      mockedFrom.mockReturnValueOnce(current()).mockReturnValueOnce(enrollmentsChain);
+
+      const res = await patch({ courseId: otherCourse });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message: 'No se puede cambiar el curso porque la cohorte tiene alumnos asociados (2).',
+        code: 'COHORT_HAS_STUDENTS',
+        field: 'courseId',
+      });
+      expect(enrollmentsChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
+    });
+
+    it('permite cambiar de curso una cohorte sin alumnos', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(enrollments())
+        .mockReturnValueOnce(createChain({ data: [], error: null }))
+        .mockReturnValueOnce(updated({ course_id: otherCourse }));
+
+      const res = await patch({ courseId: otherCourse });
+
+      expect(res.status).toBe(200);
+      expect(res.body.courseId).toBe(otherCourse);
+    });
+
+    it('enviar el mismo curso no cuenta alumnos ni bloquea', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(createChain({ data: [], error: null }))
+        .mockReturnValueOnce(updated());
+
+      const res = await patch({ courseId: validCohortBody.courseId });
+
+      expect(res.status).toBe(200);
+      expect(mockedFrom).toHaveBeenCalledTimes(3);
+      expect(mockedFrom.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+        'cohorts',
+        'cohorts',
+        'cohorts',
+      ]);
+    });
+
+    it('traduce la FK compuesta (matrícula creada en carrera) a 409 con código propio', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(enrollments())
+        .mockReturnValueOnce(createChain({ data: [], error: null }))
+        .mockReturnValueOnce(
+          createChain({
+            data: null,
+            error: {
+              code: '23503',
+              message:
+                'update or delete on table "cohorts" violates foreign key constraint "enrollments_cohort_course_fkey" on table "enrollments"',
+            },
+          }),
+        );
+
+      const res = await patch({ courseId: otherCourse });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message: 'No se puede cambiar el curso porque la cohorte tiene alumnos asociados.',
+        code: 'COHORT_HAS_STUDENTS',
+        field: 'courseId',
+      });
+    });
+
+    it('F-02: no deja bajar el cupo por debajo de los alumnos activos', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current({ cupo_maximo: 20 }))
+        .mockReturnValueOnce(enrollments('activo', 'activo', 'activo', 'finalizado'));
+
+      const res = await patch({ cupoMaximo: 2 });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message: 'El cupo máximo no puede ser menor que los alumnos activos de la cohorte (3).',
+        code: 'COHORT_CUPO_BELOW_ACTIVE',
+        field: 'cupoMaximo',
+      });
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
+    });
+
+    it('F-02: permite bajar el cupo hasta los activos; finalizados y retirados no ocupan', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current({ cupo_maximo: 20 }))
+        .mockReturnValueOnce(enrollments('activo', 'activo', 'finalizado', 'retirado', 'retirado'))
+        .mockReturnValueOnce(updated({ cupo_maximo: 2 }));
+
+      const res = await patch({ cupoMaximo: 2 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.cupoMaximo).toBe(2);
+    });
+
+    it('subir el cupo no necesita contar alumnos', async () => {
+      mockedFrom.mockReturnValueOnce(current({ cupo_maximo: 20 })).mockReturnValueOnce(updated());
+
+      const res = await patch({ cupoMaximo: 30 });
+
+      expect(res.status).toBe(200);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
+    });
+
+    it('rechaza acortar el curso si deja franjas después del nuevo fin', async () => {
+      const slotsChain = createChain({
+        data: [
+          { scheduled_at: '2026-05-20T15:00:00+00:00' },
+          { scheduled_at: '2026-05-21T15:00:00+00:00' },
+        ],
+        error: null,
+      });
+      mockedFrom.mockReturnValueOnce(current()).mockReturnValueOnce(slotsChain);
+
+      const res = await patch({ fechaFinCurso: '2026-05-01' });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message:
+          'No se pueden cambiar las fechas del curso porque quedarían franjas de práctica fuera de la nueva ventana (2).',
+        code: 'COHORT_SLOTS_OUTSIDE_WINDOW',
+        field: 'fechaFinCurso',
+      });
+      expect(slotsChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
+      // Ventana [2026-03-01 00:00, 2026-05-02 00:00) en America/Guayaquil (UTC-5).
+      expect(slotsChain.or).toHaveBeenCalledWith(
+        'scheduled_at.lt.2026-03-01T05:00:00.000Z,scheduled_at.gte.2026-05-02T05:00:00.000Z',
+      );
+    });
+
+    it('marca el inicio si alguna franja queda antes del nuevo inicio', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(
+          createChain({ data: [{ scheduled_at: '2026-03-02T15:00:00+00:00' }], error: null }),
+        );
+
+      const res = await patch({ fechaInicioCurso: '2026-03-10' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.field).toBe('fechaInicioCurso');
+    });
+
+    it('permite cambiar las fechas si todas las franjas siguen dentro', async () => {
+      const updateChain = updated({ fecha_fin_curso: '2026-07-01' });
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(createChain({ data: [], error: null }))
+        .mockReturnValueOnce(updateChain);
+
+      const res = await patch({ fechaFinCurso: '2026-07-01' });
+
+      expect(res.status).toBe(200);
+      expect(updateChain.update).toHaveBeenCalledWith({ fecha_fin_curso: '2026-07-01' });
+    });
+
+    it('cambiar solo la matrícula no consulta franjas', async () => {
+      mockedFrom.mockReturnValueOnce(current()).mockReturnValueOnce(updated());
+
+      const res = await patch({ fechaFinMatricula: '2026-02-20' });
+
+      expect(res.status).toBe(200);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 function cohortRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -720,7 +1062,7 @@ function cohortRow(overrides: Record<string, unknown> = {}): Record<string, unkn
     numero_vehiculos: null,
     numero_aulas: null,
     created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00.123456+00:00',
+    updated_at: VERSION,
     ...overrides,
   };
 }

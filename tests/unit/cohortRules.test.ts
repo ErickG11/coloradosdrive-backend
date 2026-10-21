@@ -6,6 +6,7 @@ import {
   isFechaCivil,
   maxCohortDate,
   normalizeCohortName,
+  withCount,
   type CohortDates,
 } from '../../src/utils/cohortRules';
 
@@ -105,5 +106,13 @@ describe('normalizeCohortName', () => {
   it('ignora mayúsculas y espacios extremos (como lower(btrim(nombre)))', () => {
     expect(normalizeCohortName('  TA-23001 ')).toBe('ta-23001');
     expect(normalizeCohortName('Cohorte  A')).toBe('cohorte  a');
+  });
+});
+
+describe('withCount', () => {
+  it('añade el conteo entre paréntesis antes del punto final', () => {
+    expect(withCount('La cohorte tiene alumnos asociados.', 3)).toBe(
+      'La cohorte tiene alumnos asociados (3).',
+    );
   });
 });
