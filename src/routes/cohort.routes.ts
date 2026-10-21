@@ -26,6 +26,8 @@ cohortRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 type Mode = 'create' | 'update';
 
+const VERSION_REGEX = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:?\d{2})?)$/;
+
 const idParam = (): ValidationChain => param('id').isUUID().withMessage(M.idInvalido);
 
 // Los validadores estándar de express-validator recorren los arreglos
@@ -83,6 +85,12 @@ export function cohortValidators(mode: Mode): ValidationChain[] {
             .withMessage(M.versionFaltante)
             .bail()
             .isISO8601({ strict: true })
+            .withMessage(M.versionFaltante)
+            .bail()
+            // Marca de tiempo completa (fecha, hora y zona), como la devuelve
+            // PostgREST: «2026», «2026-10» o «2026-W01» pasan isISO8601 pero
+            // PostgreSQL los rechaza (22007) y darían 500.
+            .matches(VERSION_REGEX)
             .withMessage(M.versionFaltante),
         ]
       : []),
