@@ -28,8 +28,9 @@ async function blockingConstraint(cohortId) {
     await db.query('delete from public.cohorts where id=$1', [cohortId]);
     return null;
   } catch (error) {
-    // ON DELETE RESTRICT responde 23001 (restrict_violation), no 23503.
-    assert.equal(error.code, '23001', error.message);
+    // ON DELETE RESTRICT: PGlite (PG 18) lanza 23001; PG <= 17 (Supabase
+    // 17.6) lanza 23503. El servicio mapea ambos.
+    assert.ok(['23001', '23503'].includes(error.code), error.message);
     assert.match(error.message, new RegExp(`constraint "${error.constraint}"`));
     return error.constraint;
   } finally {
@@ -157,7 +158,7 @@ try {
     JSON.stringify({
       result: 'PASS',
       checks:
-        'L6b: enrollments (any status, inactive account) and practice slots block cohort deletion with 23001 (RESTRICT) and named constraints; recovery rows do not without 030; draft 030 preflight/apply/blocks/rollback repeatable/aborts on orphans',
+        'L6b: enrollments (any status, inactive account) and practice slots block cohort deletion with 23001/23503 (RESTRICT, by PG version) and named constraints; recovery rows do not without 030; draft 030 preflight/apply/blocks/rollback repeatable/aborts on orphans',
       engine: (await one('select version() as v')).v,
       network: false,
     }),
