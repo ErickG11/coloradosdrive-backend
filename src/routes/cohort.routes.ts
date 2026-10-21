@@ -26,7 +26,9 @@ cohortRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
 type Mode = 'create' | 'update';
 
-const VERSION_REGEX = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:?\d{2})?)$/;
+// Desfase horario como máximo ±15:59 (PostgreSQL rechaza más con 22009).
+const VERSION_REGEX =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-](0\d|1[0-5])(:?[0-5]\d)?)$/;
 
 const idParam = (): ValidationChain => param('id').isUUID().withMessage(M.idInvalido);
 

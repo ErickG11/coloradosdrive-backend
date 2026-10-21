@@ -808,6 +808,14 @@ describe('cohorts endpoints', () => {
       ['updatedAt sin minutos ni zona', { precio: 100, updatedAt: '2026-10-20T12' }],
       ['updatedAt sin zona', { precio: 100, updatedAt: '2026-10-20T12:00:00.123456' }],
       ['updatedAt solo fecha', { precio: 100, updatedAt: '2026-10-20' }],
+      [
+        'updatedAt con desfase de 16 horas',
+        { precio: 100, updatedAt: '2026-10-20T12:00:00+16:00' },
+      ],
+      [
+        'updatedAt con minutos de desfase 60',
+        { precio: 100, updatedAt: '2026-10-20T12:00:00+05:60' },
+      ],
     ])('responde 400 si %s, sin consultar la base', async (_label, body) => {
       const res = await raw(body);
 
@@ -818,6 +826,19 @@ describe('cohorts endpoints', () => {
         field: 'updatedAt',
       });
       expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      '2026-01-01T00:00:00Z',
+      '2026-01-01 00:00:00.5+00',
+      '2026-01-01T00:00:00.123456-05:00',
+      '2026-01-01T00:00:00+15:59',
+    ])('acepta la versión con formato de marca de tiempo %p', async (updatedAt) => {
+      mockedFrom.mockReturnValueOnce(current()).mockReturnValueOnce(updated());
+
+      const res = await raw({ precio: 120, updatedAt });
+
+      expect(res.status).toBe(200);
     });
 
     it('responde 400 si solo llega la versión (nada que guardar)', async () => {
