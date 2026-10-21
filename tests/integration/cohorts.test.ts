@@ -802,6 +802,12 @@ describe('cohorts endpoints', () => {
       ['falta updatedAt', { precio: 100 }],
       ['updatedAt null', { precio: 100, updatedAt: null }],
       ['updatedAt no es fecha', { precio: 100, updatedAt: 'ayer' }],
+      ['updatedAt solo año', { precio: 100, updatedAt: '2026' }],
+      ['updatedAt año y mes', { precio: 100, updatedAt: '2026-10' }],
+      ['updatedAt semana ISO', { precio: 100, updatedAt: '2026-W01' }],
+      ['updatedAt sin minutos ni zona', { precio: 100, updatedAt: '2026-10-20T12' }],
+      ['updatedAt sin zona', { precio: 100, updatedAt: '2026-10-20T12:00:00.123456' }],
+      ['updatedAt solo fecha', { precio: 100, updatedAt: '2026-10-20' }],
     ])('responde 400 si %s, sin consultar la base', async (_label, body) => {
       const res = await raw(body);
 
@@ -1003,7 +1009,10 @@ describe('cohorts endpoints', () => {
         field: 'fechaFinCurso',
       });
       expect(slotsChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
-      // Ventana [2026-03-01 00:00, 2026-05-02 00:00) en America/Guayaquil (UTC-5).
+      // Solo franjas de la ventana guardada [2026-03-01, 2026-06-02) …
+      expect(slotsChain.gte).toHaveBeenCalledWith('scheduled_at', '2026-03-01T05:00:00.000Z');
+      expect(slotsChain.lt).toHaveBeenCalledWith('scheduled_at', '2026-06-02T05:00:00.000Z');
+      // … que caerían fuera de la nueva [2026-03-01, 2026-05-02), hora de Ecuador (UTC-5).
       expect(slotsChain.or).toHaveBeenCalledWith(
         'scheduled_at.lt.2026-03-01T05:00:00.000Z,scheduled_at.gte.2026-05-02T05:00:00.000Z',
       );
@@ -1020,6 +1029,37 @@ describe('cohorts endpoints', () => {
 
       expect(res.status).toBe(409);
       expect(res.body.field).toBe('fechaInicioCurso');
+    });
+
+    it('ampliar la ventana no se bloquea por franjas que ya estaban fuera', async () => {
+      const slotsChain = createChain({ data: [], error: null });
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(slotsChain)
+        .mockReturnValueOnce(updated());
+
+      const res = await patch({ fechaInicioCurso: '2026-02-26', fechaFinCurso: '2026-06-30' });
+
+      expect(res.status).toBe(200);
+      // La consulta se limita a la ventana anterior: lo que ya estaba fuera no cuenta.
+      expect(slotsChain.gte).toHaveBeenCalledWith('scheduled_at', '2026-03-01T05:00:00.000Z');
+      expect(slotsChain.lt).toHaveBeenCalledWith('scheduled_at', '2026-06-02T05:00:00.000Z');
+      expect(slotsChain.or).toHaveBeenCalledWith(
+        'scheduled_at.lt.2026-02-26T05:00:00.000Z,scheduled_at.gte.2026-07-01T05:00:00.000Z',
+      );
+    });
+
+    it('al mover solo el fin, una franja tras el nuevo fin marca fechaFinCurso', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(
+          createChain({ data: [{ scheduled_at: '2026-05-25T15:00:00+00:00' }], error: null }),
+        );
+
+      const res = await patch({ fechaFinCurso: '2026-05-20' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.field).toBe('fechaFinCurso');
     });
 
     it('permite cambiar las fechas si todas las franjas siguen dentro', async () => {

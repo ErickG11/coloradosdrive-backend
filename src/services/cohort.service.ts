@@ -89,6 +89,17 @@ function toUpdatePayload(input: UpdateCohortInput): CohortUpdate {
   return payload;
 }
 
+// Instantes UTC (ISO) de [inicio 00:00, fin + 1 día 00:00) en hora de Ecuador.
+// Las fechas ya pasaron por isFechaCivil, así que siempre son válidas.
+function courseWindow(inicio: string, fin: string): { start: string; end: string } {
+  const at = (date: string, plusDays: number): string =>
+    DateTime.fromISO(date, { zone: SCHOOL_TIMEZONE })
+      .plus({ days: plusDays })
+      .toUTC()
+      .toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  return { start: at(inicio, 0), end: at(fin, 1) };
+}
+
 const notFound = (): AppError => new AppError(M.cohorteNoExiste, 404, { code: 'COHORT_NOT_FOUND' });
 
 function toCohort(row: CohortRow): Cohort {
@@ -234,31 +245,31 @@ export class CohortService {
     return { ...toCohort(row), alumnos: await this.studentCounts(id) };
   }
 
-  // Franjas de práctica de la cohorte que quedarían fuera de la ventana de
-  // curso [inicio 00:00, fin 24:00) en la zona horaria de la escuela.
+  // Franjas de práctica que estaban DENTRO de la ventana de curso guardada y
+  // quedarían FUERA de la nueva. Las que ya estaban fuera no bloquean (así
+  // ampliar la ventana nunca falla por ellas). Ventana: [inicio 00:00, fin
+  // + 1 día 00:00) en la zona horaria de la escuela; cuenta cualquier estado.
   private async assertSlotsInsideWindow(
     id: string,
-    fechaInicioCurso: string,
-    fechaFinCurso: string,
+    previous: { inicio: string; fin: string },
+    next: { inicio: string; fin: string },
   ): Promise<void> {
-    const start = DateTime.fromISO(fechaInicioCurso, { zone: SCHOOL_TIMEZONE }).toUTC().toISO();
-    const end = DateTime.fromISO(fechaFinCurso, { zone: SCHOOL_TIMEZONE })
-      .plus({ days: 1 })
-      .toUTC()
-      .toISO();
-    if (start === null || end === null) {
-      throw new AppError(M.fechaInicioCurso, 400, { code: 'INVALID_FIELD' });
-    }
+    const old = courseWindow(previous.inicio, previous.fin);
+    const now = courseWindow(next.inicio, next.fin);
     const { data, error } = await this.supabase
       .from('practice_slots')
       .select('scheduled_at')
       .eq('cohort_id', id)
-      .or(`scheduled_at.lt.${start},scheduled_at.gte.${end}`);
+      .gte('scheduled_at', old.start)
+      .lt('scheduled_at', old.end)
+      .or(`scheduled_at.lt.${now.start},scheduled_at.gte.${now.end}`);
     if (error) {
       throw error;
     }
     if (data.length > 0) {
-      const before = data.some((slot) => new Date(slot.scheduled_at) < new Date(start));
+      // Una franja de la ventana anterior solo puede quedar antes del nuevo
+      // inicio si se movió el inicio; si no, quedó después del nuevo fin.
+      const before = data.some((slot) => new Date(slot.scheduled_at) < new Date(now.start));
       throw new AppError(withCount(M.franjasFueraVentana, data.length), 409, {
         code: 'COHORT_SLOTS_OUTSIDE_WINDOW',
         field: before ? 'fechaInicioCurso' : 'fechaFinCurso',
@@ -317,7 +328,11 @@ export class CohortService {
       fechaInicioCurso !== current.fecha_inicio_curso ||
       fechaFinCurso !== current.fecha_fin_curso
     ) {
-      await this.assertSlotsInsideWindow(id, fechaInicioCurso, fechaFinCurso);
+      await this.assertSlotsInsideWindow(
+        id,
+        { inicio: current.fecha_inicio_curso, fin: current.fecha_fin_curso },
+        { inicio: fechaInicioCurso, fin: fechaFinCurso },
+      );
     }
 
     // 4.1: un solo UPDATE condicionado a la versión base (atómico). Dos
