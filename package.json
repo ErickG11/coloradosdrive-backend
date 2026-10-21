@@ -23,6 +23,7 @@
     "test:student-cohort-db": "node tests/database/studentCohort.mjs",
     "test:cohort-validations-db": "node tests/database/cohortValidations.mjs",
     "test:cohort-concurrency-db": "node tests/database/cohortConcurrency.mjs",
+    "test:cohort-deletion-db": "node tests/database/cohortDeletion.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
