@@ -28,7 +28,8 @@ const DEFAULTS: Record<string, PostgresErrorOverride> = {
     message: 'Los datos no cumplen las reglas de validación.',
     code: 'CHECK_VIOLATION',
   },
-  // ON DELETE RESTRICT responde 23001 (restrict_violation), no 23503.
+  // ON DELETE RESTRICT: PG >= 18 lanza 23001 (restrict_violation); PG <= 17
+  // (Supabase 17.6) lanza 23503. Se mapean ambos igual.
   '23001': {
     status: 409,
     message: 'El registro está relacionado con otros datos y no se puede completar la operación.',
