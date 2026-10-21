@@ -139,14 +139,21 @@ interface CohortUsage {
   recuperaciones: number;
 }
 
+// «1 alumno», «2 alumnos», «0 alumnos»: concordancia de número en español.
+function count(value: number, singular: string, plural: string): string {
+  return `${String(value)} ${value === 1 ? singular : plural}`;
+}
+
 function cohortInUseMessage(u: CohortUsage): string {
   const a = u.alumnos;
-  const n = (value: number): string => String(value);
   return (
-    `No se puede eliminar la cohorte: tiene ${n(a.total)} alumnos (${n(a.activos)} activos, ` +
-    `${n(a.desactivados)} desactivados, ${n(a.graduados)} graduados, ${n(a.retirados)} retirados), ` +
-    `${n(u.franjas)} franjas de práctica (${n(u.reservas)} con reserva) y ` +
-    `${n(u.recuperaciones)} registros de recuperación de prácticas.`
+    `No se puede eliminar la cohorte: tiene ${count(a.total, 'alumno', 'alumnos')} (` +
+    `${count(a.activos, 'activo', 'activos')}, ` +
+    `${count(a.desactivados, 'desactivado', 'desactivados')}, ` +
+    `${count(a.graduados, 'graduado', 'graduados')}, ` +
+    `${count(a.retirados, 'retirado', 'retirados')}), ` +
+    `${count(u.franjas, 'franja de práctica', 'franjas de práctica')} (${String(u.reservas)} con reserva) y ` +
+    `${count(u.recuperaciones, 'registro de recuperación de prácticas', 'registros de recuperación de prácticas')}.`
   );
 }
 
@@ -411,7 +418,9 @@ export class CohortService {
   // las FK RESTRICT de la base siguen siendo la defensa final.
   async deleteCohort(id: string, confirmacionNombre: string): Promise<CohortDeletionResult> {
     const cohort = await this.readCohort(id);
-    if (confirmacionNombre.trim() !== cohort.nombre.trim()) {
+    // NFC: «é» compuesto y descompuesto cuentan como el mismo texto.
+    const typed = confirmacionNombre.normalize('NFC').trim();
+    if (typed !== cohort.nombre.normalize('NFC').trim()) {
       throw new AppError(M.confirmacionInvalida, 400, {
         code: 'CONFIRMATION_MISMATCH',
         field: 'confirmacionNombre',
@@ -439,24 +448,19 @@ export class CohortService {
   }
 
   private async usage(id: string): Promise<CohortUsage> {
-    const rows = await this.enrollmentRows(id);
-    const inactive = new Set<string>();
-    if (rows.length > 0) {
-      const { data, error } = await this.supabase
-        .from('users')
-        .select('id,activo')
-        .in(
-          'id',
-          rows.map((row) => row.student_id),
-        );
-      if (error) {
-        throw error;
-      }
-      for (const user of data) if (!user.activo) inactive.add(user.id);
+    // Una sola consulta con el alumno embebido (sin listas de ids en la URL,
+    // que PostgREST limita a ~8 KB). enrollments solo tiene una FK a users.
+    const { data: rows, error } = await this.supabase
+      .from('enrollments')
+      .select('status,student:users!enrollments_student_id_fkey(activo)')
+      .eq('cohort_id', id)
+      .overrideTypes<{ status: string; student: { activo: boolean } | null }[], { merge: false }>();
+    if (error) {
+      throw error;
     }
     // Desactivados: cuenta desactivada (users.activo = false) con cualquier
     // estado de matrícula; el resto se reparte por estado.
-    const accountActive = rows.filter((row) => !inactive.has(row.student_id));
+    const accountActive = rows.filter((row) => row.student?.activo !== false);
     const byStatus = countByStatus(accountActive);
 
     const { data: slots, error: slotsError } = await this.supabase

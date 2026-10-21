@@ -1196,13 +1196,16 @@ describe('cohorts endpoints', () => {
     );
 
     it('bloquea con 409 y explica alumnos por tipo, franjas, reservas y recuperaciones', async () => {
-      const usersChain = createChain({
+      const enrollmentsChain = createChain({
         data: [
-          { id: 's1', activo: true },
-          { id: 's2', activo: false },
-          { id: 's3', activo: true },
-          { id: 's4', activo: true },
-          { id: 's5', activo: false },
+          { status: 'activo', student: { activo: true } },
+          { status: 'activo', student: { activo: true } },
+          { status: 'activo', student: { activo: false } },
+          { status: 'finalizado', student: { activo: true } },
+          { status: 'finalizado', student: { activo: true } },
+          { status: 'retirado', student: { activo: true } },
+          { status: 'retirado', student: { activo: true } },
+          { status: 'finalizado', student: { activo: false } },
         ],
         error: null,
       });
@@ -1210,22 +1213,10 @@ describe('cohorts endpoints', () => {
         data: [{ student_id: null }, { student_id: 's1' }, { student_id: null }],
         error: null,
       });
-      const recoveryChain = createChain({ data: null, error: null, count: 1 });
+      const recoveryChain = createChain({ data: null, error: null, count: 2 });
       mockedFrom
         .mockReturnValueOnce(current())
-        .mockReturnValueOnce(
-          createChain({
-            data: [
-              { status: 'activo', student_id: 's1' },
-              { status: 'activo', student_id: 's2' },
-              { status: 'finalizado', student_id: 's3' },
-              { status: 'retirado', student_id: 's4' },
-              { status: 'finalizado', student_id: 's5' },
-            ],
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(usersChain)
+        .mockReturnValueOnce(enrollmentsChain)
         .mockReturnValueOnce(slotsChain)
         .mockReturnValueOnce(recoveryChain);
 
@@ -1234,35 +1225,102 @@ describe('cohorts endpoints', () => {
       expect(res.status).toBe(409);
       expect(res.body).toMatchObject({
         message:
-          'No se puede eliminar la cohorte: tiene 5 alumnos (1 activos, 2 desactivados, 1 graduados, 1 retirados), 3 franjas de práctica (1 con reserva) y 1 registros de recuperación de prácticas.',
+          'No se puede eliminar la cohorte: tiene 8 alumnos (2 activos, 2 desactivados, 2 graduados, 2 retirados), 3 franjas de práctica (1 con reserva) y 2 registros de recuperación de prácticas.',
         code: 'COHORT_IN_USE',
       });
-      expect(usersChain.in).toHaveBeenCalledWith('id', ['s1', 's2', 's3', 's4', 's5']);
+      // Una sola consulta con el alumno embebido: sin listas de ids en la URL.
+      expect(enrollmentsChain.select).toHaveBeenCalledWith(
+        'status,student:users!enrollments_student_id_fkey(activo)',
+      );
+      expect(enrollmentsChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
+      expect(enrollmentsChain.in).not.toHaveBeenCalled();
       expect(slotsChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
       expect(recoveryChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
       expect(mockedFrom.mock.calls.map((call: unknown[]) => call[0])).toEqual([
         'cohorts',
         'enrollments',
-        'users',
         'practice_slots',
         'student_practice_recovery',
       ]);
     });
 
-    it('bloquea con solo franjas libres (sin alumnos no consulta usuarios)', async () => {
+    it('usa el singular cuando una cifra es 1', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(
+          createChain({
+            data: [
+              { status: 'activo', student: { activo: true } },
+              { status: 'finalizado', student: { activo: true } },
+              { status: 'retirado', student: { activo: true } },
+              { status: 'retirado', student: { activo: false } },
+            ],
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(createChain({ data: [{ student_id: 's1' }], error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null, count: 1 }));
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.body.message).toBe(
+        'No se puede eliminar la cohorte: tiene 4 alumnos (1 activo, 1 desactivado, 1 graduado, 1 retirado), 1 franja de práctica (1 con reserva) y 1 registro de recuperación de prácticas.',
+      );
+    });
+
+    it('un solo alumno y ninguna franja', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(
+          createChain({ data: [{ status: 'activo', student: { activo: true } }], error: null }),
+        )
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(noRecovery());
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.body.message).toBe(
+        'No se puede eliminar la cohorte: tiene 1 alumno (1 activo, 0 desactivados, 0 graduados, 0 retirados), 0 franjas de práctica (0 con reserva) y 0 registros de recuperación de prácticas.',
+      );
+    });
+
+    it('bloquea con solo franjas libres', async () => {
       mockedFrom
         .mockReturnValueOnce(current())
         .mockReturnValueOnce(none())
-        .mockReturnValueOnce(createChain({ data: [{ student_id: null }], error: null }))
+        .mockReturnValueOnce(
+          createChain({ data: [{ student_id: null }, { student_id: null }], error: null }),
+        )
         .mockReturnValueOnce(noRecovery());
 
       const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
 
       expect(res.status).toBe(409);
       expect(res.body.message).toBe(
-        'No se puede eliminar la cohorte: tiene 0 alumnos (0 activos, 0 desactivados, 0 graduados, 0 retirados), 1 franjas de práctica (0 con reserva) y 0 registros de recuperación de prácticas.',
+        'No se puede eliminar la cohorte: tiene 0 alumnos (0 activos, 0 desactivados, 0 graduados, 0 retirados), 2 franjas de práctica (0 con reserva) y 0 registros de recuperación de prácticas.',
       );
       expect(mockedFrom).toHaveBeenCalledTimes(4);
+    });
+
+    it('acepta la confirmación con otra forma Unicode del mismo nombre (NFC)', async () => {
+      const deleteChain = createChain({ data: { id: cohortId }, error: null });
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({
+            data: cohortRow({ id: cohortId, nombre: 'Matrícula Única' }),
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(noRecovery())
+        .mockReturnValueOnce(deleteChain);
+
+      // «í» y «Ú» descompuestos (letra + acento combinante).
+      const res = await del({ confirmacionNombre: 'Matri\u0301cula U\u0301nica' });
+
+      expect(res.status).toBe(200);
+      expect(deleteChain.delete).toHaveBeenCalledTimes(1);
     });
 
     it('F-11: bloquea con solo filas de recuperación (sin FK en la base)', async () => {
@@ -1306,7 +1364,7 @@ describe('cohorts endpoints', () => {
       ['23001', 'practice_slots_cohort_id_fkey'],
       ['23001', 'student_practice_recovery_cohort_fkey'],
       ['23503', 'practice_slots_cohort_id_fkey'],
-    ])('traduce el %s de %s (carrera tras el conteo) a 409', async (code, constraint) => {
+    ])('traduce el %s (PG 18) de %s (carrera tras el conteo) a 409', async (code, constraint) => {
       mockedFrom
         .mockReturnValueOnce(current())
         .mockReturnValueOnce(none())
@@ -1318,6 +1376,38 @@ describe('cohorts endpoints', () => {
             error: {
               code,
               message: `update or delete on table "cohorts" violates RESTRICT setting of foreign key constraint "${constraint}" on table "x"`,
+            },
+          }),
+        );
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message:
+          'No se puede eliminar la cohorte: tiene alumnos, franjas de práctica o recuperaciones asociadas.',
+        code: 'COHORT_IN_USE',
+      });
+    });
+
+    it.each([
+      'enrollments_cohort_course_fkey',
+      'enrollments_cohort_id_fkey',
+      'practice_slots_cohort_id_fkey',
+    ])('traduce el 23503 de PostgreSQL 17 (Supabase) de %s a 409', async (constraint) => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(noRecovery())
+        .mockReturnValueOnce(
+          createChain({
+            data: null,
+            error: {
+              code: '23503',
+              message: `update or delete on table "cohorts" violates foreign key constraint "${constraint}" on table "enrollments"`,
+              details:
+                'Key (id)=(22222222-2222-4222-8222-222222222222) is still referenced from table "enrollments".',
             },
           }),
         );
