@@ -43,7 +43,19 @@ export const COHORT_MESSAGES = {
   finMatriculaAntesInicio: 'El fin de matrícula no puede ser anterior al inicio de matrícula.',
   finCursoAntesInicio: 'El fin de curso no puede ser anterior al inicio de curso.',
   cursoAntesMatricula: 'El curso no puede terminar antes de que abra la matrícula.',
+  versionFaltante: 'Falta la versión de la cohorte. Recarga la página e inténtalo de nuevo.',
+  sinCambios: 'No hay cambios que guardar.',
+  versionConflicto: 'La cohorte cambió desde que abriste la edición. Recarga para ver los cambios.',
+  cursoConAlumnos: 'No se puede cambiar el curso porque la cohorte tiene alumnos asociados.',
+  cupoBajoActivos: 'El cupo máximo no puede ser menor que los alumnos activos de la cohorte.',
+  franjasFueraVentana:
+    'No se pueden cambiar las fechas del curso porque quedarían franjas de práctica fuera de la nueva ventana.',
 } as const;
+
+// Mensajes con el conteo al final, p. ej. «… alumnos asociados (3).».
+export function withCount(message: string, count: number): string {
+  return `${message.slice(0, -1)} (${String(count)}).`;
+}
 
 export const COHORT_DATE_FIELDS = [
   'fechaInicioMatricula',
