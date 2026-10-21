@@ -50,6 +50,11 @@ export const COHORT_MESSAGES = {
   cupoBajoActivos: 'El cupo máximo no puede ser menor que los alumnos activos de la cohorte.',
   franjasFueraVentana:
     'No se pueden cambiar las fechas del curso porque quedarían franjas de práctica fuera de la nueva ventana.',
+  confirmacionInvalida:
+    'Confirmación inválida: escribe el nombre exacto de la cohorte para eliminarla.',
+  cohorteEnUso:
+    'No se puede eliminar la cohorte: tiene alumnos, franjas de práctica o recuperaciones asociadas.',
+  cohorteEliminada: 'Cohorte eliminada.',
 } as const;
 
 // Mensajes con el conteo al final, p. ej. «… alumnos asociados (3).».

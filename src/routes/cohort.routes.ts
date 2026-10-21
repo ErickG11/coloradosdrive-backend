@@ -3,6 +3,7 @@ import { body, param, type ValidationChain } from 'express-validator';
 
 import {
   createCohort,
+  deleteCohort,
   getCohort,
   listCohorts,
   updateCohort,
@@ -145,4 +146,18 @@ export function cohortValidators(mode: Mode): ValidationChain[] {
 cohortRouter.post('/', cohortValidators('create'), validateFields, asyncHandler(createCohort));
 cohortRouter.get('/', asyncHandler(listCohorts));
 cohortRouter.get('/:id', idParam(), validateFields, asyncHandler(getCohort));
+// L6b: solo admin (router) y confirmación escrita con el nombre exacto.
+cohortRouter.delete(
+  '/:id',
+  idParam(),
+  body('confirmacionNombre')
+    .isString()
+    .withMessage(M.confirmacionInvalida)
+    .bail()
+    .trim()
+    .notEmpty()
+    .withMessage(M.confirmacionInvalida),
+  validateFields,
+  asyncHandler(deleteCohort),
+);
 cohortRouter.patch('/:id', cohortValidators('update'), validateFields, asyncHandler(updateCohort));

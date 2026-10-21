@@ -48,3 +48,9 @@ export interface CohortStudentCounts {
 export interface CohortDetail extends Cohort {
   alumnos: CohortStudentCounts;
 }
+
+export interface CohortDeletionResult {
+  id: string;
+  nombre: string;
+  message: string;
+}

@@ -1105,6 +1105,246 @@ describe('cohorts endpoints', () => {
       expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
   });
+
+  describe('L6b: DELETE /cohorts/:id', () => {
+    const cohortId = '22222222-2222-4222-8222-222222222222';
+    const del = (body: unknown, id = cohortId) =>
+      request(app)
+        .delete(`/cohorts/${id}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+        .send(body as object);
+    const current = () =>
+      createChain({ data: cohortRow({ id: cohortId, nombre: 'Cohorte Marzo 2026' }), error: null });
+    const none = () => createChain({ data: [], error: null });
+    const noRecovery = () => createChain({ data: null, error: null, count: 0 });
+
+    it('sin token responde 401', async () => {
+      const res = await request(app)
+        .delete(`/cohorts/${cohortId}`)
+        .send({ confirmacionNombre: 'Cohorte Marzo 2026' });
+      expect(res.status).toBe(401);
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('estudiante e instructor reciben 403 y no se consulta la cohorte', async () => {
+      mockedFrom.mockReturnValueOnce(
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+      );
+      const asStudent = await request(app)
+        .delete(`/cohorts/${cohortId}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
+        .send({ confirmacionNombre: 'Cohorte Marzo 2026' });
+      const asInstructor = await request(app)
+        .delete(`/cohorts/${cohortId}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'instructor')}`)
+        .send({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(asStudent.status).toBe(403);
+      expect(asInstructor.status).toBe(403);
+      expect(mockedFrom).toHaveBeenCalledTimes(1); // solo el estado de la cuenta del estudiante
+    });
+
+    it('responde 400 si el id no es un UUID', async () => {
+      const res = await del({ confirmacionNombre: 'x' }, 'abc');
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field: 'id' });
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it.each<[string, unknown]>([
+      ['sin cuerpo', {}],
+      ['vacía', { confirmacionNombre: '' }],
+      ['solo espacios', { confirmacionNombre: '   ' }],
+      ['no texto', { confirmacionNombre: 123 }],
+    ])('rechaza la confirmación %s sin tocar la base', async (_label, body) => {
+      const res = await del(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        message: 'Confirmación inválida: escribe el nombre exacto de la cohorte para eliminarla.',
+        code: 'INVALID_FIELD',
+        field: 'confirmacionNombre',
+      });
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+
+    it('responde 404 si la cohorte no existe', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }));
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe('COHORT_NOT_FOUND');
+    });
+
+    it.each(['cohorte marzo 2026', 'Cohorte Marzo', 'Cohorte  Marzo 2026'])(
+      'no elimina si el nombre no coincide exactamente (%p)',
+      async (confirmacionNombre) => {
+        mockedFrom.mockReturnValueOnce(current());
+
+        const res = await del({ confirmacionNombre });
+
+        expect(res.status).toBe(400);
+        expect(res.body).toMatchObject({
+          message: 'Confirmación inválida: escribe el nombre exacto de la cohorte para eliminarla.',
+          code: 'CONFIRMATION_MISMATCH',
+          field: 'confirmacionNombre',
+        });
+        expect(mockedFrom).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('bloquea con 409 y explica alumnos por tipo, franjas, reservas y recuperaciones', async () => {
+      const usersChain = createChain({
+        data: [
+          { id: 's1', activo: true },
+          { id: 's2', activo: false },
+          { id: 's3', activo: true },
+          { id: 's4', activo: true },
+          { id: 's5', activo: false },
+        ],
+        error: null,
+      });
+      const slotsChain = createChain({
+        data: [{ student_id: null }, { student_id: 's1' }, { student_id: null }],
+        error: null,
+      });
+      const recoveryChain = createChain({ data: null, error: null, count: 1 });
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(
+          createChain({
+            data: [
+              { status: 'activo', student_id: 's1' },
+              { status: 'activo', student_id: 's2' },
+              { status: 'finalizado', student_id: 's3' },
+              { status: 'retirado', student_id: 's4' },
+              { status: 'finalizado', student_id: 's5' },
+            ],
+            error: null,
+          }),
+        )
+        .mockReturnValueOnce(usersChain)
+        .mockReturnValueOnce(slotsChain)
+        .mockReturnValueOnce(recoveryChain);
+
+      const res = await del({ confirmacionNombre: '  Cohorte Marzo 2026 ' });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message:
+          'No se puede eliminar la cohorte: tiene 5 alumnos (1 activos, 2 desactivados, 1 graduados, 1 retirados), 3 franjas de práctica (1 con reserva) y 1 registros de recuperación de prácticas.',
+        code: 'COHORT_IN_USE',
+      });
+      expect(usersChain.in).toHaveBeenCalledWith('id', ['s1', 's2', 's3', 's4', 's5']);
+      expect(slotsChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
+      expect(recoveryChain.eq).toHaveBeenCalledWith('cohort_id', cohortId);
+      expect(mockedFrom.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+        'cohorts',
+        'enrollments',
+        'users',
+        'practice_slots',
+        'student_practice_recovery',
+      ]);
+    });
+
+    it('bloquea con solo franjas libres (sin alumnos no consulta usuarios)', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(createChain({ data: [{ student_id: null }], error: null }))
+        .mockReturnValueOnce(noRecovery());
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.message).toBe(
+        'No se puede eliminar la cohorte: tiene 0 alumnos (0 activos, 0 desactivados, 0 graduados, 0 retirados), 1 franjas de práctica (0 con reserva) y 0 registros de recuperación de prácticas.',
+      );
+      expect(mockedFrom).toHaveBeenCalledTimes(4);
+    });
+
+    it('F-11: bloquea con solo filas de recuperación (sin FK en la base)', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(createChain({ data: null, error: null, count: 2 }));
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('COHORT_IN_USE');
+      expect(res.body.message).toContain('2 registros de recuperación de prácticas');
+    });
+
+    it('elimina una cohorte sin referencias y responde 200', async () => {
+      const deleteChain = createChain({ data: { id: cohortId }, error: null });
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(noRecovery())
+        .mockReturnValueOnce(deleteChain);
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        id: cohortId,
+        nombre: 'Cohorte Marzo 2026',
+        message: 'Cohorte eliminada.',
+      });
+      expect(deleteChain.delete).toHaveBeenCalledTimes(1);
+      expect(deleteChain.eq).toHaveBeenCalledWith('id', cohortId);
+    });
+
+    it.each([
+      ['23001', 'enrollments_cohort_id_fkey'],
+      ['23001', 'enrollments_cohort_course_fkey'],
+      ['23001', 'practice_slots_cohort_id_fkey'],
+      ['23001', 'student_practice_recovery_cohort_fkey'],
+      ['23503', 'practice_slots_cohort_id_fkey'],
+    ])('traduce el %s de %s (carrera tras el conteo) a 409', async (code, constraint) => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(noRecovery())
+        .mockReturnValueOnce(
+          createChain({
+            data: null,
+            error: {
+              code,
+              message: `update or delete on table "cohorts" violates RESTRICT setting of foreign key constraint "${constraint}" on table "x"`,
+            },
+          }),
+        );
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({
+        message:
+          'No se puede eliminar la cohorte: tiene alumnos, franjas de práctica o recuperaciones asociadas.',
+        code: 'COHORT_IN_USE',
+      });
+    });
+
+    it('responde 404 si otra persona la eliminó entre el conteo y el DELETE', async () => {
+      mockedFrom
+        .mockReturnValueOnce(current())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(none())
+        .mockReturnValueOnce(noRecovery())
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
+
+      const res = await del({ confirmacionNombre: 'Cohorte Marzo 2026' });
+
+      expect(res.status).toBe(404);
+    });
+  });
 });
 
 function cohortRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {

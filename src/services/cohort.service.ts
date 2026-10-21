@@ -4,6 +4,7 @@ import { DateTime } from 'luxon';
 import type { Database } from '../config/database.types';
 import type {
   Cohort,
+  CohortDeletionResult,
   CohortDetail,
   CohortStudentCounts,
   CreateCohortInput,
@@ -98,6 +99,55 @@ function courseWindow(inicio: string, fin: string): { start: string; end: string
       .toUTC()
       .toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
   return { start: at(inicio, 0), end: at(fin, 1) };
+}
+
+function countByStatus(rows: readonly { status: string }[]): CohortStudentCounts {
+  const by = (status: string): number => rows.filter((row) => row.status === status).length;
+  return {
+    total: rows.length,
+    activos: by('activo'),
+    finalizados: by('finalizado'),
+    retirados: by('retirado'),
+  };
+}
+
+// L6b: las FK ON DELETE RESTRICT que impiden borrar una cohorte usada (red de
+// seguridad si algo se asocia entre el conteo previo y el DELETE).
+const inUse: PostgresErrorOverride = {
+  status: 409,
+  message: M.cohorteEnUso,
+  code: 'COHORT_IN_USE',
+};
+const DELETE_CONSTRAINTS: Record<string, PostgresErrorOverride> = {
+  enrollments_cohort_id_fkey: inUse,
+  enrollments_cohort_course_fkey: inUse,
+  practice_slots_cohort_id_fkey: inUse,
+  // Borrador 030 (F-11); inofensivo mientras no se aplique.
+  student_practice_recovery_cohort_fkey: inUse,
+};
+
+interface CohortUsage {
+  alumnos: {
+    total: number;
+    activos: number;
+    desactivados: number;
+    graduados: number;
+    retirados: number;
+  };
+  franjas: number;
+  reservas: number;
+  recuperaciones: number;
+}
+
+function cohortInUseMessage(u: CohortUsage): string {
+  const a = u.alumnos;
+  const n = (value: number): string => String(value);
+  return (
+    `No se puede eliminar la cohorte: tiene ${n(a.total)} alumnos (${n(a.activos)} activos, ` +
+    `${n(a.desactivados)} desactivados, ${n(a.graduados)} graduados, ${n(a.retirados)} retirados), ` +
+    `${n(u.franjas)} franjas de práctica (${n(u.reservas)} con reserva) y ` +
+    `${n(u.recuperaciones)} registros de recuperación de prácticas.`
+  );
 }
 
 const notFound = (): AppError => new AppError(M.cohorteNoExiste, 404, { code: 'COHORT_NOT_FOUND' });
@@ -223,21 +273,19 @@ export class CohortService {
 
   // Matrículas asociadas por estado (una sola consulta). `activos` usa el
   // mismo criterio que enforce_cohort_cupo (status = 'activo').
-  private async studentCounts(id: string): Promise<CohortStudentCounts> {
+  private async enrollmentRows(id: string): Promise<{ status: string; student_id: string }[]> {
     const { data, error } = await this.supabase
       .from('enrollments')
-      .select('status')
+      .select('status,student_id')
       .eq('cohort_id', id);
     if (error) {
       throw error;
     }
-    const by = (status: string): number => data.filter((row) => row.status === status).length;
-    return {
-      total: data.length,
-      activos: by('activo'),
-      finalizados: by('finalizado'),
-      retirados: by('retirado'),
-    };
+    return data;
+  }
+
+  private async studentCounts(id: string): Promise<CohortStudentCounts> {
+    return countByStatus(await this.enrollmentRows(id));
   }
 
   async getCohort(id: string): Promise<CohortDetail> {
@@ -356,5 +404,89 @@ export class CohortService {
     }
 
     return toCohort(data);
+  }
+
+  // L6b: el admin confirma escribiendo el nombre exacto de la cohorte. Se
+  // cuenta todo lo que la referencia ANTES de borrar para explicar el bloqueo;
+  // las FK RESTRICT de la base siguen siendo la defensa final.
+  async deleteCohort(id: string, confirmacionNombre: string): Promise<CohortDeletionResult> {
+    const cohort = await this.readCohort(id);
+    if (confirmacionNombre.trim() !== cohort.nombre.trim()) {
+      throw new AppError(M.confirmacionInvalida, 400, {
+        code: 'CONFIRMATION_MISMATCH',
+        field: 'confirmacionNombre',
+      });
+    }
+
+    const usage = await this.usage(id);
+    if (usage.alumnos.total > 0 || usage.franjas > 0 || usage.recuperaciones > 0) {
+      throw new AppError(cohortInUseMessage(usage), 409, { code: 'COHORT_IN_USE' });
+    }
+
+    const { data, error } = await this.supabase
+      .from('cohorts')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
+    if (error) {
+      throw mapPostgresError(error, DELETE_CONSTRAINTS) ?? error;
+    }
+    if (!data) {
+      throw notFound();
+    }
+    return { id, nombre: cohort.nombre, message: M.cohorteEliminada };
+  }
+
+  private async usage(id: string): Promise<CohortUsage> {
+    const rows = await this.enrollmentRows(id);
+    const inactive = new Set<string>();
+    if (rows.length > 0) {
+      const { data, error } = await this.supabase
+        .from('users')
+        .select('id,activo')
+        .in(
+          'id',
+          rows.map((row) => row.student_id),
+        );
+      if (error) {
+        throw error;
+      }
+      for (const user of data) if (!user.activo) inactive.add(user.id);
+    }
+    // Desactivados: cuenta desactivada (users.activo = false) con cualquier
+    // estado de matrícula; el resto se reparte por estado.
+    const accountActive = rows.filter((row) => !inactive.has(row.student_id));
+    const byStatus = countByStatus(accountActive);
+
+    const { data: slots, error: slotsError } = await this.supabase
+      .from('practice_slots')
+      .select('student_id')
+      .eq('cohort_id', id);
+    if (slotsError) {
+      throw slotsError;
+    }
+    // F-11: student_practice_recovery.cohort_id no tiene FK; sin este conteo
+    // la base no impediría borrar una cohorte con recuperaciones pendientes.
+    const { count, error: recoveryError } = await this.supabase
+      .from('student_practice_recovery')
+      .select('slot_id', { count: 'exact', head: true })
+      .eq('cohort_id', id);
+    if (recoveryError) {
+      throw recoveryError;
+    }
+
+    return {
+      alumnos: {
+        total: rows.length,
+        activos: byStatus.activos,
+        desactivados: rows.length - accountActive.length,
+        graduados: byStatus.finalizados,
+        retirados: byStatus.retirados,
+      },
+      franjas: slots.length,
+      reservas: slots.filter((slot) => slot.student_id !== null).length,
+      recuperaciones: count ?? 0,
+    };
   }
 }
