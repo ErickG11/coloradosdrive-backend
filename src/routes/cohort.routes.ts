@@ -1,74 +1,119 @@
 import { Router } from 'express';
-import { body, param } from 'express-validator';
+import { body, param, type ValidationChain } from 'express-validator';
 
 import { createCohort, listCohorts, updateCohort } from '../controllers/cohort.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
-import { validate } from '../middlewares/validate';
+import { validateFields } from '../middlewares/validate';
 import { asyncHandler } from '../utils/asyncHandler';
+import {
+  COHORT_DATE_FIELDS,
+  COHORT_LIMITS as L,
+  COHORT_MESSAGES as M,
+  isFechaCivil,
+  maxCohortDate,
+} from '../utils/cohortRules';
 
 export const cohortRouter = Router();
 
 // RF-01: solo el administrador puede crear y editar matrículas/cohortes.
 cohortRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
-const createValidators = [
-  body('courseId').isUUID().withMessage('courseId debe ser un UUID válido'),
-  body('nombre').isString().trim().notEmpty().withMessage('nombre es obligatorio'),
-  body('precio').isFloat({ min: 0 }).withMessage('precio debe ser un número mayor o igual a 0'),
-  body('cupoMaximo').isInt({ min: 1 }).withMessage('cupoMaximo debe ser un entero mayor a 0'),
-  body('fechaInicioMatricula')
-    .isISO8601()
-    .withMessage('fechaInicioMatricula debe ser una fecha válida (ISO 8601)'),
-  body('fechaFinMatricula')
-    .isISO8601()
-    .withMessage('fechaFinMatricula debe ser una fecha válida (ISO 8601)'),
-  body('fechaInicioCurso')
-    .isISO8601()
-    .withMessage('fechaInicioCurso debe ser una fecha válida (ISO 8601)'),
-  body('fechaFinCurso')
-    .isISO8601()
-    .withMessage('fechaFinCurso debe ser una fecha válida (ISO 8601)'),
-  body('tipoModalidad').optional({ values: 'null' }).isString(),
-  body('horariosCapacitacionTeoria').optional({ values: 'null' }).isString(),
-  body('numeroVehiculos').optional({ values: 'null' }).isInt({ min: 0 }),
-  body('numeroAulas').optional({ values: 'null' }).isInt({ min: 0 }),
-];
+type Mode = 'create' | 'update';
 
-const updateValidators = [
-  param('id').isUUID().withMessage('id debe ser un UUID válido'),
-  body('courseId').optional().isUUID().withMessage('courseId debe ser un UUID válido'),
-  body('nombre').optional().isString().trim().notEmpty().withMessage('nombre es obligatorio'),
-  body('precio')
-    .optional()
-    .isFloat({ min: 0 })
-    .withMessage('precio debe ser un número mayor o igual a 0'),
-  body('cupoMaximo')
-    .optional()
-    .isInt({ min: 1 })
-    .withMessage('cupoMaximo debe ser un entero mayor a 0'),
-  body('fechaInicioMatricula')
-    .optional()
-    .isISO8601()
-    .withMessage('fechaInicioMatricula debe ser una fecha válida (ISO 8601)'),
-  body('fechaFinMatricula')
-    .optional()
-    .isISO8601()
-    .withMessage('fechaFinMatricula debe ser una fecha válida (ISO 8601)'),
-  body('fechaInicioCurso')
-    .optional()
-    .isISO8601()
-    .withMessage('fechaInicioCurso debe ser una fecha válida (ISO 8601)'),
-  body('fechaFinCurso')
-    .optional()
-    .isISO8601()
-    .withMessage('fechaFinCurso debe ser una fecha válida (ISO 8601)'),
-  body('tipoModalidad').optional({ values: 'null' }).isString(),
-  body('horariosCapacitacionTeoria').optional({ values: 'null' }).isString(),
-  body('numeroVehiculos').optional({ values: 'null' }).isInt({ min: 0 }),
-  body('numeroAulas').optional({ values: 'null' }).isInt({ min: 0 }),
-];
+// Los validadores estándar de express-validator recorren los arreglos
+// elemento a elemento (y aceptan []): los números se exigen escalares.
+const isNumberLike = (value: unknown): boolean =>
+  typeof value === 'number' || typeof value === 'string';
+const isPresent = (value: unknown): boolean =>
+  value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
 
-cohortRouter.post('/', createValidators, validate, asyncHandler(createCohort));
+// En crear, el campo es obligatorio; en actualizar solo se valida si viene
+// (null o '' cuentan como enviados y se rechazan).
+function required(name: string, mode: Mode): ValidationChain {
+  return mode === 'update' ? body(name).optional() : body(name);
+}
+
+function optionalNullable(name: string): ValidationChain {
+  return body(name).optional({ values: 'null' });
+}
+
+// F-05: una sola definición para crear y actualizar; `mode` decide si los
+// campos son obligatorios u opcionales. Un mensaje por campo (3.8).
+export function cohortValidators(mode: Mode): ValidationChain[] {
+  const dates = COHORT_DATE_FIELDS.map((field) =>
+    required(field, mode)
+      .custom(isFechaCivil)
+      .withMessage(M[field])
+      .bail()
+      .custom((value: string) => value <= maxCohortDate())
+      .withMessage(M.fechaLejana),
+  );
+  const resource = (name: string, message: string): ValidationChain =>
+    optionalNullable(name)
+      .custom(isNumberLike)
+      .withMessage(message)
+      .bail()
+      .isInt({ min: 0, max: L.recursosMax })
+      .withMessage(message)
+      .bail()
+      .toInt();
+  const text = (name: string, max: number, message: string): ValidationChain =>
+    optionalNullable(name)
+      .isString()
+      .withMessage(message)
+      .bail()
+      .isLength({ max })
+      .withMessage(message);
+
+  return [
+    ...(mode === 'update' ? [param('id').isUUID().withMessage(M.idInvalido)] : []),
+    required('courseId', mode)
+      .isString()
+      .withMessage(M.cursoInvalido)
+      .bail()
+      .isUUID()
+      .withMessage(M.cursoInvalido),
+    required('nombre', mode)
+      .isString()
+      .withMessage(M.nombreObligatorio)
+      .bail()
+      .trim()
+      .notEmpty()
+      .withMessage(M.nombreObligatorio)
+      .bail()
+      .isLength({ max: L.nombreMax })
+      .withMessage(M.nombreLargo),
+    required('precio', mode)
+      .custom(isPresent)
+      .withMessage(M.precioObligatorio)
+      .bail()
+      .custom(isNumberLike)
+      .withMessage(M.precioRango)
+      .bail()
+      .isFloat({ min: 0, max: L.precioMax })
+      .withMessage(M.precioRango)
+      .bail()
+      .isDecimal({ decimal_digits: '0,2' })
+      .withMessage(M.precioDecimales)
+      .bail()
+      .toFloat(),
+    required('cupoMaximo', mode)
+      .custom(isNumberLike)
+      .withMessage(M.cupo)
+      .bail()
+      .isInt({ min: L.cupoMin, max: L.cupoMax })
+      .withMessage(M.cupo)
+      .bail()
+      .toInt(),
+    ...dates,
+    text('tipoModalidad', L.tipoModalidadMax, M.tipoModalidad),
+    text('horariosCapacitacionTeoria', L.horariosTeoriaMax, M.horariosTeoria),
+    resource('numeroVehiculos', M.vehiculos),
+    resource('numeroAulas', M.aulas),
+  ];
+}
+
+cohortRouter.post('/', cohortValidators('create'), validateFields, asyncHandler(createCohort));
 cohortRouter.get('/', asyncHandler(listCohorts));
-cohortRouter.patch('/:id', updateValidators, validate, asyncHandler(updateCohort));
+cohortRouter.patch('/:id', cohortValidators('update'), validateFields, asyncHandler(updateCohort));
