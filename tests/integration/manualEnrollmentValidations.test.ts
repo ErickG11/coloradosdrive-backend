@@ -88,6 +88,15 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
       expect(from).toHaveBeenCalledTimes(1);
     });
 
+    it('un fallo de la base en la consulta responde 500 genérico, sin detalles', async () => {
+      from.mockReturnValueOnce(createChain({ data: null, error: { code: 'XX', message: 'detalle interno' } }));
+      const res = await request(app).post(`${base}/duplicates`).set('Authorization', token())
+        .send({ cedula: '1710034065' });
+      expect(res.status).toBe(500);
+      expect(res.body.message).toBe('Internal server error');
+      expect(JSON.stringify(res.body)).not.toContain('detalle interno');
+    });
+
     it.each([
       [{}, undefined, 'Indica la cédula, el correo o ambos.'],
       [{ otro: 'x' }, undefined, 'Indica la cédula, el correo o ambos.'],
@@ -171,6 +180,11 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
       ['instructor inválido', withPractice({ instructorId: 'x' }), 'practice.instructorId',
         'Selecciona un instructor válido.'],
       // Paso 4
+      ['pago nulo', { ...confirmBody, pago: null }, 'pago', 'El pago debe ser un objeto válido.'],
+      ['documentos no es lista', { ...confirmBody, documentos: 'x' }, 'documentos',
+        'El checklist de documentos no es válido.'],
+      ['documento con estado inválido', { ...confirmBody, documentos: [{ tipo: 'cedula', estado: 'x' }] },
+        'documentos', 'El checklist contiene documentos o estados inválidos o repetidos'],
       ['modalidad de pago', { ...confirmBody, pago: { modalidad: 'x', descuento: 0, montoAbonado: 0 } },
         'pago.modalidad', 'Selecciona la modalidad de pago.'],
       ['descuento negativo', { ...confirmBody, pago: { modalidad: 'abono', descuento: -1, montoAbonado: 1 } },
@@ -183,6 +197,23 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field, message });
       expect(rpc).not.toHaveBeenCalled();
+    });
+
+    it('sin Idempotency-Key responde con mensaje en español', async () => {
+      const res = await request(app).post(`${base}/confirm`).set('Authorization', token())
+        .send(confirmBody);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe('Falta el identificador de la operación.');
+    });
+
+    it('en modo existente ignora teléfono y fecha de nacimiento (no responde 400 por ellos)', async () => {
+      rpc.mockResolvedValue({ data: null, error: { code: 'XX', message: 'detiene el flujo' } });
+      from.mockImplementation(() => createChain({ data: null, error: null }));
+      const res = await request(app).post(`${base}/confirm`).set('Authorization', token())
+        .set('Idempotency-Key', uuid)
+        .send({ ...confirmBody, student: { mode: 'existing', id: uuid, telefono: 'abc',
+          fechaNacimiento: '2999-01-01' } });
+      expect(res.status).not.toBe(400);
     });
 
     it('acepta los datos legítimos (llega al servicio, no se rechaza en el validador)', async () => {

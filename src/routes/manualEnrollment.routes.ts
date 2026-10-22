@@ -33,12 +33,13 @@ const isMoney = (value: unknown): boolean =>
   Math.abs(value * 100 - Math.round(value * 100)) < 1e-8;
 const documents = [
   body('documentos').optional().isArray({ max: DOCUMENT_TYPES.length })
+    .withMessage(M.documentos).bail()
     .custom((value: unknown) => { validateDocumentUpdates(value as DocumentInput[]); return true; }),
-  body('documentos.*.tipo').isIn(DOCUMENT_TYPES),
-  body('documentos.*.estado').isIn(['entregado', 'pendiente', 'no_aplica']),
+  body('documentos.*.tipo').isIn(DOCUMENT_TYPES).withMessage(M.documentos),
+  body('documentos.*.estado').isIn(['entregado', 'pendiente', 'no_aplica']).withMessage(M.documentos),
 ];
 const payment = [
-  body('pago').optional().isObject(),
+  body('pago').optional().isObject().withMessage(M.pagoObjeto),
   body('pago.modalidad').if(body('pago').exists()).isIn(['abono', 'completo'])
     .withMessage(M.modalidadPago),
   body('pago.descuento').if(body('pago').exists()).custom(isMoney).withMessage(M.descuento),
@@ -129,6 +130,7 @@ const studentNew = [
     .withMessage(M.correo)
     .normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false }),
   body('student.telefono')
+    .if(newStudent)
     .optional({ values: 'falsy' })
     .custom((v) => typeof v === 'string')
     .withMessage(PHONE_MESSAGE)
@@ -137,6 +139,7 @@ const studentNew = [
     .custom((v: string) => v === '' || isValidPhone(v))
     .withMessage(PHONE_MESSAGE),
   body('student.fechaNacimiento')
+    .if(newStudent)
     .optional({ values: 'falsy' })
     .custom(assertBirthDate),
 ];
@@ -199,7 +202,7 @@ manualEnrollmentRouter.post(
   [
     ...course,
     ...practice,
-    header('Idempotency-Key').isUUID(),
+    header('Idempotency-Key').isUUID().withMessage(M.idempotencia),
     body('student.mode').isIn(['new', 'existing']).withMessage(M.studentMode),
     body('student.id').if(body('student.mode').equals('existing')).isUUID()
       .withMessage(M.studentId),

@@ -55,6 +55,10 @@ export function manualEnrollmentError(error: PostgrestError): Error {
     return new AppError('El alumno tiene una eliminación pendiente', 409, { code: 'DELETION_PENDING' });
   if (error.code === 'CD023')
     return new AppError('El instructor dejó de estar disponible. Consulta una nueva sugerencia.', 409);
+  // Dos administradores a la vez: la restricción única de cédula identifica el campo.
+  // Otras restricciones únicas (matrícula vigente del mismo tipo) conservan el 409 general.
+  if (error.code === '23505' && error.message.includes('users_cedula_unique'))
+    return manualError(M.cedulaDuplicada, 'student.cedula', 409, 'DUPLICATE_CEDULA');
   if (error.code === '23505')
     return new AppError(
       'Ya existe una matrícula vigente del mismo tipo o una cuenta con esa cédula. Selecciona el estudiante existente.',
