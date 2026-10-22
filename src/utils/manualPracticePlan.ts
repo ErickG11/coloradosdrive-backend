@@ -1,6 +1,22 @@
 import type { ManualPracticeInput } from '../models/manualEnrollment.model';
 import { AppError } from './AppError';
+import { isFechaCivil } from './cohortRules';
+import { HORAS_POR_DIA_MESSAGE, isHorasPorDiaValid } from './practiceHours';
 import { parseFechaCivil, parseHora, SCHOOL_TIMEZONE } from './schoolTimezone';
+
+export const PRACTICE_MESSAGES = {
+  fechaInicio: 'La fecha de inicio no es válida.',
+  fechaFin: 'La fecha final no es válida.',
+  fechaFinAnterior: 'La fecha final no puede ser anterior al inicio.',
+  rangoSinDias: 'El rango elegido no contiene días de práctica de la modalidad seleccionada.',
+  horaDeseada: 'La hora deseada debe estar entre 06:00 y 22:00.',
+  horaNoCabe:
+    'Con las horas por día elegidas, la práctica debe terminar a más tardar a las 22:00. Elige una hora más temprana o menos horas por día.',
+} as const;
+
+function invalid(message: string, field: string): AppError {
+  return new AppError(message, 400, { code: 'INVALID_FIELD', field: `practice.${field}` });
+}
 
 // La interfaz consume este cálculo por HTTP; no hay una segunda fórmula en el navegador.
 export interface ManualPracticePlan {
@@ -26,21 +42,17 @@ export function manualPracticePlan(input: ManualPracticeInput): ManualPracticePl
   ) {
     throw new AppError('Duración o modalidad inválida', 400);
   }
-  if (!Number.isInteger(input.horasPorDia) || input.horasPorDia < 1 || input.horasPorDia > 16) {
-    throw new AppError('Horas por día debe ser un entero entre 1 y 16', 400);
-  }
+  if (!isHorasPorDiaValid(input.horasPorDia)) throw invalid(HORAS_POR_DIA_MESSAGE, 'horasPorDia');
   const hora = parseHora(input.horaResuelta ?? input.horaDeseada);
-  if (
-    hora.hour * 60 + hora.minute < 360 ||
-    (hora.hour + input.horasPorDia) * 60 + hora.minute > 1320
-  ) {
-    throw new AppError('El horario debe caber dentro de 06:00–22:00', 400);
-  }
+  const minutos = hora.hour * 60 + hora.minute;
+  if (minutos < 360 || minutos > 1320) throw invalid(PRACTICE_MESSAGES.horaDeseada, 'horaDeseada');
+  if (minutos + input.horasPorDia * 60 > 1320) throw invalid(PRACTICE_MESSAGES.horaNoCabe, 'horaDeseada');
+  if (!isFechaCivil(input.fechaInicio)) throw invalid(PRACTICE_MESSAGES.fechaInicio, 'fechaInicio');
+  if (input.fechaFin !== undefined && !isFechaCivil(input.fechaFin))
+    throw invalid(PRACTICE_MESSAGES.fechaFin, 'fechaFin');
   const start = parseFechaCivil(input.fechaInicio);
   const end = input.fechaFin === undefined ? null : parseFechaCivil(input.fechaFin);
-  if (end && end < start) {
-    throw new AppError('La fecha final no puede ser anterior al inicio', 400);
-  }
+  if (end && end < start) throw invalid(PRACTICE_MESSAGES.fechaFinAnterior, 'fechaFin');
   const diasObjetivo = input.semanas * (input.modalidad === 'entre_semana' ? 5 : 2);
   const fechas: string[] = [];
   let cursor = start;
@@ -51,7 +63,7 @@ export function manualPracticePlan(input: ManualPracticeInput): ManualPracticePl
     cursor = cursor.plus({ days: 1 });
   }
   if (fechas.length === 0)
-    throw new AppError('El rango no contiene días aplicables a la modalidad', 400);
+    throw invalid(PRACTICE_MESSAGES.rangoSinDias, 'fechaFin');
   return {
     timezone: SCHOOL_TIMEZONE,
     semanas: input.semanas,

@@ -8,6 +8,7 @@ import type {
   ManualPracticeInput,
 } from '../models/manualEnrollment.model';
 import { AppError } from '../utils/AppError';
+import { MANUAL_MESSAGES as M, manualError } from '../utils/manualEnrollmentRules';
 import { assertStudentMutable } from './studentDeletion.service';
 import { manualPracticePlan, type ManualPracticePlan } from '../utils/manualPracticePlan';
 import { SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
@@ -61,7 +62,8 @@ export function manualEnrollmentError(error: PostgrestError): Error {
     );
   if (['CD025', 'CD026'].includes(error.code)) return new AppError(error.message, 400);
   if (error.code === 'CD027') return new AppError('Matrícula no encontrada', 404);
-  if (['CD001', 'CD020', 'CD021', '23P01'].includes(error.code))
+  if (error.code === 'CD001') return manualError(M.cohorteLlena, 'cohortId', 409, 'COHORT_FULL');
+  if (['CD020', 'CD021', '23P01'].includes(error.code))
     return new AppError(
       error.code === '23P01'
         ? 'El instructor dejó de estar disponible. Consulta una nueva sugerencia.'
@@ -114,6 +116,36 @@ export class ManualEnrollmentService {
         .filter((e) => e.student_id === s.id)
         .map((e) => ({ tipo: e.course_type, status: e.status })),
     }));
+  }
+  // Existe o no, por campo y sin datos personales (el resultado de la
+  // búsqueda solo se reduce a un booleano). Cédula: cualquier perfil, como
+  // la confirmación. Correo: la búsqueda existente de estudiantes
+  // (find_manual_students, exacta e insensible a mayúsculas); el correo de un
+  // instructor o admin solo lo detecta Auth al confirmar.
+  async duplicates(
+    actor: string,
+    input: { cedula?: string; correo?: string },
+  ): Promise<{ cedula: boolean; correo: boolean }> {
+    let cedula = false;
+    if (input.cedula !== undefined) {
+      const { count, error } = await this.db
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('cedula', input.cedula);
+      if (error) throw error;
+      cedula = (count ?? 0) > 0;
+    }
+    let correo = false;
+    if (input.correo !== undefined) {
+      const wanted = input.correo.toLowerCase();
+      const { data, error } = await this.db.rpc('find_manual_students', {
+        p_actor: actor,
+        p_query: wanted,
+      });
+      if (error) throw error;
+      correo = data.some((s) => s.correo.toLowerCase() === wanted);
+    }
+    return { cedula, correo };
   }
   private async catalogCourse(tipo: CourseType): Promise<string> {
     const c = (await this.catalog()).find((c) => c.tipo === tipo);
@@ -182,7 +214,8 @@ export class ManualEnrollmentService {
       .eq('id', input.cohortId)
       .maybeSingle();
     if (error) throw error;
-    if (!cohort) throw new AppError('La cohorte no existe', 404);
+    if (!cohort)
+      throw manualError(M.cohorteNoExiste, 'cohortId', 404, 'COHORT_NOT_FOUND');
     const { data: course, error: ce } = await this.db
       .from('courses')
       .select('tipo')
@@ -190,10 +223,10 @@ export class ManualEnrollmentService {
       .single();
     if (ce) throw ce;
     if (course.tipo !== input.courseType)
-      throw new AppError('La cohorte es de otro tipo de curso', 400);
+      throw manualError(M.cohorteOtroCurso, 'cohortId', 400, 'COHORT_COURSE_MISMATCH');
     const today = DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd');
     if (today < cohort.fecha_inicio_matricula || today > cohort.fecha_fin_matricula)
-      throw new AppError('La matrícula de la cohorte no está abierta', 409);
+      throw manualError(M.cohorteCerrada, 'cohortId', 409, 'COHORT_ENROLLMENT_CLOSED');
     return { courseId: cohort.course_id, price: Number(cohort.precio) };
   }
   async practicePreview(
@@ -258,7 +291,7 @@ export class ManualEnrollmentService {
     try {
       const plan = manualPracticePlan(input.practice);
       const { courseId, price } = await this.resolveCourse(input);
-      validateInitialPayment(price, payment);
+      validateInitialPayment(price, payment, input.pago !== undefined);
       const scheduled = input.cohortId
         ? await this.generator.prepareForTransaction({
             fechaInicio: input.practice.fechaInicio,
@@ -298,10 +331,7 @@ export class ManualEnrollmentService {
           .maybeSingle();
         if (error) throw error;
         if (profile)
-          throw new AppError(
-            'La cédula ya existe. Busca y selecciona el estudiante existente.',
-            409,
-          );
+          throw manualError(M.cedulaDuplicada, 'student.cedula', 409, 'DUPLICATE_CEDULA');
         password = randomBytes(18).toString('base64url');
         authCreationUncertain = true;
         const { data, error: ae } = await this.db.auth.admin.createUser({
@@ -314,12 +344,9 @@ export class ManualEnrollmentService {
           // Un rechazo explícito 4xx acredita que no se creó la identidad.
           // Transporte/5xx o respuesta perdida requieren reconciliar Auth.
           if (ae.status && ae.status >= 400 && ae.status < 500) authCreationUncertain = false;
-          throw new AppError(
-            ae.code === 'email_exists'
-              ? 'El correo ya existe. Busca y selecciona el estudiante existente.'
-              : 'No se pudo crear la cuenta de acceso',
-            ae.code === 'email_exists' ? 409 : 502,
-          );
+          if (ae.code === 'email_exists')
+            throw manualError(M.correoDuplicado, 'student.correo', 409, 'DUPLICATE_EMAIL');
+          throw new AppError('No se pudo crear la cuenta de acceso', 502);
         }
         studentId = data.user.id;
         createdId = studentId;
@@ -400,7 +427,8 @@ export class ManualEnrollmentService {
     }
   }
   private requireInstructor(plan: ManualPracticeInput): string {
-    if (!plan.instructorId) throw new AppError('Selecciona un instructor antes de confirmar', 400);
+    if (!plan.instructorId)
+      throw manualError(M.instructorObligatorio, 'practice.instructorId');
     return plan.instructorId;
   }
   private async updateOperation(
