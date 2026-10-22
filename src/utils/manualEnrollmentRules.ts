@@ -18,6 +18,9 @@ export const MANUAL_MESSAGES = {
   cedulaDuplicada: 'La cédula ya existe. Busca y selecciona el estudiante existente.',
   correoDuplicado: 'El correo ya existe. Busca y selecciona el estudiante existente.',
   duplicadosCuerpo: 'Indica la cédula, el correo o ambos.',
+  pagoObjeto: 'El pago debe ser un objeto válido.',
+  documentos: 'El checklist de documentos no es válido.',
+  idempotencia: 'Falta el identificador de la operación.',
   // Paso 2
   tipoCurso: 'Selecciona un tipo de curso válido.',
   automatic: 'Indica si la cohorte se asigna automáticamente.',

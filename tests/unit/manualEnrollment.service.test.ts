@@ -301,6 +301,15 @@ describe('Errores de confirmación con field y code (paso 5 vuelve al paso afect
     expect(deleteUser).not.toHaveBeenCalled();
   });
 
+  it('carrera de dos administradores (23505): cédula única -> DUPLICATE_CEDULA; otra restricción -> 409 general', () => {
+    expect(manualEnrollmentError({ code: '23505',
+      message: 'duplicate key value violates unique constraint "users_cedula_unique"' } as PostgrestError))
+      .toMatchObject({ statusCode: 409, code: 'DUPLICATE_CEDULA', field: 'student.cedula' });
+    const general = manualEnrollmentError({ code: '23505', message: 'otra restricción' } as PostgrestError);
+    expect(general).toMatchObject({ statusCode: 409 });
+    expect(general).not.toHaveProperty('code', 'DUPLICATE_CEDULA');
+  });
+
   it('cupo agotado detectado por la base (CD001): 409 COHORT_FULL en cohortId', () => {
     expect(
       manualEnrollmentError({ code: 'CD001', message: 'x' } as PostgrestError),

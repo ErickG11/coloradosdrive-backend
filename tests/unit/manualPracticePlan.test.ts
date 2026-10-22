@@ -95,5 +95,6 @@ describe('Plan civil compartido con el wizard por HTTP', () => {
   });
   it('una fecha de inicio pasada NO se rechaza (decisión del dueño: el admin elige libremente)', () => {
     expect(manualPracticePlan({ ...base, fechaInicio: '2020-01-06' }).dias).toBe(5);
+    expect(manualPracticePlan({ ...base, fechaInicio: '2000-03-01' }).primerDiaEfectivo).toBe('2000-03-01');
   });
 });
