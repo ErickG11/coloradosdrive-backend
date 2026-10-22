@@ -2,6 +2,16 @@ import { AppError } from '../../src/utils/AppError';
 import { mapPostgresError, postgresConstraintName } from '../../src/utils/postgresError';
 
 describe('postgresConstraintName', () => {
+  it('extrae el nombre en el mensaje de ON DELETE RESTRICT (23001)', () => {
+    expect(
+      postgresConstraintName({
+        code: '23001',
+        message:
+          'update or delete on table "cohorts" violates RESTRICT setting of foreign key constraint "practice_slots_cohort_id_fkey" on table "practice_slots"',
+      }),
+    ).toBe('practice_slots_cohort_id_fkey');
+  });
+
   it('extrae el nombre de la restricción del mensaje de PostgREST', () => {
     expect(
       postgresConstraintName({
@@ -24,6 +34,12 @@ describe('mapPostgresError', () => {
     ['22003', 400, 'VALUE_OUT_OF_RANGE', 'Un valor numérico está fuera del rango permitido.'],
     ['23505', 409, 'DUPLICATE', 'Ya existe un registro con esos datos.'],
     ['23514', 400, 'CHECK_VIOLATION', 'Los datos no cumplen las reglas de validación.'],
+    [
+      '23001',
+      409,
+      'FOREIGN_KEY_VIOLATION',
+      'El registro está relacionado con otros datos y no se puede completar la operación.',
+    ],
     [
       '23503',
       409,

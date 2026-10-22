@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import type {
   Cohort,
+  CohortDeletionResult,
   CohortDetail,
   CreateCohortInput,
   UpdateCohortInput,
@@ -29,4 +30,12 @@ export async function getCohort(req: Request, res: Response<CohortDetail>): Prom
 export async function updateCohort(req: Request, res: Response<Cohort>): Promise<void> {
   const cohort = await cohortService.updateCohort(req.params.id, req.body as UpdateCohortInput);
   res.status(200).json(cohort);
+}
+
+export async function deleteCohort(
+  req: Request,
+  res: Response<CohortDeletionResult>,
+): Promise<void> {
+  const { confirmacionNombre } = req.body as { confirmacionNombre: string };
+  res.status(200).json(await cohortService.deleteCohort(req.params.id, confirmacionNombre));
 }
