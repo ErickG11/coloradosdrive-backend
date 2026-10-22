@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 
 import { AppError } from '../utils/AppError';
+import { BIRTH_DATE_CODE_BY_MESSAGE } from '../utils/birthDate';
 
 // Corre después de las cadenas de validación de express-validator en cada
 // ruta; si hay errores, corta con un 400 controlado en vez de dejar pasar
@@ -31,9 +32,12 @@ export function validateFields(req: Request, _res: Response, next: NextFunction)
   }
   const [error] = result.array({ onlyFirstError: true });
   const field = error.type === 'field' && error.path ? error.path : undefined;
+  const message = typeof error.msg === 'string' ? error.msg : 'Datos de entrada inválidos';
   next(
-    new AppError(typeof error.msg === 'string' ? error.msg : 'Datos de entrada inválidos', 400, {
-      code: 'INVALID_FIELD',
+    new AppError(message, 400, {
+      // Un code propio solo para los casos con mensaje registrado (fecha de
+      // nacimiento); el resto sigue con INVALID_FIELD.
+      code: BIRTH_DATE_CODE_BY_MESSAGE[message] ?? 'INVALID_FIELD',
       ...(field ? { field } : {}),
     }),
   );

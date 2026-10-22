@@ -142,14 +142,6 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         'Ingresa un teléfono válido de 7 a 20 caracteres (solo dígitos, +, espacios, guiones y paréntesis).'],
       ['teléfono sin 7 dígitos', withStudent({ telefono: '+(  )-- 12345' }), 'student.telefono',
         'Ingresa un teléfono válido de 7 a 20 caracteres (solo dígitos, +, espacios, guiones y paréntesis).'],
-      ['nacimiento hoy', withStudent({ fechaNacimiento: isoYearsAgo(0) }), 'student.fechaNacimiento',
-        'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
-      ['nacimiento futuro', withStudent({ fechaNacimiento: '2999-01-01' }), 'student.fechaNacimiento',
-        'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
-      ['menor de 15', withStudent({ fechaNacimiento: isoYearsAgo(15, 1) }), 'student.fechaNacimiento',
-        'La edad debe estar entre 15 y 100 años.'],
-      ['mayor de 100', withStudent({ fechaNacimiento: isoYearsAgo(101) }), 'student.fechaNacimiento',
-        'La edad debe estar entre 15 y 100 años.'],
       ['nacimiento imposible', withStudent({ fechaNacimiento: '2000-02-30' }), 'student.fechaNacimiento',
         'La fecha de nacimiento no es válida.'],
       // Paso 2
@@ -213,6 +205,35 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         .set('Idempotency-Key', uuid)
         .send({ ...confirmBody, student: { mode: 'existing', id: uuid, telefono: 'abc',
           fechaNacimiento: '2999-01-01' } });
+      expect(res.status).not.toBe(400);
+    });
+
+    it.each([
+      ['hoy (0 años)', 0, 0, 'BIRTH_DATE_TOO_YOUNG', 'La edad mínima para registrar a un estudiante es de 15 años.'],
+      ['ayer', 0, -1, 'BIRTH_DATE_TOO_YOUNG', 'La edad mínima para registrar a un estudiante es de 15 años.'],
+      ['a un día de cumplir 15', 15, 1, 'BIRTH_DATE_TOO_YOUNG', 'La edad mínima para registrar a un estudiante es de 15 años.'],
+      ['mañana (futura)', 0, 1, 'BIRTH_DATE_FUTURE', 'La fecha de nacimiento no puede ser futura.'],
+      ['año 2999 (futura)', 0, 0, 'BIRTH_DATE_FUTURE', 'La fecha de nacimiento no puede ser futura.'],
+      ['cumple 101 hoy', 101, 0, 'BIRTH_DATE_TOO_OLD', 'La edad máxima permitida es de 100 años.'],
+    ])('fecha de nacimiento %s: mensaje y code propios', async (name, years, days, code, message) => {
+      const fechaNacimiento = name.startsWith('año 2999')
+        ? '2999-01-01'
+        : today.minus({ years }).plus({ days }).toFormat('yyyy-MM-dd');
+      const res = await request(app).post(`${base}/confirm`).set('Authorization', token())
+        .set('Idempotency-Key', uuid).send(withStudent({ fechaNacimiento }));
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code, field: 'student.fechaNacimiento', message });
+    });
+
+    it.each([
+      ['exactamente 15 años hoy', 15, 0],
+      ['exactamente 100 años hoy', 100, 0],
+      ['cumplió 100 ayer', 100, -1],
+    ])('fecha de nacimiento %s: se acepta', async (_n, years, days) => {
+      rpc.mockResolvedValue({ data: null, error: { code: 'XX', message: 'detiene el flujo' } });
+      const fechaNacimiento = today.minus({ years }).plus({ days }).toFormat('yyyy-MM-dd');
+      const res = await request(app).post(`${base}/confirm`).set('Authorization', token())
+        .set('Idempotency-Key', uuid).send(withStudent({ fechaNacimiento }));
       expect(res.status).not.toBe(400);
     });
 
