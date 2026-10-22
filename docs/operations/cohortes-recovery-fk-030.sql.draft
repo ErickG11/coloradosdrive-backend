@@ -1,0 +1,36 @@
+-- BORRADOR 030 (F-11, lote L6b). NO es una migración todavía: se entrega como
+-- .sql.draft en docs/operations para que los runners que aplican todo
+-- migrations/ no la ejecuten y para no reservar el número sin la decisión de
+-- Erick. Para adoptarla: ejecutar antes cohortes-recovery-fk-030-preflight.sql
+-- (P7 debe dar 0), copiarla a migrations/030_recovery_cohort_fk.sql y aplicarla
+-- con el rol de migraciones. Rollback: cohortes-recovery-fk-030-rollback.sql.
+--
+-- Qué cubre: student_practice_recovery.cohort_id (025) no tiene FK, así que la
+-- base no impide borrar una cohorte con filas de recuperación. El servidor ya
+-- las cuenta antes de DELETE /cohorts/:id; esta FK sería la defensa final.
+-- Qué NO cubre, a propósito: slot_id. 026 (delete_student_data) borra
+-- practice_slots antes que student_practice_recovery dentro de la misma
+-- función; una FK de slot_id con RESTRICT podría romper la eliminación de
+-- alumnos. Requiere un análisis aparte.
+begin;
+set local lock_timeout = '5s';
+
+do $$
+declare v_count integer;
+begin
+  select count(*) into v_count from public.student_practice_recovery r
+    where not exists (select 1 from public.cohorts c where c.id = r.cohort_id);
+  if v_count > 0 then
+    raise exception 'Migración 030 abortada: % fila(s) de student_practice_recovery apuntan a cohortes que no existen. Revisa P7 del preflight antes de aplicar.', v_count
+      using errcode = '55000';
+  end if;
+end $$;
+
+alter table public.student_practice_recovery
+  add constraint student_practice_recovery_cohort_fkey
+  foreign key (cohort_id) references public.cohorts (id) on delete restrict;
+comment on constraint student_practice_recovery_cohort_fkey on public.student_practice_recovery is
+  'Una cohorte con prácticas por recuperar no se puede eliminar (el servidor responde 409 COHORT_IN_USE).';
+
+notify pgrst, 'reload schema';
+commit;
