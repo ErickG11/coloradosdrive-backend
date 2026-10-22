@@ -146,10 +146,10 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
       ['nacimiento futuro', withStudent({ fechaNacimiento: '2999-01-01' }), 'student.fechaNacimiento',
         'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
-      ['menor de 16', withStudent({ fechaNacimiento: isoYearsAgo(16, 1) }), 'student.fechaNacimiento',
-        'La edad debe estar entre 16 y 100 años.'],
+      ['menor de 15', withStudent({ fechaNacimiento: isoYearsAgo(15, 1) }), 'student.fechaNacimiento',
+        'La edad debe estar entre 15 y 100 años.'],
       ['mayor de 100', withStudent({ fechaNacimiento: isoYearsAgo(101) }), 'student.fechaNacimiento',
-        'La edad debe estar entre 16 y 100 años.'],
+        'La edad debe estar entre 15 y 100 años.'],
       ['nacimiento imposible', withStudent({ fechaNacimiento: '2000-02-30' }), 'student.fechaNacimiento',
         'La fecha de nacimiento no es válida.'],
       // Paso 2
@@ -219,7 +219,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
     it('acepta los datos legítimos (llega al servicio, no se rechaza en el validador)', async () => {
       rpc.mockResolvedValue({ data: null, error: { code: 'XX', message: 'detiene el flujo' } });
       const res = await request(app).post(`${base}/confirm`).set('Authorization', token())
-        .set('Idempotency-Key', uuid).send(withStudent({ telefono: '', fechaNacimiento: isoYearsAgo(16) }));
+        .set('Idempotency-Key', uuid).send(withStudent({ telefono: '', fechaNacimiento: isoYearsAgo(15) }));
       expect(res.status).not.toBe(400);
       expect(rpc).toHaveBeenCalledWith('reserve_manual_enrollment', expect.any(Object));
     });

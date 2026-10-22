@@ -272,8 +272,8 @@ describe('admin estudiantes A', () => {
   it.each([
     ['hoy', 0, 'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
     ['futura', -5, 'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
-    ['menor de 16', 10, 'La edad debe estar entre 16 y 100 años.'],
-    ['mayor de 100', 120, 'La edad debe estar entre 16 y 100 años.'],
+    ['menor de 15', 10, 'La edad debe estar entre 15 y 100 años.'],
+    ['mayor de 100', 120, 'La edad debe estar entre 15 y 100 años.'],
   ])('PATCH rechaza una fecha de nacimiento %s con mensaje en español', async (_n, yearsAgo, message) => {
     const date = DateTime.now().setZone('America/Guayaquil').minus({ years: yearsAgo })
       .toFormat('yyyy-MM-dd');

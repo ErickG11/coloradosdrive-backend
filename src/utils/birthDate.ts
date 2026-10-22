@@ -4,7 +4,7 @@ import { isFechaCivil } from './cohortRules';
 import { SCHOOL_TIMEZONE } from './schoolTimezone';
 
 // Límites de PLAUSIBILIDAD de la fecha de nacimiento (no son una regla legal).
-export const BIRTH_AGE_MIN = 16;
+export const BIRTH_AGE_MIN = 15;
 export const BIRTH_AGE_MAX = 100;
 
 // Edad legal mínima para matricularse (18 según la ANT; pendiente de confirmar
@@ -17,7 +17,7 @@ export const ENFORCE_LEGAL_MIN_AGE = false;
 export const BIRTH_DATE_MESSAGES = {
   invalida: 'La fecha de nacimiento no es válida.',
   hoyOFutura: 'La fecha de nacimiento no puede ser hoy ni una fecha futura.',
-  edad: 'La edad debe estar entre 16 y 100 años.',
+  edad: 'La edad debe estar entre 15 y 100 años.',
   edadLegal: 'El alumno debe tener al menos 18 años.',
 } as const;
 

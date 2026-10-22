@@ -14,9 +14,10 @@ const now = DateTime.fromISO('2026-10-21T12:00:00', { zone: 'America/Guayaquil' 
 describe('fecha de nacimiento compartida', () => {
   it.each([
     ['2000-02-29', null],
-    ['2010-10-21', null], // exactamente 16 años hoy
+    ['2011-10-21', null], // exactamente 15 años hoy
     ['1926-10-21', null], // exactamente 100 años hoy
-    ['2010-10-22', BIRTH_DATE_MESSAGES.edad], // le faltan días para cumplir 16
+    ['2011-10-22', BIRTH_DATE_MESSAGES.edad], // le falta un día para cumplir 15
+    ['2010-10-21', null], // 16 años: sigue siendo válido
     ['1926-10-20', null], // cumplió 100 ayer: 100 sigue siendo válido
     ['1925-10-22', null], // 100 años y 364 días: aún tiene 100
     ['1925-10-21', BIRTH_DATE_MESSAGES.edad], // cumple 101 hoy
