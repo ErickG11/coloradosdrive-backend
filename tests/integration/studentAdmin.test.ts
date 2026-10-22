@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { DateTime } from 'luxon';
 
 jest.mock('../../src/config/supabase', () => ({
   supabaseAdmin: {
@@ -266,6 +267,23 @@ describe('admin estudiantes A', () => {
     expect(rpc).not.toHaveBeenCalled();
     expect(getAuth).not.toHaveBeenCalled();
     expect(updateAuth).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['hoy', 0, 'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
+    ['futura', -5, 'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
+    ['menor de 16', 10, 'La edad debe estar entre 16 y 100 años.'],
+    ['mayor de 100', 120, 'La edad debe estar entre 16 y 100 años.'],
+  ])('PATCH rechaza una fecha de nacimiento %s con mensaje en español', async (_n, yearsAgo, message) => {
+    const date = DateTime.now().setZone('America/Guayaquil').minus({ years: yearsAgo })
+      .toFormat('yyyy-MM-dd');
+    const response = await request(app)
+      .patch(`${path}/${id}`)
+      .set('Authorization', token())
+      .send({ updatedAt: version, fechaNacimiento: date });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'INVALID_FIELD', field: 'fechaNacimiento', message });
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('PATCH accepts a leap date and the exact field length limits', async () => {

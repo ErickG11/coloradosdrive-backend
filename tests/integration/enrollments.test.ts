@@ -115,6 +115,21 @@ describe('POST /enrollments', () => {
     expect(mockedFrom).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['hoy', new Date().toISOString().slice(0, 10)],
+    ['futura', '2999-01-01'],
+    ['menor de 16', new Date(Date.now() - 10 * 365.25 * 86_400_000).toISOString().slice(0, 10)],
+    ['mayor de 100', '1900-01-01'],
+  ])('responde 400 si fechaNacimiento es %s', async (_name, fechaNacimiento) => {
+    const res = await request(app)
+      .post('/enrollments')
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
+      .send({ ...validEnrollmentBody, fechaNacimiento });
+
+    expect(res.status).toBe(400);
+    expect(mockedFrom).not.toHaveBeenCalled();
+  });
+
   it('responde 409 si la cédula ya está registrada', async () => {
     mockedFrom
       .mockReturnValueOnce(createChain({ data: cohortRow, error: null })) // getCohortOrThrow
