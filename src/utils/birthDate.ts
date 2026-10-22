@@ -14,12 +14,31 @@ export const BIRTH_AGE_MAX = 100;
 export const LEGAL_MIN_AGE = 18;
 export const ENFORCE_LEGAL_MIN_AGE = false;
 
+// Un mensaje y un `code` por caso. Una fecha futura es la única que dice
+// «futura»; «hoy» tiene 0 años y cae en el caso de menor de la edad mínima.
 export const BIRTH_DATE_MESSAGES = {
   invalida: 'La fecha de nacimiento no es válida.',
-  hoyOFutura: 'La fecha de nacimiento no puede ser hoy ni una fecha futura.',
-  edad: 'La edad debe estar entre 15 y 100 años.',
+  futura: 'La fecha de nacimiento no puede ser futura.',
+  edadMinima: `La edad mínima para registrar a un estudiante es de ${String(BIRTH_AGE_MIN)} años.`,
+  edadMaxima: `La edad máxima permitida es de ${String(BIRTH_AGE_MAX)} años.`,
   edadLegal: 'El alumno debe tener al menos 18 años.',
 } as const;
+
+export const BIRTH_DATE_CODES = {
+  futura: 'BIRTH_DATE_FUTURE',
+  edadMinima: 'BIRTH_DATE_TOO_YOUNG',
+  edadMaxima: 'BIRTH_DATE_TOO_OLD',
+  edadLegal: 'BIRTH_DATE_UNDER_LEGAL_AGE',
+} as const;
+
+// Código de error por mensaje, para que `validateFields` lo devuelva junto a
+// `field` (las cadenas de express-validator solo transportan el texto).
+export const BIRTH_DATE_CODE_BY_MESSAGE: Readonly<Record<string, string>> = {
+  [BIRTH_DATE_MESSAGES.futura]: BIRTH_DATE_CODES.futura,
+  [BIRTH_DATE_MESSAGES.edadMinima]: BIRTH_DATE_CODES.edadMinima,
+  [BIRTH_DATE_MESSAGES.edadMaxima]: BIRTH_DATE_CODES.edadMaxima,
+  [BIRTH_DATE_MESSAGES.edadLegal]: BIRTH_DATE_CODES.edadLegal,
+};
 
 // Edad cumplida en años enteros a la fecha `today` (ambas «YYYY-MM-DD»).
 export function ageOn(birth: string, today: string): number {
@@ -38,9 +57,10 @@ export function ageOn(birth: string, today: string): number {
 export function birthDateError(value: unknown, now: DateTime = DateTime.now()): string | null {
   if (!isFechaCivil(value)) return BIRTH_DATE_MESSAGES.invalida;
   const today = now.setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd');
-  if (value >= today) return BIRTH_DATE_MESSAGES.hoyOFutura;
+  if (value > today) return BIRTH_DATE_MESSAGES.futura;
   const age = ageOn(value, today);
-  if (age < BIRTH_AGE_MIN || age > BIRTH_AGE_MAX) return BIRTH_DATE_MESSAGES.edad;
+  if (age < BIRTH_AGE_MIN) return BIRTH_DATE_MESSAGES.edadMinima; // incluye «hoy» (0 años)
+  if (age > BIRTH_AGE_MAX) return BIRTH_DATE_MESSAGES.edadMaxima;
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- bandera desactivada a propósito
   if (ENFORCE_LEGAL_MIN_AGE && age < LEGAL_MIN_AGE) return BIRTH_DATE_MESSAGES.edadLegal;
   return null;

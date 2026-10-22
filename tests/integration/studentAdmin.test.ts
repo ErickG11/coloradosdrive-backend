@@ -270,11 +270,11 @@ describe('admin estudiantes A', () => {
   });
 
   it.each([
-    ['hoy', 0, 'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
-    ['futura', -5, 'La fecha de nacimiento no puede ser hoy ni una fecha futura.'],
-    ['menor de 15', 10, 'La edad debe estar entre 15 y 100 años.'],
-    ['mayor de 100', 120, 'La edad debe estar entre 15 y 100 años.'],
-  ])('PATCH rechaza una fecha de nacimiento %s con mensaje en español', async (_n, yearsAgo, message) => {
+    ['hoy', 0, 'BIRTH_DATE_TOO_YOUNG', 'La edad mínima para registrar a un estudiante es de 15 años.'],
+    ['futura', -5, 'BIRTH_DATE_FUTURE', 'La fecha de nacimiento no puede ser futura.'],
+    ['menor de 15', 10, 'BIRTH_DATE_TOO_YOUNG', 'La edad mínima para registrar a un estudiante es de 15 años.'],
+    ['mayor de 100', 120, 'BIRTH_DATE_TOO_OLD', 'La edad máxima permitida es de 100 años.'],
+  ])('PATCH rechaza una fecha de nacimiento %s con mensaje en español', async (_n, yearsAgo, code, message) => {
     const date = DateTime.now().setZone('America/Guayaquil').minus({ years: yearsAgo })
       .toFormat('yyyy-MM-dd');
     const response = await request(app)
@@ -282,7 +282,7 @@ describe('admin estudiantes A', () => {
       .set('Authorization', token())
       .send({ updatedAt: version, fechaNacimiento: date });
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({ code: 'INVALID_FIELD', field: 'fechaNacimiento', message });
+    expect(response.body).toMatchObject({ code, field: 'fechaNacimiento', message });
     expect(rpc).not.toHaveBeenCalled();
   });
 
