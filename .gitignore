@@ -24,3 +24,8 @@ npm-debug.log*
 
 # ts
 *.tsbuildinfo
+
+# reportes y artefactos generados por el pipeline de Jenkins
+reports/
+artifacts/
+.eslintcache
