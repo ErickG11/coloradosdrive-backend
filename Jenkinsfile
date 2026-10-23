@@ -27,6 +27,8 @@ pipeline {
         GITHUB_REPO = 'ErickG11/coloradosdrive-backend'
         // Caché de npm compartida entre builds y ramas (fuera del workspace).
         NPM_CONFIG_CACHE = "${JENKINS_HOME}/.npm-cache"
+        // Límite de memoria por proceso de Node (agente con ~7 GB en total).
+        NODE_OPTIONS = '--max-old-space-size=1536'
     }
 
     stages {
@@ -50,15 +52,22 @@ pipeline {
             }
         }
 
+        // Solo corren en paralelo las tareas ligeras (Lint, Formato, Auditoría). Los tests no se mezclan
+        // aquí porque Jest + ESLint con tipos a la vez agotaron CPU y memoria del agente Docker.
         stage('Calidad (paralelo)') {
             parallel {
                 stage('Lint') {
                     steps {
-                        sh '''
-                            mkdir -p reports
-                            # Reporte JSON para archivar; si falla, se repite en formato legible para el log.
-                            npm run lint -- -f json -o reports/eslint.json || { rc=$?; npm run lint || true; exit $rc; }
-                        '''
+                        script {
+                            lib.withStageTimeout('Lint', 8) {
+                                sh '''
+                                    mkdir -p reports
+                                    # Caché de ESLint (.eslintcache) y reporte JSON para archivar.
+                                    # Si falla, se repite en formato legible para el log.
+                                    npm run lint -- --cache --cache-location .eslintcache -f json -o reports/eslint.json                                         || { rc=$?; npm run lint -- --cache --cache-location .eslintcache || true; exit $rc; }
+                                '''
+                            }
+                        }
                     }
                 }
                 stage('Formato') {
@@ -67,7 +76,11 @@ pipeline {
                         // por eso marca el build como inestable en vez de bloquearlo.
                         // Cuando se ejecute "npm run format" en el repo, quitar el catchError.
                         catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
-                            sh 'npm run format:check'
+                            script {
+                                lib.withStageTimeout('Formato', 8) {
+                                    sh 'npm run format:check'
+                                }
+                            }
                         }
                     }
                 }
@@ -75,30 +88,50 @@ pipeline {
                     steps {
                         // Una vulnerabilidad alta marca el build como inestable, no lo bloquea.
                         catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
-                            sh 'npm audit --audit-level=high'
+                            script {
+                                lib.withStageTimeout('Auditoría', 8) {
+                                    sh 'npm audit --audit-level=high'
+                                }
+                            }
                         }
                     }
                 }
-                stage('Tests') {
-                    when { not { branch 'main' } }
-                    steps {
-                        sh 'npm test -- --ci'
+            }
+        }
+
+        // Etapas secuenciales: Jest usa solo 2 workers para no saturar un agente con pocos recursos.
+        stage('Tests') {
+            when { not { branch 'main' } }
+            steps {
+                script {
+                    lib.withStageTimeout('Tests', 10) {
+                        sh 'npm test -- --ci --maxWorkers=2'
                     }
                 }
-                stage('Tests + cobertura') {
-                    when { branch 'main' }
-                    steps {
-                        sh 'npm run test:coverage'
+            }
+        }
+
+        stage('Tests + cobertura') {
+            when { branch 'main' }
+            steps {
+                script {
+                    lib.withStageTimeout('Tests + cobertura', 10) {
+                        sh 'npm run test:coverage -- --maxWorkers=2'
                     }
                 }
-                stage('Tests de BD en memoria') {
-                    when {
-                        anyOf {
-                            branch 'main'
-                            changeRequest()
-                        }
-                    }
-                    steps {
+            }
+        }
+
+        stage('Tests de BD en memoria') {
+            when {
+                anyOf {
+                    branch 'main'
+                    changeRequest()
+                }
+            }
+            steps {
+                script {
+                    lib.withStageTimeout('Tests de BD en memoria', 8) {
                         // PGlite en memoria: no se conecta a Supabase ni a ninguna base real.
                         sh 'npm run test:students-db'
                     }
@@ -108,7 +141,11 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'npm run build'
+                script {
+                    lib.withStageTimeout('Build', 8) {
+                        sh 'npm run build'
+                    }
+                }
             }
         }
 
