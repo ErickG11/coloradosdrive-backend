@@ -55,6 +55,21 @@ def withStageTimeout(String stageName, int minutes, Closure body) {
 }
 
 /**
+ * Ejecuta una etapa no bloqueante. Si falla o se pasa de tiempo, la etapa queda en amarillo
+ * (UNSTABLE) pero el build sigue en SUCCESS, y se agrega 'label' a la lista de advertencias.
+ */
+def runNonBlocking(String stageName, String label, int minutes, List warnings, Closure body) {
+    catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+        try {
+            withStageTimeout(stageName, minutes, body)
+        } catch (e) {
+            warnings << label
+            throw e  // lo captura catchError para marcar la etapa
+        }
+    }
+}
+
+/**
  * Publica el estado del commit en GitHub (pending | success | failure | error).
  * Nunca rompe el build: cualquier fallo de red o de permisos se ignora.
  */
@@ -89,18 +104,21 @@ def setGithubStatus(String state, String description) {
  * Envía el resultado a Telegram y actualiza el estado del commit en GitHub.
  * status: SUCCESS | FAILURE | UNSTABLE | ABORTED
  */
-def notify(String status) {
+def notify(String status, List warnings = []) {
     def emoji = [SUCCESS: '✅', FAILURE: '❌', UNSTABLE: '⚠️', ABORTED: '⏹️'].get(status, 'ℹ️')
     // UNSTABLE sigue siendo un build que compila y pasa tests: en GitHub se marca como success.
     def ghState = [SUCCESS: 'success', FAILURE: 'failure', UNSTABLE: 'success', ABORTED: 'error'].get(status, 'error')
 
     def branch = env.BRANCH_NAME ?: 'desconocida'
     def shortCommit = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'n/a'
+    // Etapas no bloqueantes que fallaron (formato, auditoría...): no frenan el build pero se reportan.
+    def warningText = warnings ? warnings.unique().join(', ') : ''
     def message = "${emoji} ColoradosDrive backend: ${status}\n" +
         "Rama: ${branch}\n" +
         "Commit: ${shortCommit}\n" +
         "Build: #${env.BUILD_NUMBER}\n" +
         "Duración: ${currentBuild.durationString.replace(' and counting', '')}\n" +
+        (warningText ? "Advertencias: ${warningText}\n" : '') +
         "${env.BUILD_URL}"
 
     withEnv(["TG_TEXT=${message}"]) {
@@ -118,7 +136,8 @@ def notify(String status) {
         }
     }
 
-    setGithubStatus(ghState, "Build #${env.BUILD_NUMBER}: ${status}")
+    def ghDescription = "Build #${env.BUILD_NUMBER}: ${status}" + (warningText ? " | Advertencias: ${warningText}" : '')
+    setGithubStatus(ghState, ghDescription)
 }
 
 return this
