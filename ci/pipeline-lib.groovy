@@ -19,15 +19,38 @@ def installDependencies() {
     ).trim()
 
     if (lockHash && lockHash == savedHash) {
-        echo "CACHE HIT: package-lock.json no cambió (sha256 ${lockHash.take(12)}...). Se omite npm ci."
+        echo "CACHE HIT: package-lock.json no cambió (sha256 ${lockHash.take(12)}...). Se omite npm ci y se conserva .eslintcache."
         return
     }
 
     echo "CACHE MISS: lockfile nuevo o node_modules ausente. Ejecutando npm ci (caché npm en ${env.NPM_CONFIG_CACHE})."
+    // Las dependencias cambiaron (puede cambiar ESLint o sus reglas): se descarta la caché de ESLint.
+    sh 'rm -f .eslintcache'
     sh 'npm ci --prefer-offline --no-audit --no-fund'
     // npm ci borra node_modules antes de instalar, por eso el marcador se escribe al final.
     withEnv(["LOCK_HASH=${lockHash}"]) {
         sh "printf '%s' \"\$LOCK_HASH\" > ${LOCK_MARKER}"
+    }
+}
+
+/**
+ * Ejecuta el cuerpo con un límite de tiempo. Si se agota, la etapa queda en FAILURE
+ * (no en ABORTED, que es lo que hace timeout por defecto) con un mensaje claro.
+ */
+def withStageTimeout(String stageName, int minutes, Closure body) {
+    def startMs = System.currentTimeMillis()
+    try {
+        timeout(time: minutes, unit: 'MINUTES') {
+            body()
+        }
+    } catch (e) {
+        def elapsedMs = System.currentTimeMillis() - startMs
+        // Interrupción por el límite: el tiempo transcurrido alcanza el máximo (margen de 5 s).
+        if (elapsedMs >= minutes * 60000L - 5000L) {
+            error "TIMEOUT: la etapa '${stageName}' superó el límite de ${minutes} minutos y se canceló. " +
+                'Revisar CPU y memoria del agente (procesos colgados o sin recursos).'
+        }
+        throw e
     }
 }
 

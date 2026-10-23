@@ -28,3 +28,4 @@ npm-debug.log*
 # reportes y artefactos generados por el pipeline de Jenkins
 reports/
 artifacts/
+.eslintcache
