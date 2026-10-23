@@ -6,6 +6,10 @@
 // lo vean todas las etapas y el bloque post.
 def lib
 
+// Etapas no bloqueantes que fallaron o se pasaron de tiempo (ej. 'formato', 'auditoría').
+// Se declara aquí, igual que lib, para que la lean las ramas paralelas y el bloque post.
+def warnings = []
+
 pipeline {
     agent any
 
@@ -72,26 +76,23 @@ pipeline {
                 }
                 stage('Formato') {
                     steps {
-                        // El repo ya tiene archivos sin formatear (el CI de GitHub no corre este paso),
-                        // por eso marca el build como inestable en vez de bloquearlo.
-                        // Cuando se ejecute "npm run format" en el repo, quitar el catchError.
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
-                            script {
-                                lib.withStageTimeout('Formato', 8) {
-                                    sh 'npm run format:check'
-                                }
+                        // No bloqueante: el repo ya tiene archivos sin formatear (el CI de GitHub no corre
+                        // este paso). El build queda en SUCCESS (el plugin de GitHub trata UNSTABLE como
+                        // fallo) y la etapa en amarillo; la advertencia se reporta en Telegram y GitHub.
+                        // Cuando se ejecute "npm run format" en el repo, pasar a lib.withStageTimeout.
+                        script {
+                            lib.runNonBlocking('Formato', 'formato', 8, warnings) {
+                                sh 'npm run format:check'
                             }
                         }
                     }
                 }
                 stage('Auditoría') {
                     steps {
-                        // Una vulnerabilidad alta marca el build como inestable, no lo bloquea.
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
-                            script {
-                                lib.withStageTimeout('Auditoría', 8) {
-                                    sh 'npm audit --audit-level=high'
-                                }
+                        // No bloqueante: una vulnerabilidad alta se reporta como advertencia.
+                        script {
+                            lib.runNonBlocking('Auditoría', 'auditoría', 8, warnings) {
+                                sh 'npm audit --audit-level=high'
                             }
                         }
                     }
@@ -172,16 +173,16 @@ pipeline {
             echo "Duración total: ${currentBuild.durationString.replace(' and counting', '')}"
         }
         success {
-            script { if (lib) { lib.notify('SUCCESS') } }
+            script { if (lib) { lib.notify('SUCCESS', warnings) } }
         }
         failure {
-            script { if (lib) { lib.notify('FAILURE') } }
+            script { if (lib) { lib.notify('FAILURE', warnings) } }
         }
         unstable {
-            script { if (lib) { lib.notify('UNSTABLE') } }
+            script { if (lib) { lib.notify('UNSTABLE', warnings) } }
         }
         aborted {
-            script { if (lib) { lib.notify('ABORTED') } }
+            script { if (lib) { lib.notify('ABORTED', warnings) } }
         }
     }
 }

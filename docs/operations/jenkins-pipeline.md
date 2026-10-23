@@ -73,14 +73,24 @@ En todos los casos se notifica a Telegram y se marca el estado del commit en Git
 
 - Jenkins corre en una PC local: no recibe webhooks (se usa escaneo cada 5 minutos) y solo funciona mientras la PC está encendida.
 - Los tests de integración usan mocks de Supabase, correo y JWKS; no validan contra servicios reales. Los tests de BD usan PGlite en memoria, no la base de Supabase.
-- `npm run format:check` falla hoy en 43 archivos de `src/` y `tests/` (aparte de los finales de línea). Por eso la etapa Formato es no bloqueante (marca el build como inestable). Al formatear el repo se puede volver a bloquear.
-- Una vulnerabilidad alta en `npm audit` deja el build inestable, no fallido.
+- `npm run format:check` falla hoy en 43 archivos de `src/` y `tests/` (aparte de los finales de línea). Por eso la etapa Formato es no bloqueante (ver sección 6). Al formatear el repo se puede volver a bloquear.
+- Una vulnerabilidad alta en `npm audit` es una advertencia, no un fallo (ver sección 6).
 - La caché de ESLint y de `node_modules` vive en el workspace del agente; si se borra, el siguiente build es completo.
 - No hay SonarQube ni análisis estático más allá de ESLint.
 - No hay despliegue automático: la etapa Entrega solo genera el paquete. El despliegue a Railway queda como trabajo futuro (comentado en el `Jenkinsfile`).
-- Un build inestable se reporta como `success` en GitHub y como `UNSTABLE` en Telegram.
+- Un build `UNSTABLE` (por ejemplo, por un test inestable) se reporta como `success` en GitHub y como `UNSTABLE` en Telegram.
 
-## 6. Problemas encontrados y cómo se resolvieron
+## 6. Etapas no bloqueantes y advertencias
+
+Formato y Auditoría **no bloquean** el build: si fallan o se pasan de tiempo, la etapa se marca en amarillo (UNSTABLE) en Stages, pero el resultado global del build sigue en **SUCCESS**.
+
+**Por qué:** el plugin de GitHub de Jenkins publica los checks `continuous-integration/jenkins/branch` y `continuous-integration/jenkins/pr-head` y trata un build UNSTABLE como fallido (❌). Eso ensuciaba el PR aunque lint, tests y build pasaran.
+
+**Cómo no se esconden los problemas:** `runNonBlocking` (en `ci/pipeline-lib.groovy`) agrega el nombre de la etapa a la lista `warnings` del `Jenkinsfile`. Si la lista no está vacía, `notify` incluye la línea `Advertencias: formato, auditoría` en el mensaje de Telegram y en la descripción del estado `jenkins/ci-backend` de GitHub. Si fallan Lint, Tests o Build, el build sigue terminando en FAILURE.
+
+**Plan:** Formato y Auditoría pasarán a ser bloqueantes cuando se aplique `npm run format` y se corrijan las dependencias vulnerables, cada cosa en un PR aparte. Entonces bastará con cambiar `lib.runNonBlocking(...)` por `lib.withStageTimeout(...)` en esas dos etapas.
+
+## 7. Problemas encontrados y cómo se resolvieron
 
 **Síntoma:** el build #2 quedó 24 minutos en las ramas paralelas Lint y Tests, sin escribir nada en el log, mientras Formato y Auditoría terminaron en 16 s. En local los mismos comandos funcionaban.
 
