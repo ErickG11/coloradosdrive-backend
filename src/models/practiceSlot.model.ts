@@ -1,3 +1,5 @@
+import type { Database } from '../config/database.types';
+
 export const PRACTICE_SLOT_STATUSES = [
   'disponible',
   'asignado',
@@ -78,4 +80,38 @@ export type UpdatePracticeSlotInput = Partial<{
 
 export interface SubmitAttendanceInput {
   attended: boolean;
+}
+
+export const CANCELLATION_CATEGORIES = ['salud', 'trabajo', 'estudios', 'familiar', 'transporte', 'otro'] as const;
+export type CancellationCategory = (typeof CANCELLATION_CATEGORIES)[number];
+export type CancellationOutcome = 'reprogramable' | 'hora_perdida' | 'falta';
+
+export interface CancelPracticeSlotInput {
+  motivoCategoria: CancellationCategory;
+  motivoTexto: string;
+}
+
+export interface CancellationPreview {
+  reprogramacionesRestantes: number;
+  hayFranjasLibres: boolean;
+  resultadoSiCancela: CancellationOutcome;
+}
+
+export interface PracticeCancellationRpcResult {
+  slot: Database['public']['Tables']['practice_slots']['Row'];
+  cancellationId: string;
+  enrollmentId: string;
+  studentId: string;
+  instructorId: string;
+  cohortId: string;
+  cancelledAt: string;
+  resultado: CancellationOutcome;
+  consumioReprogramacion: boolean;
+  reprogramacionNumero: number | null;
+  reprogramacionesRestantes: number;
+  difundirCohorte: boolean;
+}
+
+export interface CancelPracticeSlotResult extends PracticeSlot {
+  cancelacion: Omit<PracticeCancellationRpcResult, 'slot' | 'studentId' | 'instructorId' | 'cohortId' | 'difundirCohorte'>;
 }

@@ -12,11 +12,12 @@ import {
   claimPracticeSlot,
   confirmPracticeSlot,
   markPracticeSlotAttendance,
+  previewPracticeSlotCancellation,
 } from '../controllers/practiceSlotAction.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
-import { PRACTICE_SLOT_STATUSES } from '../models/practiceSlot.model';
+import { CANCELLATION_CATEGORIES, PRACTICE_SLOT_STATUSES } from '../models/practiceSlot.model';
 import { asyncHandler } from '../utils/asyncHandler';
 import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
 
@@ -148,9 +149,18 @@ practiceSlotRouter.post(
 practiceSlotRouter.post(
   '/:id/cancel',
   requireRole('estudiante'),
-  idParamValidator,
+  [idParamValidator,
+    body('motivoCategoria').isString().bail().isIn(CANCELLATION_CATEGORIES)
+      .withMessage('Indica una categoría de cancelación válida'),
+    body('motivoTexto').isString().bail().trim().isLength({ min: 10 })
+      .withMessage('El motivo debe tener al menos 10 caracteres'),
+  ],
   validate,
   asyncHandler(cancelPracticeSlot),
+);
+practiceSlotRouter.get(
+  '/:id/cancel-preview', requireRole('estudiante'), idParamValidator, validate,
+  asyncHandler(previewPracticeSlotCancellation),
 );
 
 // RF-03 (alcance agregado en Sprint 4, ver docs/adr/007): el instructor

@@ -20,6 +20,7 @@
     "test:student-profile-db": "node tests/database/studentProfile.mjs",
     "test:student-access-db": "node tests/database/studentAccess.mjs",
     "test:student-deletion-db": "node tests/database/studentDeletion.mjs",
+    "test:practice-cancellation-db": "node tests/database/practiceCancellation.mjs",
     "test:student-cohort-db": "node tests/database/studentCohort.mjs",
     "test:cohort-validations-db": "node tests/database/cohortValidations.mjs",
     "test:cohort-concurrency-db": "node tests/database/cohortConcurrency.mjs",
