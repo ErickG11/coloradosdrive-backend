@@ -13,6 +13,9 @@ import {
   confirmPracticeSlot,
   markPracticeSlotAttendance,
   previewPracticeSlotCancellation,
+  releasedPracticeSlotsForMe,
+  myPendingPracticeSlots,
+  swapPracticeSlot,
 } from '../controllers/practiceSlotAction.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
@@ -114,6 +117,15 @@ practiceSlotRouter.get(
   listValidators,
   validate,
   asyncHandler(listPracticeSlots),
+);
+practiceSlotRouter.get('/released-for-me', requireRole('estudiante'), asyncHandler(releasedPracticeSlotsForMe));
+practiceSlotRouter.get('/my-pending', requireRole('estudiante'), asyncHandler(myPendingPracticeSlots));
+practiceSlotRouter.post(
+  '/:id/swap', requireRole('estudiante'),
+  [idParamValidator, body('practicaASoltarId').optional().isString()
+    .withMessage('practicaASoltarId debe ser un UUID válido').bail().isUUID()
+    .withMessage('practicaASoltarId debe ser un UUID válido')],
+  validate, asyncHandler(swapPracticeSlot),
 );
 practiceSlotRouter.patch(
   '/:id',

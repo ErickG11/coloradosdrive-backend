@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 
 import { supabaseAdmin } from '../config/supabase';
 import { mailer } from '../config/mailer';
-import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, SubmitAttendanceInput } from '../models/practiceSlot.model';
+import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, SubmitAttendanceInput, ReleasedPracticeSlot, SwapPracticeResult } from '../models/practiceSlot.model';
 import { EmailService } from '../services/email.service';
 import { PracticeSlotActionService } from '../services/practiceSlotAction.service';
 import { RealtimeService } from '../services/realtime.service';
@@ -25,6 +25,19 @@ export async function claimPracticeSlot(req: Request, res: Response<PracticeSlot
   const studentId = requireStudentId(req);
   const slot = await practiceSlotActionService.claimSlot(req.params.id, studentId);
   res.status(200).json(slot);
+}
+
+export async function releasedPracticeSlotsForMe(req: Request, res: Response<ReleasedPracticeSlot[]>): Promise<void> {
+  res.status(200).json(await practiceSlotActionService.releasedForStudent(requireStudentId(req)));
+}
+
+export async function myPendingPracticeSlots(req: Request, res: Response<{ slot: PracticeSlot; enrollmentId: string }[]>): Promise<void> {
+  res.status(200).json(await practiceSlotActionService.pendingForStudent(requireStudentId(req)));
+}
+
+export async function swapPracticeSlot(req: Request, res: Response<SwapPracticeResult>): Promise<void> {
+  const { practicaASoltarId } = req.body as { practicaASoltarId?: string };
+  res.status(200).json(await practiceSlotActionService.swapSlot(req.params.id, requireStudentId(req), practicaASoltarId));
 }
 
 export async function confirmPracticeSlot(
