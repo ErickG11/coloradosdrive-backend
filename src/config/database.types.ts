@@ -10,7 +10,7 @@
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
 import type { StudentListResult } from '../models/studentAdmin.model';
-import type { CancellationCategory, CancellationOutcome, CancellationPreview, PracticeCancellationRpcResult } from '../models/practiceSlot.model';
+import type { CancellationCategory, CancellationOutcome, CancellationPreview, PracticeCancellationRpcResult, ReleasedPracticeSlot, PendingPracticeRpcSlot, SwapPracticeRpcResult } from '../models/practiceSlot.model';
 import type { PracticeRecovery } from '../services/studentAccess.service';
 import type { StudentDeletionOperation } from '../services/studentDeletion.service';
 import type { StudentProfileResult } from '../services/studentProfile.service';
@@ -178,6 +178,18 @@ export interface Database {
         Args: { p_slot_id: string; p_student_id: string; p_motivo_categoria: string; p_motivo_texto: string };
         Returns: PracticeCancellationRpcResult;
       };
+      released_practice_slots_for_student: {
+        Args: { p_student_id: string };
+        Returns: ReleasedPracticeSlot[];
+      };
+      pending_practice_slots_for_student: {
+        Args: { p_student_id: string };
+        Returns: PendingPracticeRpcSlot[];
+      };
+      swap_practice_slot: {
+        Args: { p_slot_id: string; p_student_id: string; p_source_slot_id: string | null };
+        Returns: SwapPracticeRpcResult;
+      };
       practice_slots_scheduler_candidates: {
         Args: { p_transition: 'remind' | 'close' | 'complete' };
         Returns: {
@@ -202,9 +214,13 @@ export interface Database {
           motivo_categoria: CancellationCategory;
           motivo_texto: string; resultado: CancellationOutcome;
           consumio_reprogramacion: boolean; reprogramacion_numero: number | null;
+          origen: 'alumno' | 'cambio_cupo';
+          repuesto_por_slot_id: string | null; repuesto_en: string | null;
         };
-        Insert: Omit<Database['public']['Tables']['practice_slot_cancellations']['Row'], 'id'> & { id?: string };
-        Update: never;
+        Insert: Omit<Database['public']['Tables']['practice_slot_cancellations']['Row'], 'id' | 'origen' | 'repuesto_por_slot_id' | 'repuesto_en'> & {
+          id?: string; origen?: 'alumno' | 'cambio_cupo'; repuesto_por_slot_id?: string | null; repuesto_en?: string | null;
+        };
+        Update: { repuesto_por_slot_id?: string; repuesto_en?: string };
         Relationships: [];
       };
 

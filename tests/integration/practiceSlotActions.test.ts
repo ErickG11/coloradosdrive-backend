@@ -112,22 +112,27 @@ describe('practice-slots student actions', () => {
   });
 
   it.each(['claim', 'confirm'] as const)('%s usa el actor del JWT y devuelve el DTO vigente', async (action) => {
+    mockHttpSendSuccess();
+    const row = buildSlotRow({ student_id: studentId, status: action === 'claim' ? 'asignado' : 'confirmado' });
     mockedRpc.mockReturnValue(createChain({
-      data: buildSlotRow({ student_id: studentId, status: action === 'claim' ? 'asignado' : 'confirmado' }),
+      data: action === 'claim' ? { slot: row, caso: 'A', practicaSoltadaId: null,
+        cancellationId: 'c1', enrollmentId: 'e1', reprogramacionesRestantes: 1 } : row,
       error: null,
     }));
     const res = await request(app).post(`/practice-slots/${slotId}/${action}`)
       .set('Authorization', authenticateStudent()).send({ studentId: 'otro-actor', now: 'ayer' });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ id: slotId, studentId, durationMinutes: 60 });
-    expect(mockedRpc).toHaveBeenCalledWith('act_on_practice_slot', {
-      p_slot_id: slotId, p_student_id: studentId, p_action: action,
-    });
+    expect(mockedRpc).toHaveBeenCalledWith(action === 'claim' ? 'swap_practice_slot' : 'act_on_practice_slot',
+      action === 'claim' ? { p_slot_id: slotId, p_student_id: studentId, p_source_slot_id: null }
+        : { p_slot_id: slotId, p_student_id: studentId, p_action: action });
   });
 
   it('simula dos respuestas de reclamación concurrentes: HTTP 200 y 409 (no demuestra locks SQL)', async () => {
+    mockHttpSendSuccess();
     mockedRpc.mockReturnValueOnce(createChain({
-      data: buildSlotRow({ student_id: studentId, status: 'asignado' }), error: null,
+      data: { slot: buildSlotRow({ student_id: studentId, status: 'asignado' }), caso: 'A',
+        practicaSoltadaId: null, cancellationId: 'c1', enrollmentId: 'e1', reprogramacionesRestantes: 1 }, error: null,
     })).mockReturnValueOnce(createChain({
       data: null, error: { code: 'CD409', message: 'Esta franja ya no está disponible' },
     }));
@@ -216,8 +221,10 @@ describe('practice-slots student actions', () => {
   );
 
   it('una franja reclamada de nuevo no hereda el ciclo anterior devuelto por PostgreSQL', async () => {
+    mockHttpSendSuccess();
     mockedRpc.mockReturnValue(createChain({
-      data: buildSlotRow({ status: 'asignado', student_id: studentId }), error: null,
+      data: { slot: buildSlotRow({ status: 'asignado', student_id: studentId }), caso: 'A',
+        practicaSoltadaId: null, cancellationId: 'c1', enrollmentId: 'e1', reprogramacionesRestantes: 1 }, error: null,
     }));
     const res = await request(app).post(`/practice-slots/${slotId}/claim`)
       .set('Authorization', authenticateStudent());

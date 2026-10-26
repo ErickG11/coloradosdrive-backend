@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
-import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot } from '../models/practiceSlot.model';
+import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, ReleasedPracticeSlot, SwapPracticeResult } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
 import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import type { RealtimeService } from './realtime.service';
@@ -45,7 +45,36 @@ export class PracticeSlotActionService {
   // La RPC bloquea la fila, verifica la matrícula activa en la cohorte y
   // decide el plazo en el UPDATE con clock_timestamp() de PostgreSQL.
   async claimSlot(slotId: string, studentId: string): Promise<PracticeSlot> {
-    return this.actOnSlot(slotId, studentId, 'claim');
+    return (await this.swapSlot(slotId, studentId)).slot;
+  }
+
+  async releasedForStudent(studentId: string): Promise<ReleasedPracticeSlot[]> {
+    const { data, error } = await this.supabase.rpc('released_practice_slots_for_student', { p_student_id: studentId });
+    if (error) throwPracticeWriteError(error);
+    return data;
+  }
+
+  async pendingForStudent(studentId: string): Promise<{ slot: PracticeSlot; enrollmentId: string }[]> {
+    const { data, error } = await this.supabase.rpc('pending_practice_slots_for_student', { p_student_id: studentId });
+    if (error) throwPracticeWriteError(error);
+    return data.map((item) => ({ ...item, slot: toPracticeSlot(item.slot) }));
+  }
+
+  async swapSlot(slotId: string, studentId: string, sourceSlotId?: string): Promise<SwapPracticeResult> {
+    const { data, error } = await this.supabase.rpc('swap_practice_slot', {
+      p_slot_id: slotId, p_student_id: studentId, p_source_slot_id: sourceSlotId ?? null,
+    });
+    if (error) throwPracticeWriteError(error);
+    // RPC resuelta = commit confirmado. Los dos avisos son independientes y best-effort.
+    // Nunca emitir slot-released por la franja de origen: evita la cascada de ofertas.
+    await this.notifySwapSafely(`user-${studentId}-practice-slots`, 'slots-updated');
+    await this.notifySwapSafely(`cohort-${data.slot.cohort_id}-practice-slots`, 'slot-taken');
+    return { ...data, slot: toPracticeSlot(data.slot) };
+  }
+
+  private async notifySwapSafely(channel: string, event: string): Promise<void> {
+    try { await this.realtimeService.broadcast(channel, event, {}); }
+    catch (err) { console.error('No se pudo notificar el cambio de práctica:', err); }
   }
 
   async confirmSlot(slotId: string, studentId: string): Promise<PracticeSlot> {
@@ -80,7 +109,7 @@ export class PracticeSlotActionService {
   }
 
   private async actOnSlot(
-    slotId: string, studentId: string, action: 'claim' | 'confirm',
+    slotId: string, studentId: string, action: 'confirm',
   ): Promise<PracticeSlot> {
     const { data, error } = await this.supabase.rpc('act_on_practice_slot', {
       p_slot_id: slotId, p_student_id: studentId, p_action: action,

@@ -115,3 +115,32 @@ export interface PracticeCancellationRpcResult {
 export interface CancelPracticeSlotResult extends PracticeSlot {
   cancelacion: Omit<PracticeCancellationRpcResult, 'slot' | 'studentId' | 'instructorId' | 'cohortId' | 'difundirCohorte'>;
 }
+
+export interface ReleasedPracticeSlot {
+  id: string;
+  cohortId: string;
+  enrollmentId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  status: 'disponible' | 'liberado';
+  caso: 'A' | 'B';
+  via: 'reposicion' | 'cambio';
+  practicasASoltarIds: string[];
+  reprogramacionesRestantes: number;
+}
+
+export interface PendingPracticeRpcSlot {
+  slot: Database['public']['Tables']['practice_slots']['Row'];
+  enrollmentId: string;
+}
+
+export interface SwapPracticeRpcResult extends PendingPracticeRpcSlot {
+  caso: 'A' | 'B';
+  practicaSoltadaId: string | null;
+  cancellationId: string;
+  reprogramacionesRestantes: number;
+}
+
+export interface SwapPracticeResult extends Omit<SwapPracticeRpcResult, 'slot'> {
+  slot: PracticeSlot;
+}
