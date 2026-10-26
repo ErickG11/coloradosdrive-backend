@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 
 import { supabaseAdmin } from '../config/supabase';
-import type { PracticeSlot, SubmitAttendanceInput } from '../models/practiceSlot.model';
+import { mailer } from '../config/mailer';
+import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, SubmitAttendanceInput } from '../models/practiceSlot.model';
+import { EmailService } from '../services/email.service';
 import { PracticeSlotActionService } from '../services/practiceSlotAction.service';
 import { RealtimeService } from '../services/realtime.service';
 import { AppError } from '../utils/AppError';
@@ -9,6 +11,7 @@ import { AppError } from '../utils/AppError';
 const practiceSlotActionService = new PracticeSlotActionService(
   supabaseAdmin,
   new RealtimeService(supabaseAdmin),
+  new EmailService(mailer),
 );
 
 function requireStudentId(req: Request): string {
@@ -33,9 +36,13 @@ export async function confirmPracticeSlot(
   res.status(200).json(slot);
 }
 
-export async function cancelPracticeSlot(req: Request, res: Response<PracticeSlot>): Promise<void> {
+export async function previewPracticeSlotCancellation(req: Request, res: Response<CancellationPreview>): Promise<void> {
+  res.status(200).json(await practiceSlotActionService.previewCancellation(req.params.id, requireStudentId(req)));
+}
+
+export async function cancelPracticeSlot(req: Request, res: Response<CancelPracticeSlotResult>): Promise<void> {
   const studentId = requireStudentId(req);
-  const slot = await practiceSlotActionService.cancelSlot(req.params.id, studentId);
+  const slot = await practiceSlotActionService.cancelSlot(req.params.id, studentId, req.body as CancelPracticeSlotInput);
   res.status(200).json(slot);
 }
 

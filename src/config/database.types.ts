@@ -10,6 +10,7 @@
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
 import type { StudentListResult } from '../models/studentAdmin.model';
+import type { CancellationCategory, CancellationOutcome, CancellationPreview, PracticeCancellationRpcResult } from '../models/practiceSlot.model';
 import type { PracticeRecovery } from '../services/studentAccess.service';
 import type { StudentDeletionOperation } from '../services/studentDeletion.service';
 import type { StudentProfileResult } from '../services/studentProfile.service';
@@ -166,8 +167,16 @@ export interface Database {
         Returns: boolean;
       };
       act_on_practice_slot: {
-        Args: { p_slot_id: string; p_student_id: string; p_action: 'claim' | 'confirm' | 'cancel' };
+        Args: { p_slot_id: string; p_student_id: string; p_action: 'claim' | 'confirm' };
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
+      };
+      preview_practice_slot_cancellation: {
+        Args: { p_slot_id: string; p_student_id: string };
+        Returns: CancellationPreview;
+      };
+      cancel_practice_slot_with_reason: {
+        Args: { p_slot_id: string; p_student_id: string; p_motivo_categoria: string; p_motivo_texto: string };
+        Returns: PracticeCancellationRpcResult;
       };
       practice_slots_scheduler_candidates: {
         Args: { p_transition: 'remind' | 'close' | 'complete' };
@@ -186,6 +195,19 @@ export interface Database {
       };
     };
     Tables: {
+      practice_slot_cancellations: {
+        Row: {
+          id: string; slot_id: string; enrollment_id: string; student_id: string;
+          instructor_id: string; cohort_id: string; slot_starts_at: string; cancelled_at: string;
+          motivo_categoria: CancellationCategory;
+          motivo_texto: string; resultado: CancellationOutcome;
+          consumio_reprogramacion: boolean; reprogramacion_numero: number | null;
+        };
+        Insert: Omit<Database['public']['Tables']['practice_slot_cancellations']['Row'], 'id'> & { id?: string };
+        Update: never;
+        Relationships: [];
+      };
+
       student_deletion_operations: {
         Row: StudentDeletionOperation;
         Insert: { student_id: string; actor_id: string };
@@ -408,6 +430,7 @@ export interface Database {
           monto_total: string | null;
           descuento: string;
           monto_abonado: string;
+          reprogramaciones_usadas: number;
           horas_practica_objetivo: number | null;
           fecha_inscripcion: string;
           created_at: string;
@@ -424,6 +447,7 @@ export interface Database {
           monto_total: number | null;
           descuento?: number;
           monto_abonado?: number;
+          reprogramaciones_usadas?: number;
           horas_practica_objetivo?: number | null;
         };
         Update: Partial<{

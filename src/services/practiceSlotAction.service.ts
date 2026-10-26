@@ -1,10 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
-import type { PracticeSlot } from '../models/practiceSlot.model';
+import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot } from '../models/practiceSlot.model';
 import { AppError } from '../utils/AppError';
 import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import type { RealtimeService } from './realtime.service';
+import type { EmailService } from './email.service';
+import { PracticeSlotNotificationService } from './practiceSlotNotification.service';
 
 type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
 
@@ -28,13 +30,17 @@ function toPracticeSlot(row: PracticeSlotRow): PracticeSlot {
 
 // Recibe el cliente de Supabase y el RealtimeService por constructor
 // (mismo patrón que ExamAttemptService/EmailService) para poder
-// mockearlos en tests. No depende de EmailService: ninguna de estas 3
-// acciones envía correo (eso es exclusivo del scheduler, próximo commit).
+// mockearlos en tests. La cancelación tardía avisa por correo al instructor.
 export class PracticeSlotActionService {
+  private readonly notifications: PracticeSlotNotificationService;
+
   constructor(
     private readonly supabase: SupabaseClient<Database>,
     private readonly realtimeService: RealtimeService,
-  ) {}
+    emailService: EmailService,
+  ) {
+    this.notifications = new PracticeSlotNotificationService(supabase, emailService, realtimeService);
+  }
 
   // La RPC bloquea la fila, verifica la matrícula activa en la cohorte y
   // decide el plazo en el UPDATE con clock_timestamp() de PostgreSQL.
@@ -46,20 +52,35 @@ export class PracticeSlotActionService {
     return this.actOnSlot(slotId, studentId, 'confirm');
   }
 
-  // RF-03: cancelar libera el cupo y notifica a la cohorte por Realtime.
-  // Se permite desde asignado o confirmado - el estudiante puede
-  // cancelar incluso después de haber confirmado. Resetea confirmed_at/
-  // confirmation_notified_at a NULL: si otro estudiante reclama esta
-  // misma franja después, necesita su propio ciclo de confirmación, no
-  // arrastrar el de quien canceló.
-  async cancelSlot(slotId: string, studentId: string): Promise<PracticeSlot> {
-    const released = await this.actOnSlot(slotId, studentId, 'cancel');
-    await this.notifyCohortSlotReleasedSafely(released);
-    return released;
+  async previewCancellation(slotId: string, studentId: string): Promise<CancellationPreview> {
+    const { data, error } = await this.supabase.rpc('preview_practice_slot_cancellation', {
+      p_slot_id: slotId, p_student_id: studentId,
+    });
+    if (error) throwPracticeWriteError(error);
+    return data;
+  }
+
+  async cancelSlot(slotId: string, studentId: string, reason: CancelPracticeSlotInput): Promise<CancelPracticeSlotResult> {
+    const { data, error } = await this.supabase.rpc('cancel_practice_slot_with_reason', {
+      p_slot_id: slotId, p_student_id: studentId,
+      p_motivo_categoria: reason.motivoCategoria, p_motivo_texto: reason.motivoTexto,
+    });
+    if (error) throwPracticeWriteError(error);
+    const released = toPracticeSlot(data.slot);
+    // El reloj y el umbral pertenecen a la transacción, no al reloj de Node.
+    if (data.difundirCohorte) await this.notifyCohortSlotReleasedSafely(released);
+    else await this.notifications.notifyInstructorNoPractice(data.instructorId, released.scheduledAt);
+    return { ...released, cancelacion: {
+      cancellationId: data.cancellationId, enrollmentId: data.enrollmentId,
+      cancelledAt: data.cancelledAt, resultado: data.resultado,
+      consumioReprogramacion: data.consumioReprogramacion,
+      reprogramacionNumero: data.reprogramacionNumero,
+      reprogramacionesRestantes: data.reprogramacionesRestantes,
+    } };
   }
 
   private async actOnSlot(
-    slotId: string, studentId: string, action: 'claim' | 'confirm' | 'cancel',
+    slotId: string, studentId: string, action: 'claim' | 'confirm',
   ): Promise<PracticeSlot> {
     const { data, error } = await this.supabase.rpc('act_on_practice_slot', {
       p_slot_id: slotId, p_student_id: studentId, p_action: action,

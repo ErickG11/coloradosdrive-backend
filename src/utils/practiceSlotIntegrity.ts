@@ -13,6 +13,12 @@ export function effectivePracticeDuration(duration: number | undefined): 60 {
 
 // No exponer details de PostgreSQL (pueden contener identificadores).
 export function throwPracticeWriteError(error: PostgrestError): never {
+  if (error.code === '22023') {
+    throw new AppError(error.message, 400);
+  }
+  if (error.code === '55P03' || error.code === '40P01') {
+    throw new AppError('Otra operación está modificando la práctica; vuelve a consultar e inténtalo de nuevo', 409);
+  }
   if (error.code === 'CD023') {
     throw new AppError('El instructor indicado está inactivo', 409);
   }
