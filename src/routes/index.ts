@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { adminDashboardRouter } from './adminDashboard.routes';
 
 import { cohortAssignmentRouter } from './cohortAssignment.routes';
 import { cohortRouter } from './cohort.routes';
@@ -18,6 +19,7 @@ import { userRouter } from './user.routes';
 import { studentAdminRouter } from './studentAdmin.routes';
 
 export const apiRouter = Router();
+apiRouter.use('/admin/dashboard', adminDashboardRouter);
 
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/courses', courseRouter);
