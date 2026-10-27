@@ -66,12 +66,25 @@ describe('E2: rutas de cupos para el alumno', () => {
     ['22023', 400, 'Tienes una hora pendiente por reponer: no debes soltar otra práctica'],
     ['CD409', 409, 'Ya usaste tus 2 reprogramaciones'],
     ['CD409', 409, 'Otro alumno tomó este cupo o ya no está disponible'],
+    ['CD409', 409, 'No puedes volver a tomar una práctica que tú mismo soltaste'],
     ['55P03', 409, 'Otra operación está modificando la práctica; vuelve a consultar e inténtalo de nuevo'],
   ])('propaga conflicto o validación %s sin difundir', async (code, status, message) => {
     rpc.mockResolvedValue({ data: null, error: { code, message } });
     const res = await request(app).post(`/practice-slots/${target}/swap`).set('Authorization', auth()).send({});
     expect(res.status).toBe(status);
     expect(res.body.message).toBe(message);
+    expect(channel).not.toHaveBeenCalled();
+  });
+
+  it('el claim antiguo también rechaza una franja propia soltada con el mismo CD409', async () => {
+    const message = 'No puedes volver a tomar una práctica que tú mismo soltaste';
+    rpc.mockResolvedValue({ data: null, error: { code: 'CD409', message } });
+    const res = await request(app).post(`/practice-slots/${target}/claim`).set('Authorization', auth());
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(message);
+    expect(rpc).toHaveBeenCalledWith('swap_practice_slot', {
+      p_slot_id: target, p_student_id: 'test-user-id', p_source_slot_id: null,
+    });
     expect(channel).not.toHaveBeenCalled();
   });
 
