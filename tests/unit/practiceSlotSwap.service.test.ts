@@ -41,6 +41,21 @@ describe('E2: servicio y efectos tras commit', () => {
     expect(h.realtime.broadcast).not.toHaveBeenCalled();
   });
 
+  it('propaga el rechazo de cupo propio tanto por swap como por claim, sin avisos', async () => {
+    const h = harness();
+    const message = 'No puedes volver a tomar una práctica que tú mismo soltaste';
+    h.rpc.mockResolvedValue({ data: null, error: { code: 'CD409', message } });
+    await expect(h.service.swapSlot('target', 'student', 'source')).rejects.toMatchObject({ statusCode: 409, message });
+    await expect(h.service.claimSlot('target', 'student')).rejects.toMatchObject({ statusCode: 409, message });
+    expect(h.rpc).toHaveBeenNthCalledWith(1, 'swap_practice_slot', {
+      p_slot_id: 'target', p_student_id: 'student', p_source_slot_id: 'source',
+    });
+    expect(h.rpc).toHaveBeenNthCalledWith(2, 'swap_practice_slot', {
+      p_slot_id: 'target', p_student_id: 'student', p_source_slot_id: null,
+    });
+    expect(h.realtime.broadcast).not.toHaveBeenCalled();
+  });
+
   it('si falla el aviso personal conserva el cambio y aún intenta invalidar la cohorte', async () => {
     const h = harness();
     h.realtime.broadcast.mockRejectedValueOnce(new Error('Sin conexión'));
