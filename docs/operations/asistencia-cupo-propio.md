@@ -1,0 +1,19 @@
+# Asistencia: cupo soltado por el mismo alumno (032)
+
+Aplicar `032_asistencia_excluir_cupo_propio.sql` manualmente desde SQL Editor, una vez revisado `asistencia-cupo-propio-preflight.sql`. No hay backfill ni cambios de tablas. La migración conserva las firmas y permisos de 030/031, y reemplaza tres cuerpos de función. Después, ejecutar `asistencia-cupo-propio-verificacion.sql` entero; sus fixtures terminan en `ROLLBACK`. `asistencia-cupo-propio-rollback.sql` restaura los cuerpos originales de 030/031, pero reabre este defecto. Revisar el estado de las funciones antes de revertir si hubo migraciones posteriores.
+
+## Regla y decisión
+
+Una fila de `practice_slot_cancellations` con el mismo `student_id` y `slot_id` excluye la franja para ese alumno, sin importar `origen`, `resultado` o si la franja volvió a quedar libre varias veces. Otros alumnos elegibles de la misma cohorte la conservan como opción. `private.eligible_free_slots_for_enrollment` aplica la regla a E1 y a la base de E2; `private.eligible_practice_slot_changes` la reafirma para la lista por alumno. `public.swap_practice_slot` vuelve a comprobarla después de los bloqueos y devuelve `CD409` con «No puedes volver a tomar una práctica que tú mismo soltaste». `/claim` llama a esa misma RPC; no se abre un bypass. No cambia el orden de bloqueos ni la lógica de competencia por un cupo ajeno.
+
+La primera vista previa de una cancelación excluye la práctica que se va a soltar mediante `p_excluded_slot_id`. Por ello esa misma franja no causó el resultado inicial `hora_perdida`. El helper E1 sí debía cambiarse: al previsualizar una cancelación posterior, una franja que el alumno soltó anteriormente podía contarse erróneamente como alternativa. Ahora también queda excluida.
+
+`hora_perdida` significa que, al cancelar, no había otra franja elegible según el helper E1. No consume reprogramación ni crea una reposición A. `private.practice_replacement_balance` ya cuenta únicamente cancelaciones `reprogramable` de origen `alumno` sin reposición; su fórmula no se modifica. Si más tarde aparece un cupo distinto, esa cancelación sigue sin dar crédito A. Un alumno con otra práctica futura propia puede hacer un cambio B permitido por las reglas actuales, soltando esa otra práctica y consumiendo una reprogramación. Eso mueve la otra hora; no repone la hora perdida. Una cancelación con `resultado='falta'` tampoco crea A.
+
+**Incoherencia distinta, fuera de alcance:** el helper E1 que decide si una cancelación es `reprogramable` no comprueba `horasPorDia`; la elegibilidad E2 sí aplica ese límite. Puede existir una franja libre que E1 cuente como alternativa y que E2 no ofrezca por cupo diario, dejando un crédito A sin opción inmediata. Esta 032 solo excluye franjas que el mismo alumno soltó y no altera la regla diaria ni reclasifica cancelaciones anteriores.
+
+## Comprobación y límites
+
+`DISABLE_CRON=true npm run test:practice-own-slot-db` aplica 030/031/032 a PGlite local, prueba el preflight, un ensayo de 032 revertido, el SQL de verificación y el rollback exacto. El SQL comprueba: alumno que soltó no ve ni toma su cupo; otro alumno sí lo ve y lo toma; el origen de un cambio B tampoco vuelve a ofrecerse a quien lo soltó; `swap` y `claim` responden con el mensaje específico; un segundo competidor recibe el conflicto de cupo ocupado sin perder origen ni contador. La competencia se ensaya en orden serial, no con dos conexiones reales simultáneas. Los tests HTTP y de servicio comprueban la propagación del `CD409` sin Broadcast.
+
+El conector Supabase denegó la lectura del historial de migraciones del proyecto. La aplicación remota de 031 procede de la información proporcionada por el usuario; no se verificaron esquema, datos ni funciones desplegadas. No se ejecutó SQL remoto ni se aplicó 032. La CLI de Supabase no está instalada en este entorno, por lo que el archivo 032 sigue la numeración manual existente en este repositorio.
