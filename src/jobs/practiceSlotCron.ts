@@ -13,7 +13,7 @@ const schedulerService = new PracticeSlotSchedulerService(
 );
 
 // RF-03: revisa cada minuto qué franjas necesitan notificación de 20 min
-// antes, cuáles llegaron a los 5 min sin reclamar/confirmar, y cuáles ya
+// antes, qué cupos liberados llegaron a los 5 min vacíos, y cuáles ya
 // terminaron. node-cron corre dentro de este mismo proceso Express -
 // funciona porque Railway lo mantiene como proceso persistente (ver ADR
 // 001); no hace falta un servicio de cron externo, a diferencia de la

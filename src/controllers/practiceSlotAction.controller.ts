@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 
 import { supabaseAdmin } from '../config/supabase';
-import type { PracticeSlot, SubmitAttendanceInput } from '../models/practiceSlot.model';
+import { mailer } from '../config/mailer';
+import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, SubmitAttendanceInput, ReleasedPracticeSlot, SwapPracticeResult } from '../models/practiceSlot.model';
+import { EmailService } from '../services/email.service';
 import { PracticeSlotActionService } from '../services/practiceSlotAction.service';
 import { RealtimeService } from '../services/realtime.service';
 import { AppError } from '../utils/AppError';
@@ -9,6 +11,7 @@ import { AppError } from '../utils/AppError';
 const practiceSlotActionService = new PracticeSlotActionService(
   supabaseAdmin,
   new RealtimeService(supabaseAdmin),
+  new EmailService(mailer),
 );
 
 function requireStudentId(req: Request): string {
@@ -24,6 +27,19 @@ export async function claimPracticeSlot(req: Request, res: Response<PracticeSlot
   res.status(200).json(slot);
 }
 
+export async function releasedPracticeSlotsForMe(req: Request, res: Response<ReleasedPracticeSlot[]>): Promise<void> {
+  res.status(200).json(await practiceSlotActionService.releasedForStudent(requireStudentId(req)));
+}
+
+export async function myPendingPracticeSlots(req: Request, res: Response<{ slot: PracticeSlot; enrollmentId: string }[]>): Promise<void> {
+  res.status(200).json(await practiceSlotActionService.pendingForStudent(requireStudentId(req)));
+}
+
+export async function swapPracticeSlot(req: Request, res: Response<SwapPracticeResult>): Promise<void> {
+  const { practicaASoltarId } = req.body as { practicaASoltarId?: string };
+  res.status(200).json(await practiceSlotActionService.swapSlot(req.params.id, requireStudentId(req), practicaASoltarId));
+}
+
 export async function confirmPracticeSlot(
   req: Request,
   res: Response<PracticeSlot>,
@@ -33,9 +49,13 @@ export async function confirmPracticeSlot(
   res.status(200).json(slot);
 }
 
-export async function cancelPracticeSlot(req: Request, res: Response<PracticeSlot>): Promise<void> {
+export async function previewPracticeSlotCancellation(req: Request, res: Response<CancellationPreview>): Promise<void> {
+  res.status(200).json(await practiceSlotActionService.previewCancellation(req.params.id, requireStudentId(req)));
+}
+
+export async function cancelPracticeSlot(req: Request, res: Response<CancelPracticeSlotResult>): Promise<void> {
   const studentId = requireStudentId(req);
-  const slot = await practiceSlotActionService.cancelSlot(req.params.id, studentId);
+  const slot = await practiceSlotActionService.cancelSlot(req.params.id, studentId, req.body as CancelPracticeSlotInput);
   res.status(200).json(slot);
 }
 

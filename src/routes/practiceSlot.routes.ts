@@ -12,11 +12,15 @@ import {
   claimPracticeSlot,
   confirmPracticeSlot,
   markPracticeSlotAttendance,
+  previewPracticeSlotCancellation,
+  releasedPracticeSlotsForMe,
+  myPendingPracticeSlots,
+  swapPracticeSlot,
 } from '../controllers/practiceSlotAction.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
-import { PRACTICE_SLOT_STATUSES } from '../models/practiceSlot.model';
+import { CANCELLATION_CATEGORIES, PRACTICE_SLOT_STATUSES } from '../models/practiceSlot.model';
 import { asyncHandler } from '../utils/asyncHandler';
 import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
 
@@ -114,6 +118,15 @@ practiceSlotRouter.get(
   validate,
   asyncHandler(listPracticeSlots),
 );
+practiceSlotRouter.get('/released-for-me', requireRole('estudiante'), asyncHandler(releasedPracticeSlotsForMe));
+practiceSlotRouter.get('/my-pending', requireRole('estudiante'), asyncHandler(myPendingPracticeSlots));
+practiceSlotRouter.post(
+  '/:id/swap', requireRole('estudiante'),
+  [idParamValidator, body('practicaASoltarId').optional().isString()
+    .withMessage('practicaASoltarId debe ser un UUID válido').bail().isUUID()
+    .withMessage('practicaASoltarId debe ser un UUID válido')],
+  validate, asyncHandler(swapPracticeSlot),
+);
 practiceSlotRouter.patch(
   '/:id',
   requireRole('admin'),
@@ -148,9 +161,18 @@ practiceSlotRouter.post(
 practiceSlotRouter.post(
   '/:id/cancel',
   requireRole('estudiante'),
-  idParamValidator,
+  [idParamValidator,
+    body('motivoCategoria').isString().bail().isIn(CANCELLATION_CATEGORIES)
+      .withMessage('Indica una categoría de cancelación válida'),
+    body('motivoTexto').isString().bail().trim().isLength({ min: 10 })
+      .withMessage('El motivo debe tener al menos 10 caracteres'),
+  ],
   validate,
   asyncHandler(cancelPracticeSlot),
+);
+practiceSlotRouter.get(
+  '/:id/cancel-preview', requireRole('estudiante'), idParamValidator, validate,
+  asyncHandler(previewPracticeSlotCancellation),
 );
 
 // RF-03 (alcance agregado en Sprint 4, ver docs/adr/007): el instructor
