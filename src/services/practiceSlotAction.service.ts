@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
 import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, ReleasedPracticeSlot, SwapPracticeResult } from '../models/practiceSlot.model';
-import { AppError } from '../utils/AppError';
+import { throwAttendanceError } from '../utils/practiceAttendanceError';
 import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import type { RealtimeService } from './realtime.service';
 import { PracticeSlotNotificationService } from './practiceSlotNotification.service';
@@ -118,39 +118,20 @@ export class PracticeSlotActionService {
     return toPracticeSlot(data);
   }
 
-  // Alcance agregado en Sprint 4 (ver docs/adr/007): el instructor
-  // registra asistencia sobre sus propias franjas, solo una vez que ya
-  // pasaron (status = 'completado' - lo marca el scheduler, próximo
-  // commit). El documento de tesis todavía dice "solo lectura" para el
-  // instructor; esto es un cambio de alcance consciente.
+  // E4: la RPC guarda asistencia, auditoria y aviso juntos bajo lock.
+  // Sin motivo es registro inicial; con motivo es correccion.
   async markAttendance(
     slotId: string,
     instructorId: string,
     attended: boolean,
+    motivo?: string,
   ): Promise<PracticeSlot> {
-    const row = await this.getSlotRowOrThrow(slotId);
-    if (row.instructor_id !== instructorId) {
-      throw new AppError('Franja no encontrada', 404);
-    }
-    if (row.status !== 'completado') {
-      throw new AppError('Solo se puede marcar asistencia sobre una franja completada', 409);
-    }
-
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .update({ attended })
-      .eq('id', slotId)
-      .eq('status', 'completado')
-      .select()
-      .maybeSingle();
-
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new AppError('Solo se puede marcar asistencia sobre una franja completada', 409);
-    }
-
+    const args = { p_slot: slotId, p_actor: instructorId, p_attended: attended };
+    const result = motivo === undefined
+      ? this.supabase.rpc('register_practice_attendance', args)
+      : this.supabase.rpc('correct_practice_attendance', { ...args, p_motivo: motivo });
+    const { data, error } = await result.single();
+    if (error) throwAttendanceError(error);
     return toPracticeSlot(data);
   }
 
@@ -167,20 +148,5 @@ export class PracticeSlotActionService {
     } catch (err) {
       console.error('No se pudo notificar la liberación del cupo:', err);
     }
-  }
-
-  private async getSlotRowOrThrow(id: string): Promise<PracticeSlotRow> {
-    const { data, error } = await this.supabase
-      .from('practice_slots')
-      .select()
-      .eq('id', id)
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new AppError('Franja no encontrada', 404);
-    }
-    return data;
   }
 }

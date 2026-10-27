@@ -63,7 +63,7 @@ export async function markPracticeSlotAttendance(
   if (!req.user) {
     throw new AppError('Authentication required', 401);
   }
-  const { attended } = req.body as SubmitAttendanceInput;
-  const slot = await practiceSlotActionService.markAttendance(req.params.id, req.user.id, attended);
+  const { attended, motivo } = req.body as SubmitAttendanceInput;
+  const slot = await practiceSlotActionService.markAttendance(req.params.id, req.user.id, attended, motivo);
   res.status(200).json(slot);
 }
