@@ -17,6 +17,7 @@ function harness(phase?: Transition, result: ChainResult = { data: slot, error: 
   snapshot: Row = phase === 'complete' ? { ...slot, status: 'confirmado' }
     : phase === 'close' ? { ...slot, status: 'liberado', student_id: null } : slot) {
   const rpc = jest.fn().mockImplementation((name, args) => {
+    if (name === 'claim_notification_email') return createChain({ data: null, error: null });
     if (name === 'practice_slots_scheduler_candidates') {
       return Promise.resolve({ data: args.p_transition === phase ? [{ slot: snapshot, row_version: '123' }] : [], error: null });
     }
@@ -35,14 +36,13 @@ function harness(phase?: Transition, result: ChainResult = { data: slot, error: 
 }
 
 describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
-  it('no envía correo de recordatorio a un alumno inactivo', async () => {
-    const log = jest.spyOn(console, 'error').mockImplementation();
-    try {
-      const h = harness('remind');
-      h.from.mockReturnValue(createChain({ data: { activo: false }, error: null }));
-      await h.service.runOnce();
-      expect(h.email.sendPracticeConfirmationRequestEmail).not.toHaveBeenCalled();
-    } finally { log.mockRestore(); }
+  it('una practica confirmada tambien recibe el evento de recordatorio tras el commit', async () => {
+    const confirmed: Row = { ...slot, status: 'confirmado' };
+    const h = harness('remind', { data: confirmed, error: null }, confirmed);
+    await h.service.runOnce();
+    expect(h.realtime.broadcast).toHaveBeenCalledWith('user-student-1-practice-slots',
+      'confirmation-requested', { scheduledAt: slot.scheduled_at });
+    expect(h.rpc).toHaveBeenCalledWith('claim_notification_email');
   });
   it('consulta las tres fases en PostgreSQL sin escribir ni notificar si no hay candidatos', async () => {
     const { service, rpc, from, email, realtime } = harness();
@@ -51,6 +51,7 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
       ['practice_slots_scheduler_candidates', { p_transition: 'remind' }],
       ['practice_slots_scheduler_candidates', { p_transition: 'close' }],
       ['practice_slots_scheduler_candidates', { p_transition: 'complete' }],
+      ['claim_notification_email'],
     ]);
     expect(from).not.toHaveBeenCalled();
     expect(email.sendNoPracticeEmail).not.toHaveBeenCalled();
@@ -84,9 +85,8 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
     expect(h.realtime.broadcast).not.toHaveBeenCalled();
     completeWrite({ data: { ...slot, confirmation_notified_at: '2026-03-01T09:40:00Z' }, error: null });
     await running;
-    expect(h.email.sendPracticeConfirmationRequestEmail).toHaveBeenCalledWith({
-      to: 'fixture@example.invalid', nombreCompleto: 'Usuario de prueba', scheduledAt: slot.scheduled_at,
-    });
+    expect(h.email.sendPracticeConfirmationRequestEmail).not.toHaveBeenCalled();
+    expect(h.rpc).toHaveBeenCalledWith('claim_notification_email');
     expect(h.realtime.broadcast).toHaveBeenCalledWith('user-student-1-practice-slots',
       'confirmation-requested', { scheduledAt: slot.scheduled_at });
   });
@@ -110,7 +110,7 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
     const snapshot: Row = { ...slot, status, student_id: null };
     const h = harness('close', { data: { ...snapshot, status: 'sin_practica' }, error: null }, snapshot);
     await h.service.runOnce();
-    expect(h.email.sendNoPracticeEmail).toHaveBeenCalledTimes(1);
+    expect(h.email.sendNoPracticeEmail).not.toHaveBeenCalled();
     expect(h.realtime.broadcast.mock.calls).toEqual([
       ['user-instructor-1-practice-slots', 'no-practice', { scheduledAt: slot.scheduled_at }],
     ]);
@@ -130,15 +130,17 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
     h.rpc.mockResolvedValueOnce({ data: null, error });
     await expect(h.service.runOnce()).rejects.toEqual(error);
     expect(h.realtime.broadcast).not.toHaveBeenCalled();
+    expect(h.rpc).toHaveBeenCalledWith('claim_notification_email');
   });
 
-  it('el correo fallido sigue siendo best-effort y permite el broadcast tras el commit', async () => {
+  it('una falla de la cola no borra el broadcast de una transicion confirmada', async () => {
     const h = harness('remind');
-    h.email.sendPracticeConfirmationRequestEmail.mockRejectedValueOnce(new Error('fallo simulado'));
-    const logger = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    try {
-      await h.service.runOnce();
-      expect(h.realtime.broadcast).toHaveBeenCalledTimes(1);
-    } finally { logger.mockRestore(); }
+    const original = h.rpc.getMockImplementation();
+    if (!original) throw new Error('Falta mock');
+    const error = new Error('Cola no disponible');
+    h.rpc.mockImplementation((name, args): unknown => name === 'claim_notification_email'
+      ? createChain({ data: null, error }) : original(name, args));
+    await expect(h.service.runOnce()).rejects.toEqual(error);
+    expect(h.realtime.broadcast).toHaveBeenCalledTimes(1);
   });
 });

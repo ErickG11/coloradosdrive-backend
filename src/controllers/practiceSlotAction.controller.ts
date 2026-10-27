@@ -1,9 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { supabaseAdmin } from '../config/supabase';
-import { mailer } from '../config/mailer';
 import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, SubmitAttendanceInput, ReleasedPracticeSlot, SwapPracticeResult } from '../models/practiceSlot.model';
-import { EmailService } from '../services/email.service';
 import { PracticeSlotActionService } from '../services/practiceSlotAction.service';
 import { RealtimeService } from '../services/realtime.service';
 import { AppError } from '../utils/AppError';
@@ -11,7 +9,6 @@ import { AppError } from '../utils/AppError';
 const practiceSlotActionService = new PracticeSlotActionService(
   supabaseAdmin,
   new RealtimeService(supabaseAdmin),
-  new EmailService(mailer),
 );
 
 function requireStudentId(req: Request): string {

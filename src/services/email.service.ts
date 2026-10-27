@@ -1,6 +1,7 @@
 import type { Transporter } from 'nodemailer';
 
 import { env } from '../config/env';
+import { formatEcuadorDateTime } from '../utils/formatEcuadorDateTime';
 
 export interface WelcomeEmailParams {
   to: string;
@@ -35,12 +36,14 @@ export interface PracticeConfirmationRequestEmailParams {
   to: string;
   nombreCompleto: string;
   scheduledAt: string;
+  messageId?: string;
 }
 
 export interface NoPracticeEmailParams {
   to: string;
   nombreCompleto: string;
   scheduledAt: string;
+  messageId?: string;
 }
 
 export interface VerificationCodeEmailParams {
@@ -55,13 +58,6 @@ function escapeHtml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function formatScheduledAt(scheduledAt: string): string {
-  return new Date(scheduledAt).toLocaleString('es-EC', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
 }
 
 // Recibe el transporter por constructor (no usa el singleton de
@@ -108,7 +104,7 @@ export class EmailService {
     const credentials = p.temporaryPassword
       ? `Contraseña temporal: ${p.temporaryPassword}\nDeberás cambiarla al ingresar por primera vez.`
       : 'Usa tus credenciales actuales. Esta matrícula no cambia tu contraseña.';
-    const summary = `Tipo ${p.courseType} · ${p.cohortName ?? 'Pendiente de cohorte'}\nEstado: ${p.status}\nPlan: ${String(p.days)} días, ${String(p.blocks)} bloques de 60 minutos (${p.start} a ${p.end}).`;
+    const summary = `Tipo ${p.courseType} · ${p.cohortName ?? 'Pendiente de cohorte'}\nEstado: ${p.status}\nPlan: ${String(p.days)} días, ${String(p.blocks)} bloques de 60 minutos (${formatEcuadorDateTime(p.start)} a ${formatEcuadorDateTime(p.end)}).`;
     const pending =
       p.status === 'pendiente_cohorte'
         ? 'El plan se conservó; aún no se generaron franjas. La asignación posterior de cohorte queda pendiente.'
@@ -198,25 +194,26 @@ export class EmailService {
     params: PracticeConfirmationRequestEmailParams,
   ): Promise<void> {
     const { to, nombreCompleto, scheduledAt } = params;
-    const fecha = formatScheduledAt(scheduledAt);
+    const fecha = formatEcuadorDateTime(scheduledAt);
 
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to,
       subject: 'Recordatorio de tu práctica de conducción',
+      messageId: params.messageId,
       text: [
         `Hola ${nombreCompleto},`,
         '',
-        `Tu práctica de conducción es a las ${fecha}, en 20 minutos.`,
+        `Tu práctica de conducción comienza el ${fecha}.`,
         'Puedes confirmar tu asistencia en la plataforma. Si no respondes, tu práctica se mantiene programada.',
         '',
-        'Si no puedes asistir, cancela desde la plataforma para liberar el cupo y que otro estudiante de tu cohorte pueda tomarlo.',
+        'Si no puedes asistir, usa «No podré asistir» en la plataforma para liberar el cupo para tu cohorte.',
       ].join('\n'),
       html: [
-        `<p>Hola ${nombreCompleto},</p>`,
-        `<p>Tu práctica de conducción es a las <strong>${fecha}</strong>, en 20 minutos.</p>`,
+        `<p>Hola ${escapeHtml(nombreCompleto)},</p>`,
+        `<p>Tu práctica de conducción comienza el <strong>${escapeHtml(fecha)}</strong>.</p>`,
         '<p>Puedes confirmar tu asistencia en la plataforma. Si no respondes, tu práctica se mantiene programada.</p>',
-        '<p>Si no puedes asistir, cancela desde la plataforma para liberar el cupo y que otro estudiante de tu cohorte pueda tomarlo.</p>',
+        '<p>Si no puedes asistir, usa «No podré asistir» en la plataforma para liberar el cupo para tu cohorte.</p>',
       ].join('\n'),
     });
   }
@@ -224,21 +221,22 @@ export class EmailService {
   // RF-03: aviso al instructor por un cupo cancelado que queda vacío a T-5.
   async sendNoPracticeEmail(params: NoPracticeEmailParams): Promise<void> {
     const { to, nombreCompleto, scheduledAt } = params;
-    const fecha = formatScheduledAt(scheduledAt);
+    const fecha = formatEcuadorDateTime(scheduledAt);
 
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to,
       subject: 'No habrá práctica en tu próximo bloque',
+      messageId: params.messageId,
       text: [
         `Hola ${nombreCompleto},`,
         '',
-        `El cupo de la práctica programada a las ${fecha} quedó vacío tras una cancelación.`,
+        `El cupo de la práctica programada el ${fecha} quedó vacío tras un aviso de inasistencia.`,
         'Ese bloque queda sin práctica.',
       ].join('\n'),
       html: [
-        `<p>Hola ${nombreCompleto},</p>`,
-        `<p>El cupo de la práctica programada a las <strong>${fecha}</strong> quedó vacío tras una cancelación.</p>`,
+        `<p>Hola ${escapeHtml(nombreCompleto)},</p>`,
+        `<p>El cupo de la práctica programada el <strong>${escapeHtml(fecha)}</strong> quedó vacío tras un aviso de inasistencia.</p>`,
         '<p>Ese bloque queda sin práctica.</p>',
       ].join('\n'),
     });
