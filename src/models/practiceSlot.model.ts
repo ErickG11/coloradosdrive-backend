@@ -80,6 +80,7 @@ export type UpdatePracticeSlotInput = Partial<{
 
 export interface SubmitAttendanceInput {
   attended: boolean;
+  motivo?: string;
 }
 
 export const CANCELLATION_CATEGORIES = ['salud', 'trabajo', 'estudios', 'familiar', 'transporte', 'otro'] as const;

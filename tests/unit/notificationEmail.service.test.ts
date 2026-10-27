@@ -6,6 +6,7 @@ import { NotificationEmailService } from '../../src/services/notificationEmail.s
 import { createChain } from '../helpers/supabaseMock';
 
 const notification: NotificationRow = {
+  attendance_event_id: null,
   id: 'notification', user_id: 'student', tipo: 'recordatorio_practica', titulo: 'Recordatorio', mensaje: 'Tu práctica',
   practice_slot_id: 'slot', scheduled_at: '2099-10-27T20:00:00Z', created_at: '', read_at: null,
   email_status: 'pendiente', email_attempts: 1, email_last_error: null, email_next_attempt_at: '',

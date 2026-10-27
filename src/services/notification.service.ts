@@ -7,6 +7,7 @@ import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 function toNotification(row: NotificationRow): Notification {
   return {
     id: row.id, tipo: row.tipo, titulo: row.titulo, mensaje: row.mensaje,
+    attendanceEventId: row.attendance_event_id ?? null,
     practiceSlotId: row.practice_slot_id, scheduledAt: row.scheduled_at,
     createdAt: row.created_at, readAt: row.read_at,
     emailStatus: row.email_status, emailAttempts: row.email_attempts,

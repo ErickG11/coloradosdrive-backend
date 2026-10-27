@@ -24,6 +24,7 @@
     "test:practice-swap-db": "node tests/database/practiceSwap.mjs",
     "test:practice-own-slot-db": "node tests/database/practiceOwnSlot.mjs",
     "test:notifications-db": "node tests/database/notifications.mjs",
+    "test:practice-attendance-db": "node tests/database/practiceAttendance.mjs",
     "test:student-cohort-db": "node tests/database/studentCohort.mjs",
     "test:cohort-validations-db": "node tests/database/cohortValidations.mjs",
     "test:cohort-concurrency-db": "node tests/database/cohortConcurrency.mjs",

@@ -11,6 +11,7 @@
 
 import type { StudentListResult } from '../models/studentAdmin.model';
 import type { NotificationRow } from '../models/notification.model';
+import type { AttendanceEventRow, PracticeHistoryResult } from '../models/practiceAttendance.model';
 import type { CancellationCategory, CancellationOutcome, CancellationPreview, PracticeCancellationRpcResult, ReleasedPracticeSlot, PendingPracticeRpcSlot, SwapPracticeRpcResult } from '../models/practiceSlot.model';
 import type { PracticeRecovery } from '../services/studentAccess.service';
 import type { StudentDeletionOperation } from '../services/studentDeletion.service';
@@ -54,6 +55,22 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      register_practice_attendance: {
+        Args: { p_slot: string; p_actor: string; p_attended: boolean };
+        Returns: Database['public']['Tables']['practice_slots']['Row'][];
+      };
+      correct_practice_attendance: {
+        Args: { p_slot: string; p_actor: string; p_attended: boolean; p_motivo: string };
+        Returns: Database['public']['Tables']['practice_slots']['Row'][];
+      };
+      list_practice_attendance_events: {
+        Args: { p_actor: string; p_slot: string; p_page: number; p_page_size: number };
+        Returns: { items: AttendanceEventRow[]; total: number };
+      };
+      student_practice_history: {
+        Args: { p_student: string; p_enrollment: string; p_page: number; p_page_size: number };
+        Returns: PracticeHistoryResult;
+      };
       list_user_notifications: {
         Args: { p_user: string; p_page: number; p_page_size: number };
         Returns: { items: NotificationRow[]; total: number; unreadCount: number };
@@ -221,6 +238,12 @@ export interface Database {
       };
     };
     Tables: {
+      practice_attendance_events: {
+        Row: AttendanceEventRow & { transaction_id: number };
+        Insert: Omit<AttendanceEventRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Update: never;
+        Relationships: [];
+      };
       notifications: {
         Row: NotificationRow;
         Insert: Pick<NotificationRow, 'user_id' | 'tipo' | 'titulo' | 'mensaje'> & Partial<NotificationRow>;

@@ -19,7 +19,9 @@ import {
 } from '../controllers/practiceSlotAction.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
-import { validate } from '../middlewares/validate';
+import { validate, validateFields } from '../middlewares/validate';
+import { attendanceEvents } from '../controllers/practiceAttendance.controller';
+import { attendancePagination, attendanceReason, attendanceValue } from './practiceAttendance.validators';
 import { CANCELLATION_CATEGORIES, PRACTICE_SLOT_STATUSES } from '../models/practiceSlot.model';
 import { asyncHandler } from '../utils/asyncHandler';
 import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
@@ -180,7 +182,12 @@ practiceSlotRouter.get(
 practiceSlotRouter.patch(
   '/:id/attendance',
   requireRole('instructor'),
-  [idParamValidator, body('attended').isBoolean().withMessage('attended debe ser boolean')],
-  validate,
+  [idParamValidator, attendanceValue(), attendanceReason(false)],
+  validateFields,
   asyncHandler(markPracticeSlotAttendance),
 );
+practiceSlotRouter.patch('/:id/attendance/correction', requireRole('admin'),
+  [idParamValidator, attendanceValue(), attendanceReason(true)], validateFields,
+  asyncHandler(markPracticeSlotAttendance));
+practiceSlotRouter.get('/:id/attendance/events', requireRole('admin'),
+  [idParamValidator, ...attendancePagination()], validateFields, asyncHandler(attendanceEvents));

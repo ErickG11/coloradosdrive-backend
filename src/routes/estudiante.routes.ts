@@ -1,17 +1,25 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
+import { body, query } from 'express-validator';
+import { studentPracticeEnrollments, studentPracticeHistory } from '../controllers/practiceAttendance.controller';
+import { attendancePagination } from './practiceAttendance.validators';
 
 import { changePassword } from '../controllers/estudiante.controller';
 import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
-import { validate } from '../middlewares/validate';
+import { validate, validateFields } from '../middlewares/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 
 export const estudianteRouter = Router();
 
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
+estudianteRouter.get('/practice-history/enrollments', asyncHandler(studentPracticeEnrollments));
+estudianteRouter.get('/practice-history', [
+  query('enrollmentId').isString().withMessage('Selecciona una matrícula válida').bail()
+    .isUUID().withMessage('Selecciona una matrícula válida'),
+  ...attendancePagination(),
+], validateFields, asyncHandler(studentPracticeHistory));
 
 // Consulta mínima del propio sujeto; sigue requiriendo JWT y rol estudiante.
 estudianteRouter.get(

@@ -15,6 +15,7 @@ const from = supabaseAdmin.from as jest.Mock;
 const verify = verifySupabaseJwt as jest.Mock;
 const id = '11111111-1111-4111-8111-111111111111';
 const row: NotificationRow = {
+  attendance_event_id: null,
   id, user_id: 'test-user-id', tipo: 'recordatorio_practica', titulo: 'Tu práctica', mensaje: 'Confirmar es opcional',
   practice_slot_id: 'slot', scheduled_at: '2026-10-27T20:00:00Z', created_at: '2026-10-27T19:40:00Z', read_at: null,
   email_status: 'pendiente', email_attempts: 1, email_last_error: 'detalle interno',
@@ -44,6 +45,13 @@ describe('API de notificaciones del propietario', () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('INVALID_FIELD');
     expect(rpc).not.toHaveBeenCalled();
+  });
+  it('expone la correccion como aviso solo de bandeja vinculado a su evento', async () => {
+    rpc.mockResolvedValue({ data: { items: [{ ...row, tipo: 'asistencia_corregida',
+      attendance_event_id: id, email_status: null, email_attempts: 0 }], total: 1, unreadCount: 1 }, error: null });
+    const res = await request(app).get('/notifications').set('Authorization', auth());
+    expect(res.status).toBe(200);
+    expect(res.body.items[0]).toMatchObject({ tipo: 'asistencia_corregida', attendanceEventId: id, emailStatus: null });
   });
   it('marcar un aviso ajeno o inexistente devuelve 404 y no acepta otro actor en el body', async () => {
     rpc.mockReturnValue(createChain({ data: null, error: null }));
