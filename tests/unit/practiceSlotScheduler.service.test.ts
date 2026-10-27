@@ -14,7 +14,8 @@ const slot: Row = {
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
 };
 function harness(phase?: Transition, result: ChainResult = { data: slot, error: null },
-  snapshot: Row = phase === 'complete' ? { ...slot, status: 'confirmado' } : slot) {
+  snapshot: Row = phase === 'complete' ? { ...slot, status: 'confirmado' }
+    : phase === 'close' ? { ...slot, status: 'liberado', student_id: null } : slot) {
   const rpc = jest.fn().mockImplementation((name, args) => {
     if (name === 'practice_slots_scheduler_candidates') {
       return Promise.resolve({ data: args.p_transition === phase ? [{ slot: snapshot, row_version: '123' }] : [], error: null });
@@ -90,14 +91,12 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
       'confirmation-requested', { scheduledAt: slot.scheduled_at });
   });
 
-  it('cerrar una asignada avisa al estudiante de la versión aceptada y al instructor', async () => {
-    const h = harness('close', { data: { ...slot, status: 'sin_practica', student_id: null }, error: null });
+  it.each(['asignado', 'confirmado', 'disponible'] as const)('no cierra %s ni avisa por falta de respuesta', async (status) => {
+    const h = harness('close', { data: slot, error: null }, { ...slot, status });
     await h.service.runOnce();
-    expect(h.email.sendNoPracticeEmail).toHaveBeenCalledTimes(1);
-    expect(h.realtime.broadcast.mock.calls).toEqual([
-      ['user-student-1-practice-slots', 'no-practice', { scheduledAt: slot.scheduled_at }],
-      ['user-instructor-1-practice-slots', 'no-practice', { scheduledAt: slot.scheduled_at }],
-    ]);
+    expect(h.rpc).not.toHaveBeenCalledWith('transition_practice_slot_for_scheduler', expect.anything());
+    expect(h.email.sendNoPracticeEmail).not.toHaveBeenCalled();
+    expect(h.realtime.broadcast).not.toHaveBeenCalled();
   });
 
   it('completar una confirmada no emite notificaciones', async () => {
@@ -107,7 +106,7 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
     expect(h.realtime.broadcast).not.toHaveBeenCalled();
   });
 
-  it.each(['disponible', 'liberado'] as const)('cerrar %s solo avisa al instructor', async (status) => {
+  it.each(['liberado'] as const)('cerrar %s solo avisa al instructor', async (status) => {
     const snapshot: Row = { ...slot, status, student_id: null };
     const h = harness('close', { data: { ...snapshot, status: 'sin_practica' }, error: null }, snapshot);
     await h.service.runOnce();

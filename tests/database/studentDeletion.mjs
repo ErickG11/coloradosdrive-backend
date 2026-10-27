@@ -38,7 +38,7 @@ try {
     create schema realtime;create table realtime.messages(id bigint,extension text);
     create function realtime.topic() returns text language sql stable as $$select current_setting('realtime.topic',true)$$;`);
   const names = (await readdir(new URL('../../migrations/', import.meta.url)))
-    .filter((n) => /^\d{3}_.*\.sql$/.test(n) && !['003', '023', '026'].includes(n.slice(0, 3)))
+    .filter((n) => /^\d{3}_.*\.sql$/.test(n) && n.slice(0, 3) < '030' && !['003', '023', '026'].includes(n.slice(0, 3)))
     .sort();
   for (const name of names)
     await db.exec(
@@ -57,6 +57,8 @@ try {
     'grant usage on schema public to service_role,anon,authenticated;grant usage on schema auth to service_role;grant select on auth.users to service_role;grant select,insert,update,delete on all tables in schema public to service_role;',
   );
   await db.exec(sql);
+  await db.exec(await file('../../migrations/030_asistencia_cancelacion.sql'));
+  await db.exec(await file('../../migrations/031_asistencia_cambio_cupo.sql'));
   for (const [n, rol] of [
     [1, 'admin'],
     [2, 'estudiante'],
@@ -88,6 +90,7 @@ try {
       'insert into practice_slots(id,cohort_id,instructor_id,student_id,scheduled_at,status,attended) values($1,$2,$3,$4,$5,$6,$7)',
       [id(n), id(20), id(4), id(student), start, status, status === 'completado' ? true : null],
     );
+  await db.query("insert into practice_slot_cancellations(slot_id,enrollment_id,student_id,instructor_id,cohort_id,slot_starts_at,cancelled_at,motivo_categoria,motivo_texto,resultado,consumio_reprogramacion,reprogramacion_numero,origen,repuesto_por_slot_id,repuesto_en) select $1,id,student_id,$2,cohort_id,'2020-01-01T10:00:00Z','2019-12-31T10:00:00Z','otro','Cambio por cupo de prueba','reprogramable',true,1,'cambio_cupo',$4,'2019-12-31T10:00:00Z' from enrollments where student_id=$3", [id(90), id(4), id(2), id(91)]);
   await slot(30, 2, '2020-01-01T10:00:00Z', 'completado');
   await slot(31, 2, '2099-01-01T10:00:00Z', 'confirmado');
   await slot(32, 3, '2099-01-01T11:00:00Z', 'asignado');
@@ -190,6 +193,9 @@ try {
   await db.exec('set role service_role');
   await assert.rejects(dataDelete(op, ['fixture/new']), /foreign key/);
   assert.equal((await one('select count(*)::int as n from attempt_answers')).n, 1);
+  assert.equal((await one('select count(*)::int as n from practice_slot_cancellations')).n, 1);
+  assert.equal((await one("select origen from practice_slot_cancellations where student_id=$1", [id(2)])).origen, 'cambio_cupo');
+  assert.equal((await one("select repuesto_por_slot_id as id from practice_slot_cancellations where student_id=$1", [id(2)])).id, id(91));
   assert.equal(
     (await one('select phase from student_deletion_operations where student_id=$1', [id(2)])).phase,
     'storage',
@@ -210,6 +216,7 @@ try {
     'exam_attempts',
     'manual_enrollment_operations',
     'student_practice_recovery',
+    'practice_slot_cancellations',
   ]) {
     const key = table === 'users' ? 'id' : 'student_id';
     assert.equal(

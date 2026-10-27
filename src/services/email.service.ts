@@ -191,8 +191,8 @@ export class EmailService {
     });
   }
 
-  // RF-03: notificación 20 minutos antes de la práctica, pidiendo
-  // confirmación de asistencia. Se envía junto con la notificación en
+  // RF-03: recordatorio 20 minutos antes de la práctica, con
+  // confirmación opcional. Se envía junto con la notificación en
   // plataforma (Realtime) - ver practiceSlotScheduler.service.ts.
   async sendPracticeConfirmationRequestEmail(
     params: PracticeConfirmationRequestEmailParams,
@@ -203,26 +203,25 @@ export class EmailService {
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to,
-      subject: 'Confirma tu práctica de conducción',
+      subject: 'Recordatorio de tu práctica de conducción',
       text: [
         `Hola ${nombreCompleto},`,
         '',
         `Tu práctica de conducción es a las ${fecha}, en 20 minutos.`,
-        'Confirma tu asistencia en la plataforma antes de que cierre la ventana de confirmación (5 minutos antes de la práctica).',
+        'Puedes confirmar tu asistencia en la plataforma. Si no respondes, tu práctica se mantiene programada.',
         '',
         'Si no puedes asistir, cancela desde la plataforma para liberar el cupo y que otro estudiante de tu cohorte pueda tomarlo.',
       ].join('\n'),
       html: [
         `<p>Hola ${nombreCompleto},</p>`,
         `<p>Tu práctica de conducción es a las <strong>${fecha}</strong>, en 20 minutos.</p>`,
-        '<p>Confirma tu asistencia en la plataforma antes de que cierre la ventana de confirmación (5 minutos antes de la práctica).</p>',
+        '<p>Puedes confirmar tu asistencia en la plataforma. Si no respondes, tu práctica se mantiene programada.</p>',
         '<p>Si no puedes asistir, cancela desde la plataforma para liberar el cupo y que otro estudiante de tu cohorte pueda tomarlo.</p>',
       ].join('\n'),
     });
   }
 
-  // RF-03: se envía al instructor únicamente si ningún estudiante
-  // confirmó asistencia en la ventana definida (ver practiceSlot.service.ts).
+  // RF-03: aviso al instructor por un cupo cancelado que queda vacío a T-5.
   async sendNoPracticeEmail(params: NoPracticeEmailParams): Promise<void> {
     const { to, nombreCompleto, scheduledAt } = params;
     const fecha = formatScheduledAt(scheduledAt);
@@ -234,12 +233,12 @@ export class EmailService {
       text: [
         `Hola ${nombreCompleto},`,
         '',
-        `Ningún estudiante confirmó asistencia para la práctica programada a las ${fecha}.`,
+        `El cupo de la práctica programada a las ${fecha} quedó vacío tras una cancelación.`,
         'Ese bloque queda sin práctica.',
       ].join('\n'),
       html: [
         `<p>Hola ${nombreCompleto},</p>`,
-        `<p>Ningún estudiante confirmó asistencia para la práctica programada a las <strong>${fecha}</strong>.</p>`,
+        `<p>El cupo de la práctica programada a las <strong>${fecha}</strong> quedó vacío tras una cancelación.</p>`,
         '<p>Ese bloque queda sin práctica.</p>',
       ].join('\n'),
     });

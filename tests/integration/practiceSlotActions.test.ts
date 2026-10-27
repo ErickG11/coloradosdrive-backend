@@ -32,6 +32,14 @@ const instructorId = '22222222-2222-4222-8222-222222222222';
 const slotId = '33333333-3333-4333-8333-333333333333';
 // mockAuthToken siempre resuelve sub: 'test-user-id'.
 const studentId = 'test-user-id';
+const reason = { motivoCategoria: 'salud', motivoTexto: 'Tengo una consulta medica' };
+function cancellationResult(overrides: Record<string, unknown> = {}) {
+  return { slot: buildSlotRow({ status: 'liberado' }), cancellationId: 'cancellation-1',
+    enrollmentId: 'enrollment-1', studentId, instructorId, cohortId,
+    cancelledAt: '2026-03-01T09:00:00Z', resultado: 'reprogramable',
+    consumioReprogramacion: true, reprogramacionNumero: 1, reprogramacionesRestantes: 1,
+    difundirCohorte: true, ...overrides };
+}
 
 function buildSlotRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -97,29 +105,34 @@ describe('practice-slots student actions', () => {
   ])('%s traduce %s a HTTP %s', async (action, code, status, message) => {
     mockedRpc.mockReturnValue(createChain({ data: null, error: { code, message } }));
     const res = await request(app).post(`/practice-slots/${slotId}/${action}`)
-      .set('Authorization', authenticateStudent());
+      .set('Authorization', authenticateStudent()).send(action === 'cancel' ? reason : {});
     expect(res.status).toBe(status);
     expect(res.body.message).toBe(message);
     expect(mockedChannel).not.toHaveBeenCalled();
   });
 
   it.each(['claim', 'confirm'] as const)('%s usa el actor del JWT y devuelve el DTO vigente', async (action) => {
+    mockHttpSendSuccess();
+    const row = buildSlotRow({ student_id: studentId, status: action === 'claim' ? 'asignado' : 'confirmado' });
     mockedRpc.mockReturnValue(createChain({
-      data: buildSlotRow({ student_id: studentId, status: action === 'claim' ? 'asignado' : 'confirmado' }),
+      data: action === 'claim' ? { slot: row, caso: 'A', practicaSoltadaId: null,
+        cancellationId: 'c1', enrollmentId: 'e1', reprogramacionesRestantes: 1 } : row,
       error: null,
     }));
     const res = await request(app).post(`/practice-slots/${slotId}/${action}`)
       .set('Authorization', authenticateStudent()).send({ studentId: 'otro-actor', now: 'ayer' });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ id: slotId, studentId, durationMinutes: 60 });
-    expect(mockedRpc).toHaveBeenCalledWith('act_on_practice_slot', {
-      p_slot_id: slotId, p_student_id: studentId, p_action: action,
-    });
+    expect(mockedRpc).toHaveBeenCalledWith(action === 'claim' ? 'swap_practice_slot' : 'act_on_practice_slot',
+      action === 'claim' ? { p_slot_id: slotId, p_student_id: studentId, p_source_slot_id: null }
+        : { p_slot_id: slotId, p_student_id: studentId, p_action: action });
   });
 
   it('simula dos respuestas de reclamación concurrentes: HTTP 200 y 409 (no demuestra locks SQL)', async () => {
+    mockHttpSendSuccess();
     mockedRpc.mockReturnValueOnce(createChain({
-      data: buildSlotRow({ student_id: studentId, status: 'asignado' }), error: null,
+      data: { slot: buildSlotRow({ student_id: studentId, status: 'asignado' }), caso: 'A',
+        practicaSoltadaId: null, cancellationId: 'c1', enrollmentId: 'e1', reprogramacionesRestantes: 1 }, error: null,
     })).mockReturnValueOnce(createChain({
       data: null, error: { code: 'CD409', message: 'Esta franja ya no está disponible' },
     }));
@@ -132,20 +145,86 @@ describe('practice-slots student actions', () => {
 
   it('cancelar devuelve la franja liberada y notifica tras confirmar la escritura', async () => {
     mockedRpc.mockReturnValue(createChain({
-      data: buildSlotRow({ status: 'liberado', release_notified_at: '2026-03-01T09:00:00Z' }),
+      data: cancellationResult(),
       error: null,
     }));
     const httpSend = mockHttpSendSuccess();
     const res = await request(app).post(`/practice-slots/${slotId}/cancel`)
-      .set('Authorization', authenticateStudent());
+      .set('Authorization', authenticateStudent()).send(reason);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'liberado', studentId: null, confirmedAt: null, confirmationNotifiedAt: null });
     expect(httpSend).toHaveBeenCalledWith('slot-released', {});
+    expect(mockedRpc).toHaveBeenCalledWith('cancel_practice_slot_with_reason', {
+      p_slot_id: slotId, p_student_id: studentId,
+      p_motivo_categoria: reason.motivoCategoria, p_motivo_texto: reason.motivoTexto,
+    });
+    expect(res.body.cancelacion).toMatchObject({ resultado: 'reprogramable', reprogramacionesRestantes: 1 });
   });
 
+  it.each([
+    {}, { motivoCategoria: 'inexistente', motivoTexto: 'Motivo suficientemente largo' },
+    { motivoCategoria: 'salud', motivoTexto: '         corto    ' },
+    { motivoCategoria: 'salud', motivoTexto: 1234567890 },
+    { motivoCategoria: ['salud'], motivoTexto: 'Motivo suficientemente largo' },
+  ])('rechaza cancelación sin motivo válido antes de escribir: %j', async (body) => {
+    const res = await request(app).post(`/practice-slots/${slotId}/cancel`)
+      .set('Authorization', authenticateStudent()).send(body);
+    expect(res.status).toBe(400);
+    expect(mockedRpc).not.toHaveBeenCalled();
+    expect(mockedChannel).not.toHaveBeenCalled();
+  });
+
+  it('recorta el motivo y usa exclusivamente el alumno del JWT', async () => {
+    mockedRpc.mockResolvedValue({ data: cancellationResult(), error: null });
+    mockHttpSendSuccess();
+    const res = await request(app).post(`/practice-slots/${slotId}/cancel`)
+      .set('Authorization', authenticateStudent())
+      .send({ ...reason, motivoTexto: `  ${reason.motivoTexto}  `, studentId: 'otro', now: 'ayer' });
+    expect(res.status).toBe(200);
+    expect(mockedRpc).toHaveBeenCalledWith('cancel_practice_slot_with_reason', {
+      p_slot_id: slotId, p_student_id: studentId,
+      p_motivo_categoria: reason.motivoCategoria, p_motivo_texto: reason.motivoTexto,
+    });
+  });
+
+  it.each(['reprogramable', 'hora_perdida', 'falta'])('devuelve la vista previa %s sin notificaciones', async (outcome) => {
+    const preview = { reprogramacionesRestantes: outcome === 'falta' ? 0 : 1,
+      hayFranjasLibres: outcome !== 'hora_perdida', resultadoSiCancela: outcome };
+    mockedRpc.mockResolvedValue({ data: preview, error: null });
+    const res = await request(app).get(`/practice-slots/${slotId}/cancel-preview`)
+      .set('Authorization', authenticateStudent());
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(preview);
+    expect(mockedRpc).toHaveBeenCalledTimes(1);
+    expect(mockedRpc).toHaveBeenCalledWith('preview_practice_slot_cancellation', {
+      p_slot_id: slotId, p_student_id: studentId,
+    });
+    expect(mockedChannel).not.toHaveBeenCalled();
+  });
+
+  it.each(['admin', 'instructor'] as const)('vista previa rechaza rol %s', async (role) => {
+    mockedFrom.mockReturnValue(createChain({ data: { activo: true }, error: null }));
+    const res = await request(app).get(`/practice-slots/${slotId}/cancel-preview`)
+      .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, role)}`);
+    expect(res.status).toBe(403);
+    expect(mockedRpc).not.toHaveBeenCalled();
+  });
+
+  it.each([['CD404', 404], ['CD403', 403], ['CD409', 409], ['55P03', 409]])(
+    'vista previa traduce %s sin efectos', async (code, status) => {
+      mockedRpc.mockResolvedValue({ data: null, error: { code, message: 'No disponible' } });
+      const res = await request(app).get(`/practice-slots/${slotId}/cancel-preview`)
+        .set('Authorization', authenticateStudent());
+      expect(res.status).toBe(status);
+      expect(mockedChannel).not.toHaveBeenCalled();
+    },
+  );
+
   it('una franja reclamada de nuevo no hereda el ciclo anterior devuelto por PostgreSQL', async () => {
+    mockHttpSendSuccess();
     mockedRpc.mockReturnValue(createChain({
-      data: buildSlotRow({ status: 'asignado', student_id: studentId }), error: null,
+      data: { slot: buildSlotRow({ status: 'asignado', student_id: studentId }), caso: 'A',
+        practicaSoltadaId: null, cancellationId: 'c1', enrollmentId: 'e1', reprogramacionesRestantes: 1 }, error: null,
     }));
     const res = await request(app).post(`/practice-slots/${slotId}/claim`)
       .set('Authorization', authenticateStudent());
@@ -154,12 +233,12 @@ describe('practice-slots student actions', () => {
   });
 
   it('si Realtime falla, la cancelación confirmada sigue respondiendo 200', async () => {
-    mockedRpc.mockReturnValue(createChain({ data: buildSlotRow({ status: 'liberado' }), error: null }));
+    mockedRpc.mockReturnValue(createChain({ data: cancellationResult(), error: null }));
     mockedChannel.mockReturnValue({ httpSend: jest.fn().mockRejectedValue(new Error('fallo simulado')) });
     const logger = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       const res = await request(app).post(`/practice-slots/${slotId}/cancel`)
-        .set('Authorization', authenticateStudent());
+        .set('Authorization', authenticateStudent()).send(reason);
       expect(res.status).toBe(200);
     } finally { logger.mockRestore(); }
   });
