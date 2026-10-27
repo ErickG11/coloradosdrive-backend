@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import type { PracticeCancellationRpcResult } from '../../src/models/practiceSlot.model';
-import type { EmailService } from '../../src/services/email.service';
 import { PracticeSlotActionService } from '../../src/services/practiceSlotAction.service';
 import type { RealtimeService } from '../../src/services/realtime.service';
 import { createChain } from '../helpers/supabaseMock';
@@ -25,18 +24,16 @@ function harness() {
   const realtime = { broadcast: jest.fn().mockResolvedValue(undefined) };
   return { rpc, from, email, realtime, service: new PracticeSlotActionService(
     { rpc, from, auth: { admin: { getUserById } } } as unknown as SupabaseClient<Database>,
-    realtime as unknown as RealtimeService, email as unknown as EmailService,
+    realtime as unknown as RealtimeService,
   ) };
 }
 describe('cancelación: efectos posteriores al commit', () => {
-  it('a T-5 o después solo avisa al instructor por correo y plataforma', async () => {
+  it('a T-5 o después invalida la plataforma; el correo persistido lo procesa el scheduler', async () => {
     const h = harness();
     const response = await h.service.cancelSlot('slot', 'student', reason);
     expect(response.status).toBe('sin_practica');
     expect(response.cancelacion.resultado).toBe('falta');
-    expect(h.email.sendNoPracticeEmail).toHaveBeenCalledWith({
-      to: 'fixture@example.invalid', nombreCompleto: 'Instructor', scheduledAt: result.slot.scheduled_at,
-    });
+    expect(h.email.sendNoPracticeEmail).not.toHaveBeenCalled();
     expect(h.realtime.broadcast.mock.calls).toEqual([
       ['user-instructor-practice-slots', 'no-practice', { scheduledAt: result.slot.scheduled_at }],
     ]);
@@ -50,7 +47,7 @@ describe('cancelación: efectos posteriores al commit', () => {
     expect(h.realtime.broadcast).not.toHaveBeenCalled();
     commit({ data: result, error: null });
     await pending;
-    expect(h.email.sendNoPracticeEmail).toHaveBeenCalledTimes(1);
+    expect(h.email.sendNoPracticeEmail).not.toHaveBeenCalled();
   });
   it('más de 5 minutos: difunde únicamente a la cohorte según el reloj SQL', async () => {
     const h = harness();
@@ -67,7 +64,7 @@ describe('cancelación: efectos posteriores al commit', () => {
     expect(h.email.sendNoPracticeEmail).not.toHaveBeenCalled();
     expect(h.realtime.broadcast).not.toHaveBeenCalled();
   });
-  it('un fallo de correo no revierte la cancelación y permite el aviso en plataforma', async () => {
+  it('la cancelación no depende de SMTP para devolver el commit y avisar en plataforma', async () => {
     const h = harness();
     h.email.sendNoPracticeEmail.mockRejectedValue(new Error('SMTP no disponible'));
     const log = jest.spyOn(console, 'error').mockImplementation();

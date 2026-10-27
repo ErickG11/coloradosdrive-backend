@@ -5,7 +5,6 @@ import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPre
 import { AppError } from '../utils/AppError';
 import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import type { RealtimeService } from './realtime.service';
-import type { EmailService } from './email.service';
 import { PracticeSlotNotificationService } from './practiceSlotNotification.service';
 
 type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
@@ -37,9 +36,8 @@ export class PracticeSlotActionService {
   constructor(
     private readonly supabase: SupabaseClient<Database>,
     private readonly realtimeService: RealtimeService,
-    emailService: EmailService,
   ) {
-    this.notifications = new PracticeSlotNotificationService(supabase, emailService, realtimeService);
+    this.notifications = new PracticeSlotNotificationService(realtimeService);
   }
 
   // La RPC bloquea la fila, verifica la matrícula activa en la cohorte y
