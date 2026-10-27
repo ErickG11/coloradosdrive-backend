@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import type { SwapPracticeRpcResult } from '../../src/models/practiceSlot.model';
-import type { EmailService } from '../../src/services/email.service';
 import { PracticeSlotActionService } from '../../src/services/practiceSlotAction.service';
 import type { RealtimeService } from '../../src/services/realtime.service';
 
@@ -15,7 +14,7 @@ function harness() {
   const rpc = jest.fn().mockResolvedValue({ data: result, error: null });
   const realtime = { broadcast: jest.fn().mockResolvedValue(undefined) };
   return { rpc, realtime, service: new PracticeSlotActionService(
-    { rpc } as unknown as SupabaseClient<Database>, realtime as unknown as RealtimeService, {} as EmailService,
+    { rpc } as unknown as SupabaseClient<Database>, realtime as unknown as RealtimeService,
   ) };
 }
 

@@ -4,6 +4,7 @@ import type { Database } from '../config/database.types';
 import type { EmailService } from './email.service';
 import type { RealtimeService } from './realtime.service';
 import { PracticeSlotNotificationService } from './practiceSlotNotification.service';
+import { NotificationEmailService } from './notificationEmail.service';
 
 type SchedulerTransition = 'remind' | 'close' | 'complete';
 type Candidate = Database['public']['Functions']['practice_slots_scheduler_candidates']['Returns'][number];
@@ -12,15 +13,26 @@ type Candidate = Database['public']['Functions']['practice_slots_scheduler_candi
 // El reloj de Node no participa en las decisiones (ADR 009).
 export class PracticeSlotSchedulerService {
   private readonly notifications: PracticeSlotNotificationService;
+  private readonly emails: NotificationEmailService;
   constructor(
     private readonly supabase: SupabaseClient<Database>,
     emailService: EmailService,
     realtimeService: RealtimeService,
   ) {
-    this.notifications = new PracticeSlotNotificationService(supabase, emailService, realtimeService);
+    this.notifications = new PracticeSlotNotificationService(realtimeService);
+    this.emails = new NotificationEmailService(supabase, emailService);
   }
 
   async runOnce(): Promise<void> {
+    try {
+      await this.processTransitions();
+    } finally {
+      // La cola se atiende incluso si otra transicion fallo en esta pasada.
+      await this.emails.runOnce();
+    }
+  }
+
+  private async processTransitions(): Promise<void> {
     for (const transition of ['remind', 'close', 'complete'] as const) {
       const { data, error } = await this.supabase.rpc('practice_slots_scheduler_candidates', {
         p_transition: transition,

@@ -1,9 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { supabaseAdmin } from '../config/supabase';
-import { mailer } from '../config/mailer';
 import type { CancelPracticeSlotInput, CancelPracticeSlotResult, CancellationPreview, PracticeSlot, SubmitAttendanceInput, ReleasedPracticeSlot, SwapPracticeResult } from '../models/practiceSlot.model';
-import { EmailService } from '../services/email.service';
 import { PracticeSlotActionService } from '../services/practiceSlotAction.service';
 import { RealtimeService } from '../services/realtime.service';
 import { AppError } from '../utils/AppError';
@@ -11,7 +9,6 @@ import { AppError } from '../utils/AppError';
 const practiceSlotActionService = new PracticeSlotActionService(
   supabaseAdmin,
   new RealtimeService(supabaseAdmin),
-  new EmailService(mailer),
 );
 
 function requireStudentId(req: Request): string {
@@ -66,7 +63,7 @@ export async function markPracticeSlotAttendance(
   if (!req.user) {
     throw new AppError('Authentication required', 401);
   }
-  const { attended } = req.body as SubmitAttendanceInput;
-  const slot = await practiceSlotActionService.markAttendance(req.params.id, req.user.id, attended);
+  const { attended, motivo } = req.body as SubmitAttendanceInput;
+  const slot = await practiceSlotActionService.markAttendance(req.params.id, req.user.id, attended, motivo);
   res.status(200).json(slot);
 }

@@ -20,9 +20,12 @@ const schedulerService = new PracticeSlotSchedulerService(
 // arquitectura monolítica en Vercel que el documento de tesis menciona
 // para ese caso.
 export function startPracticeSlotCron(): void {
+  let running = false;
   cron.schedule('* * * * *', () => {
+    if (running) return;
+    running = true;
     schedulerService.runOnce().catch((err: unknown) => {
       console.error('Error en la corrida del scheduler de horarios de práctica:', err);
-    });
+    }).finally(() => { running = false; });
   });
 }

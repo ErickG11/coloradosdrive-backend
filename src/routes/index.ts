@@ -17,8 +17,10 @@ import { publicCourseRouter } from './publicCourse.routes';
 import { solicitudAdminRouter, solicitudRouter } from './solicitud.routes';
 import { userRouter } from './user.routes';
 import { studentAdminRouter } from './studentAdmin.routes';
+import { notificationRouter } from './notification.routes';
 
 export const apiRouter = Router();
+apiRouter.use('/notifications', notificationRouter);
 apiRouter.use('/admin/dashboard', adminDashboardRouter);
 
 apiRouter.use('/health', healthRouter);

@@ -257,15 +257,8 @@ describe('practice-slots student actions', () => {
     });
 
     it('responde 404 si la franja no es del instructor autenticado', async () => {
-      // mockAuthToken resuelve sub: 'test-user-id'; la franja pertenece a
-      // otro instructor (instructorId).
       mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: buildSlotRow({ instructor_id: instructorId, status: 'completado' }),
-          error: null,
-        }),
-      );
+      mockedRpc.mockReturnValueOnce(createChain({ data: null, error: { code: 'AT404', message: 'Franja no encontrada' } }));
 
       const res = await request(app)
         .patch(`/practice-slots/${slotId}/attendance`)
@@ -273,16 +266,14 @@ describe('practice-slots student actions', () => {
         .send({ attended: true });
 
       expect(res.status).toBe(404);
+      expect(mockedRpc).toHaveBeenCalledWith('register_practice_attendance', {
+        p_slot: slotId, p_actor: studentId, p_attended: true,
+      });
     });
 
     it('responde 409 si la franja todavía no está completado', async () => {
       mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: buildSlotRow({ instructor_id: studentId, status: 'confirmado' }),
-          error: null,
-        }),
-      );
+      mockedRpc.mockReturnValueOnce(createChain({ data: null, error: { code: 'AT413', message: 'Practica no completada' } }));
 
       const res = await request(app)
         .patch(`/practice-slots/${slotId}/attendance`)
@@ -293,20 +284,10 @@ describe('practice-slots student actions', () => {
     });
 
     it('marca asistencia sobre una franja completada propia y responde 200', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ instructor_id: studentId, status: 'completado' }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ instructor_id: studentId, status: 'completado', attended: true }),
-            error: null,
-          }),
-        );
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
+      mockedRpc.mockReturnValueOnce(createChain({
+        data: buildSlotRow({ instructor_id: studentId, status: 'completado', attended: true }), error: null,
+      }));
 
       const res = await request(app)
         .patch(`/practice-slots/${slotId}/attendance`)
@@ -323,30 +304,14 @@ describe('practice-slots student actions', () => {
       // en la fila) se mockea el JWT verificado directamente, mismo
       // patrón que tests/integration/examAttempts.test.ts.
       const instructorA = 'instructor-a';
-      const instructorB = 'instructor-b';
       const slotOfA = '55555555-5555-4555-8555-555555555555';
       const slotOfB = '66666666-6666-4666-8666-666666666666';
 
       // Instructor A marca asistencia en SU propia franja: funciona.
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({ id: slotOfA, instructor_id: instructorA, status: 'completado' }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSlotRow({
-              id: slotOfA,
-              instructor_id: instructorA,
-              status: 'completado',
-              attended: true,
-            }),
-            error: null,
-          }),
-        );
+      mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
+      mockedRpc.mockReturnValueOnce(createChain({
+        data: buildSlotRow({ id: slotOfA, instructor_id: instructorA, status: 'completado', attended: true }), error: null,
+      }));
       mockedVerifySupabaseJwt.mockResolvedValueOnce({
         sub: instructorA,
         email: 'a@example.com',
@@ -359,16 +324,14 @@ describe('practice-slots student actions', () => {
         .send({ attended: true });
 
       expect(resOwn.status).toBe(200);
+      expect(mockedRpc).toHaveBeenLastCalledWith('register_practice_attendance', {
+        p_slot: slotOfA, p_actor: instructorA, p_attended: true,
+      });
 
       // El mismo instructor A intenta marcar asistencia en una franja de
       // B: 404, nunca ve ni toca la franja ajena.
       mockedFrom.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }));
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: buildSlotRow({ id: slotOfB, instructor_id: instructorB, status: 'completado' }),
-          error: null,
-        }),
-      );
+      mockedRpc.mockReturnValueOnce(createChain({ data: null, error: { code: 'AT404', message: 'Franja no encontrada' } }));
       mockedVerifySupabaseJwt.mockResolvedValueOnce({
         sub: instructorA,
         email: 'a@example.com',
@@ -381,6 +344,9 @@ describe('practice-slots student actions', () => {
         .send({ attended: true });
 
       expect(resOther.status).toBe(404);
+      expect(mockedRpc).toHaveBeenLastCalledWith('register_practice_attendance', {
+        p_slot: slotOfB, p_actor: instructorA, p_attended: true,
+      });
     });
   });
 });
