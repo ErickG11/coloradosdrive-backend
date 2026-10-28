@@ -21,6 +21,26 @@ export function errorHandler(
   res: Response<ErrorResponseBody>,
   _next: NextFunction,
 ): void {
+  // body-parser adjunta el JSON original a SyntaxError; puede contener el comentario de RF-04.
+  if (
+    req.method === 'POST' &&
+    /^\/estudiantes\/practice-ratings\/?(?:\?|$)/i.test(req.originalUrl) &&
+    !(err instanceof AppError)
+  ) {
+    const invalidJson = 'type' in err && err.type === 'entity.parse.failed';
+    console.error(
+      JSON.stringify({
+        event: 'practice_rating_request_failed',
+        code: invalidJson ? 'INVALID_JSON' : 'INTERNAL_ERROR',
+      }),
+    );
+    res.status(invalidJson ? 400 : 500).json({
+      status: 'error',
+      message: invalidJson ? 'Cuerpo JSON inválido' : 'Internal server error',
+      ...(invalidJson ? { code: 'INVALID_FIELD' } : {}),
+    });
+    return;
+  }
   // body-parser adjunta el cuerpo a SyntaxError. D nunca lo imprime ni devuelve.
   if (
     req.method === 'POST' &&
@@ -34,12 +54,10 @@ export function errorHandler(
         code: invalidJson ? 'INVALID_JSON' : 'INTERNAL_ERROR',
       }),
     );
-    res
-      .status(invalidJson ? 400 : 500)
-      .json({
-        status: 'error',
-        message: invalidJson ? 'Cuerpo JSON inválido' : 'Internal server error',
-      });
+    res.status(invalidJson ? 400 : 500).json({
+      status: 'error',
+      message: invalidJson ? 'Cuerpo JSON inválido' : 'Internal server error',
+    });
     return;
   }
   const statusCode = err instanceof AppError ? err.statusCode : 500;

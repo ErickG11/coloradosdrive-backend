@@ -12,7 +12,22 @@
 import type { StudentListResult } from '../models/studentAdmin.model';
 import type { NotificationRow } from '../models/notification.model';
 import type { AttendanceEventRow, PracticeHistoryResult } from '../models/practiceAttendance.model';
-import type { CancellationCategory, CancellationOutcome, CancellationPreview, PracticeCancellationRpcResult, ReleasedPracticeSlot, PendingPracticeRpcSlot, SwapPracticeRpcResult } from '../models/practiceSlot.model';
+import type {
+  InstructorRatingDetail,
+  InstructorRatingSummary,
+  PracticeRatingPage,
+  PracticeRatingPendingItem,
+  PracticeRatingSubmission,
+} from '../models/practiceRating.model';
+import type {
+  CancellationCategory,
+  CancellationOutcome,
+  CancellationPreview,
+  PracticeCancellationRpcResult,
+  ReleasedPracticeSlot,
+  PendingPracticeRpcSlot,
+  SwapPracticeRpcResult,
+} from '../models/practiceSlot.model';
 import type { PracticeRecovery } from '../services/studentAccess.service';
 import type { StudentDeletionOperation } from '../services/studentDeletion.service';
 import type { StudentProfileResult } from '../services/studentProfile.service';
@@ -55,6 +70,22 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      list_student_pending_practice_ratings: {
+        Args: { p_student: string; p_page: number; p_page_size: number };
+        Returns: PracticeRatingPage<PracticeRatingPendingItem>;
+      };
+      submit_practice_rating: {
+        Args: { p_slot: string; p_student: string; p_score: number; p_comment: string | null };
+        Returns: PracticeRatingSubmission;
+      };
+      list_admin_instructor_ratings: {
+        Args: { p_actor: string; p_page: number; p_page_size: number };
+        Returns: PracticeRatingPage<InstructorRatingSummary>;
+      };
+      admin_instructor_rating_detail: {
+        Args: { p_actor: string; p_instructor: string; p_page: number; p_page_size: number };
+        Returns: InstructorRatingDetail;
+      };
       register_practice_attendance: {
         Args: { p_slot: string; p_actor: string; p_attended: boolean };
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
@@ -82,7 +113,8 @@ export interface Database {
       read_all_user_notifications: { Args: { p_user: string }; Returns: number };
       claim_notification_email: { Args: Record<string, never>; Returns: NotificationRow[] };
       finish_notification_email: {
-        Args: { p_id: string; p_token: string; p_error: string | null }; Returns: boolean;
+        Args: { p_id: string; p_token: string; p_error: string | null };
+        Returns: boolean;
       };
       assign_pending_enrollment_cohort: {
         Args: {
@@ -206,7 +238,12 @@ export interface Database {
         Returns: CancellationPreview;
       };
       cancel_practice_slot_with_reason: {
-        Args: { p_slot_id: string; p_student_id: string; p_motivo_categoria: string; p_motivo_texto: string };
+        Args: {
+          p_slot_id: string;
+          p_student_id: string;
+          p_motivo_categoria: string;
+          p_motivo_texto: string;
+        };
         Returns: PracticeCancellationRpcResult;
       };
       released_practice_slots_for_student: {
@@ -240,29 +277,58 @@ export interface Database {
     Tables: {
       practice_attendance_events: {
         Row: AttendanceEventRow & { transaction_id: number };
-        Insert: Omit<AttendanceEventRow, 'id' | 'created_at'> & { id?: string; created_at?: string };
+        Insert: Omit<AttendanceEventRow, 'id' | 'created_at'> & {
+          id?: string;
+          created_at?: string;
+        };
         Update: never;
         Relationships: [];
       };
       notifications: {
         Row: NotificationRow;
-        Insert: Pick<NotificationRow, 'user_id' | 'tipo' | 'titulo' | 'mensaje'> & Partial<NotificationRow>;
-        Update: Partial<Pick<NotificationRow, 'read_at' | 'email_status' | 'email_attempts' | 'email_last_error'
-          | 'email_next_attempt_at' | 'email_lease_token' | 'email_locked_until'>>;
+        Insert: Pick<NotificationRow, 'user_id' | 'tipo' | 'titulo' | 'mensaje'> &
+          Partial<NotificationRow>;
+        Update: Partial<
+          Pick<
+            NotificationRow,
+            | 'read_at'
+            | 'email_status'
+            | 'email_attempts'
+            | 'email_last_error'
+            | 'email_next_attempt_at'
+            | 'email_lease_token'
+            | 'email_locked_until'
+          >
+        >;
         Relationships: [];
       };
       practice_slot_cancellations: {
         Row: {
-          id: string; slot_id: string; enrollment_id: string; student_id: string;
-          instructor_id: string; cohort_id: string; slot_starts_at: string; cancelled_at: string;
+          id: string;
+          slot_id: string;
+          enrollment_id: string;
+          student_id: string;
+          instructor_id: string;
+          cohort_id: string;
+          slot_starts_at: string;
+          cancelled_at: string;
           motivo_categoria: CancellationCategory;
-          motivo_texto: string; resultado: CancellationOutcome;
-          consumio_reprogramacion: boolean; reprogramacion_numero: number | null;
+          motivo_texto: string;
+          resultado: CancellationOutcome;
+          consumio_reprogramacion: boolean;
+          reprogramacion_numero: number | null;
           origen: 'alumno' | 'cambio_cupo';
-          repuesto_por_slot_id: string | null; repuesto_en: string | null;
+          repuesto_por_slot_id: string | null;
+          repuesto_en: string | null;
         };
-        Insert: Omit<Database['public']['Tables']['practice_slot_cancellations']['Row'], 'id' | 'origen' | 'repuesto_por_slot_id' | 'repuesto_en'> & {
-          id?: string; origen?: 'alumno' | 'cambio_cupo'; repuesto_por_slot_id?: string | null; repuesto_en?: string | null;
+        Insert: Omit<
+          Database['public']['Tables']['practice_slot_cancellations']['Row'],
+          'id' | 'origen' | 'repuesto_por_slot_id' | 'repuesto_en'
+        > & {
+          id?: string;
+          origen?: 'alumno' | 'cambio_cupo';
+          repuesto_por_slot_id?: string | null;
+          repuesto_en?: string | null;
         };
         Update: { repuesto_por_slot_id?: string; repuesto_en?: string };
         Relationships: [];
