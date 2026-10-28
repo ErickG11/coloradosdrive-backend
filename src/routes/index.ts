@@ -18,9 +18,11 @@ import { solicitudAdminRouter, solicitudRouter } from './solicitud.routes';
 import { userRouter } from './user.routes';
 import { studentAdminRouter } from './studentAdmin.routes';
 import { notificationRouter } from './notification.routes';
+import { instructorRatingRouter } from './instructorRating.routes';
 
 export const apiRouter = Router();
 apiRouter.use('/notifications', notificationRouter);
+apiRouter.use('/admin/instructor-ratings', instructorRatingRouter);
 apiRouter.use('/admin/dashboard', adminDashboardRouter);
 
 apiRouter.use('/health', healthRouter);

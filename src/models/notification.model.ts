@@ -1,6 +1,11 @@
 export const NOTIFICATION_TYPES = [
-  'recordatorio_practica', 'resultado_cancelacion', 'cupo_disponible',
-  'sin_practica_instructor', 'cambio_realizado', 'asistencia_corregida',
+  'recordatorio_practica',
+  'resultado_cancelacion',
+  'cupo_disponible',
+  'sin_practica_instructor',
+  'cambio_realizado',
+  'asistencia_corregida',
+  'encuesta_practica',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export type NotificationEmailStatus = 'pendiente' | 'enviado' | 'fallido' | null;
