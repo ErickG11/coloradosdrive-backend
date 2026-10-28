@@ -84,6 +84,7 @@ export interface Database {
       };
       admin_instructor_rating_detail: {
         Args: { p_actor: string; p_instructor: string; p_page: number; p_page_size: number };
+        // 036 agrega distribution al contrato JSON del detalle administrativo.
         Returns: InstructorRatingDetail;
       };
       register_practice_attendance: {

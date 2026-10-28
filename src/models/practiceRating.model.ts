@@ -24,12 +24,19 @@ export interface InstructorRatingSummary {
   label: string | null;
 }
 
+export interface InstructorRatingDistribution {
+  stars: 1 | 2 | 3 | 4 | 5;
+  count: number;
+  percentage: number;
+}
+
 export interface InstructorRatingDetail {
   instructorId: string;
   average: number | null;
   responses: number;
   rankingEligible: boolean;
   label: string | null;
+  distribution: InstructorRatingDistribution[];
   items: { score: number; comment: string | null }[];
   total: number;
   page: number;
