@@ -105,6 +105,11 @@ export class PracticeRatingService {
       responses: data.responses,
       rankingEligible: data.rankingEligible,
       label: data.label,
+      distribution: data.distribution.map((item) => ({
+        stars: item.stars,
+        count: item.count,
+        percentage: item.percentage,
+      })),
       items: data.items.map((item) => ({ score: item.score, comment: item.comment })),
       total: data.total,
       page: data.page,

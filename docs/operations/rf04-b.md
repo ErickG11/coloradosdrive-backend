@@ -6,16 +6,18 @@ Esta entrega conecta las RPC de la migración 035 con cuatro rutas HTTP. El back
 
 Todas requieren `Authorization: Bearer <JWT>`. Las fechas son cadenas ISO 8601. `page` admite enteros de 1 a 1000000 y `pageSize` de 1 a 100; sus valores predeterminados son 1 y 20. Las listas incluyen `total`, `page` y `pageSize`, incluso si `items` está vacío.
 
-| Ruta                                          | Rol        | Entrada                           | Respuesta correcta                                                                                               |
-| --------------------------------------------- | ---------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `GET /estudiantes/practice-ratings/pending`   | Estudiante | `?page=1&pageSize=20`             | `200 {items:[{practiceSlotId,instructorName,scheduledAt,opensAt,closesAt}],total,page,pageSize}`                 |
-| `POST /estudiantes/practice-ratings`          | Estudiante | `{practiceSlotId,score,comment?}` | `201 {id,practiceSlotId,score,comment,createdAt}`                                                                |
-| `GET /admin/instructor-ratings`               | Admin      | `?page=1&pageSize=20`             | `200 {items:[{instructorId,instructorName,active,average,responses,rankingEligible,label}],total,page,pageSize}` |
-| `GET /admin/instructor-ratings/:instructorId` | Admin      | UUID y paginación                 | `200 {instructorId,average,responses,rankingEligible,label,items:[{score,comment}],total,page,pageSize}`         |
+| Ruta                                          | Rol        | Entrada                           | Respuesta correcta                                                                                                                               |
+| --------------------------------------------- | ---------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /estudiantes/practice-ratings/pending`   | Estudiante | `?page=1&pageSize=20`             | `200 {items:[{practiceSlotId,instructorName,scheduledAt,opensAt,closesAt}],total,page,pageSize}`                                                 |
+| `POST /estudiantes/practice-ratings`          | Estudiante | `{practiceSlotId,score,comment?}` | `201 {id,practiceSlotId,score,comment,createdAt}`                                                                                                |
+| `GET /admin/instructor-ratings`               | Admin      | `?page=1&pageSize=20`             | `200 {items:[{instructorId,instructorName,active,average,responses,rankingEligible,label}],total,page,pageSize}`                                 |
+| `GET /admin/instructor-ratings/:instructorId` | Admin      | UUID y paginación                 | `200 {instructorId,average,responses,rankingEligible,label,distribution:[{stars,count,percentage}],items:[{score,comment}],total,page,pageSize}` |
 
 `score` debe ser un número JSON entero de 1 a 5. Se rechazan cadenas y fracciones. `comment` es opcional, debe ser texto y admite hasta 1000 caracteres después de recortar espacios. Si falta, se envía `null` a la RPC; la base también convierte el texto vacío en `null`. `practiceSlotId` e `instructorId` deben ser UUID. Los campos de identidad recibidos en el body o query no se usan.
 
 El detalle administrativo publica solamente `score` y `comment` por respuesta. El backend selecciona explícitamente esos campos, aun si la RPC llegara a agregar metadatos internos. El instructor no puede acceder a ninguna ruta de calificaciones.
+
+Desde 036, `distribution` contiene siempre cinco entradas en orden 5, 4, 3, 2, 1. Cada entrada tiene `stars`, `count` y `percentage` (números JSON). Cuenta todas las calificaciones vigentes del instructor, independientemente de la página de `items`. Usa las mismas exclusiones del promedio: respuesta no anulada, práctica completada y asistida con alumno e instructor coincidentes. Sin respuestas, las cinco cantidades y porcentajes son 0 y `average` sigue siendo `null`. Los porcentajes se redondean a dos decimales; su suma puede diferir de 100 hasta 0.02 por redondeo. Las cantidades suman exactamente `responses` y `total`. Aplicar 036 antes de desplegar este contrato del backend. Ver [preflight, verificación y retirada](rf04-c.md).
 
 ## Errores
 

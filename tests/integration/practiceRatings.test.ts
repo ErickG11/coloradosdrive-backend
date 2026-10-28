@@ -67,6 +67,13 @@ const detailData = {
   responses: 4,
   rankingEligible: true,
   label: null,
+  distribution: [
+    { stars: 5, count: 2, percentage: 50, studentId: 'private' },
+    { stars: 4, count: 2, percentage: 50, practiceSlotId: slot },
+    { stars: 3, count: 0, percentage: 0, createdAt: 'private' },
+    { stars: 2, count: 0, percentage: 0 },
+    { stars: 1, count: 0, percentage: 0 },
+  ],
   items: [
     { score: 5, comment: 'Bien', studentId: 'private', practiceSlotId: slot, createdAt: 'private' },
   ],
@@ -196,6 +203,13 @@ describe('RF-04: rutas de calificación', () => {
       responses: 4,
       rankingEligible: true,
       label: null,
+      distribution: [
+        { stars: 5, count: 2, percentage: 50 },
+        { stars: 4, count: 2, percentage: 50 },
+        { stars: 3, count: 0, percentage: 0 },
+        { stars: 2, count: 0, percentage: 0 },
+        { stars: 1, count: 0, percentage: 0 },
+      ],
       items: [{ score: 5, comment: 'Bien' }],
       total: 4,
       page: 2,
@@ -207,6 +221,44 @@ describe('RF-04: rutas de calificación', () => {
       p_page: 2,
       p_page_size: 1,
     });
+  });
+
+  it('el detalle sin respuestas conserva las cinco estrellas en cero y no expone datos internos', async () => {
+    const distribution = [5, 4, 3, 2, 1].map((stars) => ({
+      stars,
+      count: 0,
+      percentage: 0,
+      studentId: 'private',
+      createdAt: 'private',
+    }));
+    rpc.mockResolvedValue({
+      data: {
+        ...detailData,
+        average: null,
+        responses: 0,
+        rankingEligible: false,
+        label: 'pocas calificaciones',
+        total: 0,
+        items: [],
+        distribution,
+      },
+      error: null,
+    });
+    const res = await request(app).get(detail).set('Authorization', auth('admin'));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      instructorId: instructor,
+      average: null,
+      responses: 0,
+      rankingEligible: false,
+      label: 'pocas calificaciones',
+      total: 0,
+      page: 2,
+      pageSize: 1,
+      items: [],
+      distribution: [5, 4, 3, 2, 1].map((stars) => ({ stars, count: 0, percentage: 0 })),
+    });
+    expect(JSON.stringify(res.body)).not.toContain('private');
   });
 
   it.each(['pending', 'ranking', 'detail'] as const)(
