@@ -1,7 +1,15 @@
 import { Router } from 'express';
 import { body, query } from 'express-validator';
-import { studentPracticeEnrollments, studentPracticeHistory } from '../controllers/practiceAttendance.controller';
+import {
+  studentPracticeEnrollments,
+  studentPracticeHistory,
+} from '../controllers/practiceAttendance.controller';
+import {
+  pendingPracticeRatings,
+  submitPracticeRating,
+} from '../controllers/practiceRating.controller';
 import { attendancePagination } from './practiceAttendance.validators';
+import { ratingPagination, ratingSubmissionValidators } from './practiceRating.validators';
 
 import { changePassword } from '../controllers/estudiante.controller';
 import { supabaseAdmin } from '../config/supabase';
@@ -15,11 +23,32 @@ export const estudianteRouter = Router();
 
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
 estudianteRouter.get('/practice-history/enrollments', asyncHandler(studentPracticeEnrollments));
-estudianteRouter.get('/practice-history', [
-  query('enrollmentId').isString().withMessage('Selecciona una matrícula válida').bail()
-    .isUUID().withMessage('Selecciona una matrícula válida'),
-  ...attendancePagination(),
-], validateFields, asyncHandler(studentPracticeHistory));
+estudianteRouter.get(
+  '/practice-history',
+  [
+    query('enrollmentId')
+      .isString()
+      .withMessage('Selecciona una matrícula válida')
+      .bail()
+      .isUUID()
+      .withMessage('Selecciona una matrícula válida'),
+    ...attendancePagination(),
+  ],
+  validateFields,
+  asyncHandler(studentPracticeHistory),
+);
+estudianteRouter.get(
+  '/practice-ratings/pending',
+  ratingPagination(),
+  validateFields,
+  asyncHandler(pendingPracticeRatings),
+);
+estudianteRouter.post(
+  '/practice-ratings',
+  ratingSubmissionValidators,
+  validateFields,
+  asyncHandler(submitPracticeRating),
+);
 
 // Consulta mínima del propio sujeto; sigue requiriendo JWT y rol estudiante.
 estudianteRouter.get(

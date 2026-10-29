@@ -1,6 +1,7 @@
 import request from 'supertest';
 jest.mock('../../src/config/supabase', () => ({
-  supabaseAdmin: { from: jest.fn(), rpc: jest.fn(), channel: jest.fn(), removeChannel: jest.fn() }, supabaseAnon: {},
+  supabaseAdmin: { from: jest.fn(), rpc: jest.fn(), channel: jest.fn(), removeChannel: jest.fn() },
+  supabaseAnon: {},
 }));
 jest.mock('../../src/config/jwks', () => ({ verifySupabaseJwt: jest.fn() }));
 import { createApp } from '../../src/app';
@@ -16,48 +17,138 @@ const verify = verifySupabaseJwt as jest.Mock;
 const id = '11111111-1111-4111-8111-111111111111';
 const row: NotificationRow = {
   attendance_event_id: null,
-  id, user_id: 'test-user-id', tipo: 'recordatorio_practica', titulo: 'Tu práctica', mensaje: 'Confirmar es opcional',
-  practice_slot_id: 'slot', scheduled_at: '2026-10-27T20:00:00Z', created_at: '2026-10-27T19:40:00Z', read_at: null,
-  email_status: 'pendiente', email_attempts: 1, email_last_error: 'detalle interno',
-  email_next_attempt_at: '', email_lease_token: 'secreto-interno', email_locked_until: '',
+  id,
+  user_id: 'test-user-id',
+  tipo: 'recordatorio_practica',
+  titulo: 'Tu práctica',
+  mensaje: 'Confirmar es opcional',
+  practice_slot_id: 'slot',
+  scheduled_at: '2026-10-27T20:00:00Z',
+  created_at: '2026-10-27T19:40:00Z',
+  read_at: null,
+  email_status: 'pendiente',
+  email_attempts: 1,
+  email_last_error: 'detalle interno',
+  email_next_attempt_at: '',
+  email_lease_token: 'secreto-interno',
+  email_locked_until: '',
 };
 const app = createApp();
-const auth = (role: 'estudiante' | 'instructor' | 'admin' = 'estudiante') => `Bearer ${mockAuthToken(verify, role)}`;
+const auth = (role: 'estudiante' | 'instructor' | 'admin' = 'estudiante') =>
+  `Bearer ${mockAuthToken(verify, role)}`;
 
 describe('API de notificaciones del propietario', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     rpc.mockReset();
-    from.mockReturnValue(createChain({ data: { activo: true, rol: 'instructor', debe_cambiar_password: false }, error: null }));
+    from.mockReturnValue(
+      createChain({
+        data: { activo: true, rol: 'instructor', debe_cambiar_password: false },
+        error: null,
+      }),
+    );
   });
-  it.each(['estudiante', 'instructor'] as const)('lista para %s solo con el actor del JWT y metadatos publicos', async (role) => {
-    rpc.mockResolvedValue({ data: { items: [row], total: 3, unreadCount: 2 }, error: null });
-    const res = await request(app).get('/notifications?page=2&pageSize=1&userId=otro').set('Authorization', auth(role));
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ page: 2, pageSize: 1, total: 3, unreadCount: 2,
-      items: [{ id, practiceSlotId: 'slot', emailStatus: 'pendiente', emailAttempts: 1 }] });
-    expect(res.body.items[0]).not.toHaveProperty('email_last_error');
-    expect(res.body.items[0]).not.toHaveProperty('email_lease_token');
-    expect(rpc).toHaveBeenCalledWith('list_user_notifications', { p_user: 'test-user-id', p_page: 2, p_page_size: 1 });
-  });
-  it.each(['page=0', 'page=1.5', 'page=1000001', 'pageSize=101', 'page=1&page=2'])('rechaza paginacion invalida %s', async (query) => {
-    const res = await request(app).get(`/notifications?${query}`).set('Authorization', auth());
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('INVALID_FIELD');
-    expect(rpc).not.toHaveBeenCalled();
-  });
+  it.each(['estudiante', 'instructor'] as const)(
+    'lista para %s solo con el actor del JWT y metadatos publicos',
+    async (role) => {
+      rpc.mockResolvedValue({ data: { items: [row], total: 3, unreadCount: 2 }, error: null });
+      const res = await request(app)
+        .get('/notifications?page=2&pageSize=1&userId=otro')
+        .set('Authorization', auth(role));
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        page: 2,
+        pageSize: 1,
+        total: 3,
+        unreadCount: 2,
+        items: [{ id, practiceSlotId: 'slot', emailStatus: 'pendiente', emailAttempts: 1 }],
+      });
+      expect(res.body.items[0]).not.toHaveProperty('email_last_error');
+      expect(res.body.items[0]).not.toHaveProperty('email_lease_token');
+      expect(rpc).toHaveBeenCalledWith('list_user_notifications', {
+        p_user: 'test-user-id',
+        p_page: 2,
+        p_page_size: 1,
+      });
+    },
+  );
+  it.each(['page=0', 'page=1.5', 'page=1000001', 'pageSize=101', 'page=1&page=2'])(
+    'rechaza paginacion invalida %s',
+    async (query) => {
+      const res = await request(app).get(`/notifications?${query}`).set('Authorization', auth());
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('INVALID_FIELD');
+      expect(rpc).not.toHaveBeenCalled();
+    },
+  );
   it('expone la correccion como aviso solo de bandeja vinculado a su evento', async () => {
-    rpc.mockResolvedValue({ data: { items: [{ ...row, tipo: 'asistencia_corregida',
-      attendance_event_id: id, email_status: null, email_attempts: 0 }], total: 1, unreadCount: 1 }, error: null });
+    rpc.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ...row,
+            tipo: 'asistencia_corregida',
+            attendance_event_id: id,
+            email_status: null,
+            email_attempts: 0,
+          },
+        ],
+        total: 1,
+        unreadCount: 1,
+      },
+      error: null,
+    });
     const res = await request(app).get('/notifications').set('Authorization', auth());
     expect(res.status).toBe(200);
-    expect(res.body.items[0]).toMatchObject({ tipo: 'asistencia_corregida', attendanceEventId: id, emailStatus: null });
+    expect(res.body.items[0]).toMatchObject({
+      tipo: 'asistencia_corregida',
+      attendanceEventId: id,
+      emailStatus: null,
+    });
+  });
+  it('lista la encuesta de práctica y permite marcarla como leída', async () => {
+    const survey = {
+      ...row,
+      tipo: 'encuesta_practica',
+      email_status: null,
+      email_attempts: 0,
+      attendance_event_id: id,
+    };
+    rpc.mockResolvedValueOnce({
+      data: { items: [survey, row], total: 2, unreadCount: 2 },
+      error: null,
+    });
+    const listed = await request(app).get('/notifications').set('Authorization', auth());
+    expect(listed.status).toBe(200);
+    expect(listed.body.items).toMatchObject([
+      { tipo: 'encuesta_practica', attendanceEventId: id, emailStatus: null, readAt: null },
+      { tipo: 'recordatorio_practica', emailStatus: 'pendiente' },
+    ]);
+    rpc.mockReturnValueOnce(
+      createChain({ data: { ...survey, read_at: row.created_at }, error: null }),
+    );
+    const marked = await request(app)
+      .patch(`/notifications/${id}/read`)
+      .set('Authorization', auth())
+      .send({ userId: 'otro' });
+    expect(marked.status).toBe(200);
+    expect(marked.body).toMatchObject({ tipo: 'encuesta_practica', readAt: row.created_at });
+    expect(rpc).toHaveBeenLastCalledWith('mark_user_notification_read', {
+      p_user: 'test-user-id',
+      p_id: id,
+    });
   });
   it('marcar un aviso ajeno o inexistente devuelve 404 y no acepta otro actor en el body', async () => {
     rpc.mockReturnValue(createChain({ data: null, error: null }));
-    const res = await request(app).patch(`/notifications/${id}/read`).set('Authorization', auth()).send({ userId: 'otro' });
+    const res = await request(app)
+      .patch(`/notifications/${id}/read`)
+      .set('Authorization', auth())
+      .send({ userId: 'otro' });
     expect(res.status).toBe(404);
-    expect(rpc).toHaveBeenCalledWith('mark_user_notification_read', { p_user: 'test-user-id', p_id: id });
+    expect(rpc).toHaveBeenCalledWith('mark_user_notification_read', {
+      p_user: 'test-user-id',
+      p_id: id,
+    });
   });
   it('marca un aviso propio y devuelve readAt', async () => {
     rpc.mockReturnValue(createChain({ data: { ...row, read_at: row.created_at }, error: null }));
@@ -67,15 +158,22 @@ describe('API de notificaciones del propietario', () => {
   });
   it('read-all utiliza exclusivamente al propietario', async () => {
     rpc.mockResolvedValue({ data: 2, error: null });
-    const res = await request(app).post('/notifications/read-all').set('Authorization', auth()).send({ userId: 'otro' });
+    const res = await request(app)
+      .post('/notifications/read-all')
+      .set('Authorization', auth())
+      .send({ userId: 'otro' });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ updatedCount: 2 });
     expect(rpc).toHaveBeenCalledWith('read_all_user_notifications', { p_user: 'test-user-id' });
   });
   it('valida UUID y requiere sesion con rol de alumno o instructor', async () => {
-    expect((await request(app).patch('/notifications/no-uuid/read').set('Authorization', auth())).status).toBe(400);
+    expect(
+      (await request(app).patch('/notifications/no-uuid/read').set('Authorization', auth())).status,
+    ).toBe(400);
     expect((await request(app).get('/notifications')).status).toBe(401);
-    expect((await request(app).get('/notifications').set('Authorization', auth('admin'))).status).toBe(403);
+    expect(
+      (await request(app).get('/notifications').set('Authorization', auth('admin'))).status,
+    ).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
   });
 });
