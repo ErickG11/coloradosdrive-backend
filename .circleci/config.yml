@@ -1,0 +1,289 @@
+version: 2.1
+
+executors:
+  node22:
+    parameters:
+      image_tag:
+        type: string
+        default: '22.22'
+    docker:
+      - image: cimg/node:<< parameters.image_tag >>
+    working_directory: ~/project
+    resource_class: medium
+    environment:
+      DISABLE_CRON: 'true'
+      NODE_OPTIONS: --max-old-space-size=1536
+      NPM_CONFIG_CACHE: /home/circleci/.npm
+
+commands:
+  prepare_job:
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+
+  install_deps:
+    steps:
+      - restore_cache:
+          keys:
+            - v1-node22-{{ arch }}-{{ checksum "package-lock.json" }}
+      - run:
+          name: Dependencias con caché del lockfile
+          command: |
+            node -v && npm -v
+            lock_hash=$(sha256sum package-lock.json | cut -d' ' -f1)
+            saved_hash=$(cat node_modules/.package-lock.sha256 2>/dev/null || true)
+            if [ "$lock_hash" = "$saved_hash" ] && [ -d node_modules ]; then
+              echo 'CACHE HIT: se omite npm ci'
+            else
+              rm -f .eslintcache
+              npm ci --prefer-offline --no-audit --no-fund
+              printf '%s' "$lock_hash" > node_modules/.package-lock.sha256
+            fi
+      - save_cache:
+          key: v1-node22-{{ arch }}-{{ checksum "package-lock.json" }}
+          paths:
+            - node_modules
+            - /home/circleci/.npm
+      - persist_to_workspace:
+          root: .
+          paths:
+            - node_modules
+
+  execute_check:
+    parameters:
+      result_name:
+        type: string
+      script:
+        type: string
+      minutes:
+        type: integer
+        default: 8
+      warning:
+        type: string
+        default: ''
+    steps:
+      - run:
+          name: Ejecutar comprobación y registrar resultado
+          environment:
+            CHECK_SCRIPT: << parameters.script >>
+            CHECK_MINUTES: '<< parameters.minutes >>'
+            CHECK_WARNING: << parameters.warning >>
+          command: |
+            mkdir -p job-results
+            rc=0
+            timeout --signal=TERM --kill-after=10s "${CHECK_MINUTES}m" bash -eo pipefail -c "$CHECK_SCRIPT" || rc=$?
+            printf '%s\n' "$rc" > "job-results/${CIRCLE_JOB}.status"
+            if [ "$rc" -ne 0 ] && [ -n "$CHECK_WARNING" ]; then
+              printf '⚠️ %s (exit %s)\n' "$CHECK_WARNING" "$rc" | tee "job-results/${CIRCLE_JOB}.warning"
+            fi
+      # Cada job escribe nombres distintos: no colisionan las capas paralelas.
+      - persist_to_workspace:
+          root: .
+          paths:
+            - job-results/<< parameters.result_name >>.*
+      - run:
+          name: Aplicar resultado bloqueante o advertencia
+          environment:
+            CHECK_WARNING: << parameters.warning >>
+          command: |
+            if [ -z "$CHECK_WARNING" ]; then
+              exit "$(cat "job-results/${CIRCLE_JOB}.status")"
+            fi
+
+  notify_telegram:
+    parameters:
+      state:
+        type: enum
+        enum: [success, failure]
+      condition:
+        type: enum
+        enum: [on_success, on_fail, always]
+    steps:
+      - run:
+          name: Telegram (<< parameters.state >>)
+          when: << parameters.condition >>
+          environment:
+            NOTIFY_STATE: << parameters.state >>
+          command: |
+            set +x
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+              echo 'Telegram omitido: faltan variables del proyecto'
+              exit 0
+            fi
+            emoji='✅'
+            [ "$NOTIFY_STATE" != failure ] || emoji='❌'
+            warnings=$(cat job-results/*.warning 2>/dev/null || true)
+            message=$(printf '%s ColoradosDrive backend: %s\nRama: %s\nCommit: %.7s\nBuild: #%s\nAdvertencias: %s\n%s' \
+              "$emoji" "$NOTIFY_STATE" "$CIRCLE_BRANCH" "$CIRCLE_SHA1" "$CIRCLE_BUILD_NUM" \
+              "${warnings:-ninguna registrada}" "$CIRCLE_BUILD_URL")
+            curl --silent --fail --connect-timeout 10 --max-time 20 --output /dev/null \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=${message}" || echo 'Advertencia: no se pudo notificar a Telegram'
+
+jobs:
+  install:
+    executor: node22
+    steps:
+      - checkout
+      - install_deps
+
+  lint:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: lint
+          script: |
+            mkdir -p reports
+            npm run lint -- --cache --cache-location .eslintcache -f json -o reports/eslint.json \
+              || { rc=$?; npm run lint -- --cache --cache-location .eslintcache || true; exit $rc; }
+      - store_artifacts:
+          path: reports
+
+  format:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: format
+          script: npm run format:check
+          warning: formato
+
+  audit:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: audit
+          script: npm audit --audit-level=high
+          warning: auditoría
+
+  test:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: test
+          script: npm test -- --ci --maxWorkers=2
+          minutes: 10
+
+  test_coverage:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: test_coverage
+          script: npm run test:coverage -- --maxWorkers=2
+          minutes: 10
+      - store_artifacts:
+          path: coverage
+
+  test_db:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: test_db
+          script: npm run test:students-db
+
+  build:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: build
+          script: npm run build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - dist
+
+  delivery:
+    executor: node22
+    steps:
+      - prepare_job
+      - execute_check:
+          result_name: delivery
+          script: |
+            mkdir -p artifacts
+            tar -czf "artifacts/coloradosdrive-backend-build-${CIRCLE_BUILD_NUM}.tgz" dist package.json package-lock.json
+      - store_artifacts:
+          path: artifacts
+
+  notify:
+    executor: node22
+    steps:
+      - attach_workspace:
+          at: ~/project
+      - run:
+          name: Determinar estado global sin ocultar fallos previos
+          command: |
+            expected='lint format audit build'
+            if [ "$CIRCLE_BRANCH" = main ]; then
+              expected="$expected test_coverage test_db delivery"
+            else
+              expected="$expected test"
+            fi
+            failed=0
+            for job in $expected; do
+              result=$(cat "job-results/${job}.status" 2>/dev/null || echo missing)
+              case "$job:$result" in
+                *:0|format:[0-9]*|audit:[0-9]*) ;;
+                *) echo "Fallo o job no ejecutado: $job ($result)"; failed=1 ;;
+              esac
+            done
+            exit "$failed"
+      - notify_telegram:
+          state: success
+          condition: on_success
+      - notify_telegram:
+          state: failure
+          condition: on_fail
+
+workflows:
+  backend:
+    jobs:
+      - install
+      - lint:
+          requires: [install]
+      - format:
+          requires: [install]
+      - audit:
+          requires: [install]
+      - test:
+          requires: [lint, format, audit]
+          filters:
+            branches:
+              ignore: main
+      - test_coverage:
+          requires: [lint, format, audit]
+          filters:
+            branches:
+              only: main
+      - test_db:
+          requires: [test_coverage]
+          filters:
+            branches:
+              only: main
+      # CircleCI ignora dependencias filtradas: test en main; cobertura/BD fuera.
+      - build:
+          requires: [test, test_coverage, test_db]
+      - delivery:
+          requires: [build]
+          filters:
+            branches:
+              only: main
+      # Esperar también jobs fallidos o bloqueados permite un único aviso global.
+      - notify:
+          requires:
+            - install: terminal
+            - lint: terminal
+            - format: terminal
+            - audit: terminal
+            - test: terminal
+            - test_coverage: terminal
+            - test_db: terminal
+            - build: terminal
+            - delivery: terminal
