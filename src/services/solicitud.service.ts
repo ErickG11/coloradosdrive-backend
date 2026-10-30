@@ -18,6 +18,8 @@ import {
   type SolicitudTipoDocumento,
   type UploadedFile,
 } from '../models/solicitud.model';
+import { calcularEdad, validateApplicant } from '../utils/solicitudAge';
+import { SolicitudPrivacyService } from './solicitudPrivacy.service';
 import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { detectFileType } from '../utils/fileSignature';
@@ -55,10 +57,6 @@ const EXTENSION_BY_DETECTED_TYPE: Record<string, string> = {
 // contenido ya bufferizado, más abajo en subirDocumento().
 export const ALLOWED_MIMETYPES = Object.keys(EXTENSION_BY_DETECTED_TYPE);
 
-function normalizeCorreo(correo: string): string {
-  return correo.trim().toLowerCase();
-}
-
 function hashCode(code: string): string {
   return createHash('sha256').update(code).digest('hex');
 }
@@ -67,17 +65,7 @@ function isUniqueViolation(error: PostgrestError | null): boolean {
   return error?.code === POSTGRES_UNIQUE_VIOLATION;
 }
 
-// Años cumplidos a `now` a partir de una fecha 'YYYY-MM-DD'.
-export function calcularEdad(fechaNacimiento: string, now: Date = new Date()): number {
-  const [year, month, day] = fechaNacimiento.split('-').map(Number);
-  let age = now.getUTCFullYear() - year;
-  const birthdayPassed =
-    now.getUTCMonth() + 1 > month || (now.getUTCMonth() + 1 === month && now.getUTCDate() >= day);
-  if (!birthdayPassed) {
-    age -= 1;
-  }
-  return age;
-}
+export { calcularEdad } from '../utils/solicitudAge';
 
 function toAdminView(
   row: SolicitudRow,
@@ -221,113 +209,32 @@ export class SolicitudService {
     input: SolicitudDatosInput,
   ): Promise<CompletarDatosResult> {
     const current = await this.getOrThrow(solicitudId);
-
-    if (!current.correo_verificado) {
-      throw new AppError('Debes verificar tu correo antes de continuar', 403);
+    if (!current.correo_verificado) throw solicitudError('Debes verificar tu correo antes de continuar', 403, 'ACCESO_DENEGADO');
+    if (current.estado === 'aprobada' || (current.estado === 'pendiente_revision' && current.reviewed_at)) {
+      throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
     }
-    if (current.estado === 'aprobada') {
-      throw new AppError('Esta solicitud ya fue aprobada', 409);
+    const consent = await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
+    const rep = validateApplicant(input.fechaNacimiento, input.representante);
+    const { data: conflicts, error: conflictsError } = await this.supabase.from('solicitudes_inscripcion')
+      .select('id').eq('cedula', input.cedula).neq('id', solicitudId).in('estado', ['pendiente_revision', 'aprobada']);
+    if (conflictsError) throw conflictsError;
+    if (conflicts.length) throw solicitudError('Ya existe una solicitud activa para esta cédula', 409, 'CEDULA_ACTIVA');
+    if (rep) {
+      const { error } = await this.supabase.from('solicitud_consentimientos').update({
+        representante_nombre: rep.nombre, representante_cedula: rep.cedula, representante_acepta: true,
+      }).eq('id', consent.id);
+      if (error) throw error;
     }
-
-    const { data: conflicts, error: conflictError } = await this.supabase
-      .from('solicitudes_inscripcion')
-      .select()
-      .eq('cedula', input.cedula)
-      .neq('id', solicitudId);
-    if (conflictError) {
-      throw conflictError;
-    }
-
-    if (conflicts.some((c) => c.estado === 'pendiente_revision' || c.estado === 'aprobada')) {
-      throw new AppError('Ya existe una solicitud activa para esta cédula', 409);
-    }
-
-    const datos = {
-      cedula: input.cedula,
-      nombre_completo: input.nombreCompleto,
-      telefono: input.telefono ?? null,
-      fecha_nacimiento: input.fechaNacimiento,
-    };
-    // Vuelve a "recién enviada": sin esto la limpieza por antigüedad
-    // borraría de inmediato un registro rechazado viejo reutilizado.
-    const resetFields = {
-      estado: 'pendiente_revision' as const,
-      motivo_rechazo: null,
-      reviewed_by: null,
-      reviewed_at: null,
-      student_id: null,
-      created_at: new Date().toISOString(),
-    };
-
-    // Solo es un "reintento de la misma persona" si el correo de la fila
-    // rechazada coincide con el de quien está completando datos ahora. Sin
-    // esto, cualquiera que conozca la cédula de otra persona (no es un dato
-    // secreto) podría verificar SU PROPIO correo y luego reclamar/borrar el
-    // registro rechazado de alguien más con solo enviar esa cédula — ver el
-    // hallazgo de suplantación reportado. Si el correo no coincide, esta
-    // cédula simplemente puede tener dos filas independientes (el índice
-    // parcial de 007_solicitudes_inscripcion.sql solo bloquea duplicados en
-    // pendiente_revision/aprobada, nunca en rechazada), así que se deja que
-    // la solicitud actual siga su curso normal como una nueva e
-    // independiente, sin tocar la rechazada de nadie más.
-    const rejectedForCedula = conflicts.find(
-      (c) =>
-        c.estado === 'rechazada' && normalizeCorreo(c.correo) === normalizeCorreo(current.correo),
-    );
-
-    // Reintento de una cédula rechazada anteriormente por la MISMA persona
-    // (mismo correo): se reemplaza ESE registro (mismo id), no se crea uno
-    // nuevo.
-    if (rejectedForCedula) {
-      await this.borrarDocumentos(rejectedForCedula.id);
-      await this.borrarDocumentos(current.id);
-      const { error: deleteError } = await this.supabase
-        .from('solicitudes_inscripcion')
-        .delete()
-        .eq('id', current.id);
-      if (deleteError) {
-        throw deleteError;
-      }
-
-      const { error } = await this.supabase
-        .from('solicitudes_inscripcion')
-        .update({
-          ...datos,
-          ...resetFields,
-          correo: current.correo,
-          correo_verificado: true,
-          codigo_verificacion: null,
-          codigo_expira_at: null,
-        })
-        .eq('id', rejectedForCedula.id);
-      if (error) {
-        throw isUniqueViolation(error)
-          ? new AppError('Ya existe una solicitud activa para esta cédula', 409)
-          : error;
-      }
-
-      return {
-        solicitudId: rejectedForCedula.id,
-        token: signSolicitudToken(rejectedForCedula.id),
-      };
-    }
-
-    // El propio registro estaba rechazado: se reutiliza en el mismo id.
-    if (current.estado === 'rechazada') {
-      await this.borrarDocumentos(current.id);
-    }
-
-    const { error } = await this.supabase
-      .from('solicitudes_inscripcion')
-      .update(current.estado === 'rechazada' ? { ...datos, ...resetFields } : datos)
-      .eq('id', current.id);
-    if (error) {
-      throw isUniqueViolation(error)
-        ? new AppError('Ya existe una solicitud activa para esta cédula', 409)
-        : error;
-    }
-
-    return { solicitudId: current.id, token: signSolicitudToken(current.id) };
+    let update = this.supabase.from('solicitudes_inscripcion').update({
+      cedula: input.cedula, nombre_completo: input.nombreCompleto, telefono: input.telefono ?? null,
+      fecha_nacimiento: input.fechaNacimiento, solicitada_at: current.solicitada_at ?? new Date().toISOString(),
+      ...(current.estado === 'rechazada' ? { estado: 'pendiente_revision' as const, motivo_rechazo: null, reviewed_by: null, reviewed_at: null } : {}),
+    }).eq('id', solicitudId).eq('estado', current.estado);
+    if (current.estado === 'pendiente_revision') update = update.is('reviewed_at', null);
+    const { data, error } = await update.select('id').maybeSingle();
+    if (error) throw isUniqueViolation(error) ? solicitudError('Ya existe una solicitud activa para esta cédula', 409, 'CEDULA_ACTIVA') : error;
+    if (!data) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
+    return { solicitudId, token: signSolicitudToken(solicitudId) };
   }
 
   // ---------------------------------------------------------------------

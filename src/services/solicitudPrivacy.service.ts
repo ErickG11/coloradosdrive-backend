@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { env } from '../config/env';
 import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
-import { calcularEdad } from './solicitud.service';
+import { calcularEdad } from '../utils/solicitudAge';
 import { solicitudError } from '../utils/solicitudError';
 
 type Consent = Database['public']['Tables']['solicitud_consentimientos']['Row'];
