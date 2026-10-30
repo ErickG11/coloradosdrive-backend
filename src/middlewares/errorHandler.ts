@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 
 import { isProduction } from '../config/env';
+import { solicitudErrorCode } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 
 interface ErrorResponseBody {
@@ -21,6 +22,15 @@ export function errorHandler(
   res: Response<ErrorResponseBody>,
   _next: NextFunction,
 ): void {
+  if (/^\/(?:admin\/)?solicitudes(?:\/|$|\?)/.test(req.originalUrl)) {
+    const operational = err instanceof AppError;
+    res.status(operational ? err.statusCode : 500).json({
+      status: 'error',
+      message: operational ? err.message : 'No se pudo completar la operación',
+      code: solicitudErrorCode(err),
+    });
+    return;
+  }
   // body-parser adjunta el JSON original a SyntaxError; puede contener el comentario de RF-04.
   if (
     req.method === 'POST' &&
