@@ -17,6 +17,7 @@ import { CohortAssignmentService } from '../services/cohortAssignment.service';
 import { EmailService } from '../services/email.service';
 import { SolicitudService, type DecidirSolicitudResult } from '../services/solicitud.service';
 import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPrivacy.service';
+import { SolicitudDocumentAccessService } from '../services/solicitudAudit.service';
 import { AppError } from '../utils/AppError';
 
 const solicitudService = new SolicitudService(
@@ -130,3 +131,7 @@ export async function aceptarConsentimiento(req: Request, res: Response): Promis
   res.json(await privacyService.accept(req.params.id, req.body as { versionAviso: string; aceptoTratamiento: boolean; declaraVeracidad: boolean }));
 }
 
+
+export async function documentoUrl(req: Request, res: Response): Promise<void> {
+  res.json(await new SolicitudDocumentAccessService(supabaseAdmin).url(req.params.id, req.params.docId, requireAdminId(req)));
+}

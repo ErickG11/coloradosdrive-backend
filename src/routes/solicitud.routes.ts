@@ -8,6 +8,7 @@ import {
   completarDatos,
   confirmarCodigo,
   decidirSolicitud,
+  documentoUrl,
   listarSolicitudes,
   revisarDocumento,
   subirDocumento,
@@ -187,3 +188,5 @@ solicitudRouter.get('/:id/progreso', applicationRateLimiter, authenticateSolicit
 solicitudRouter.put('/:id/consentimiento', applicationRateLimiter, authenticateSolicitud,
   [idParamValidator, body('versionAviso').isString()], validate, asyncHandler(aceptarConsentimiento));
 
+
+solicitudAdminRouter.get('/:id/documentos/:docId/url', [idParamValidator, param('docId').isUUID()], validate, asyncHandler(documentoUrl));
