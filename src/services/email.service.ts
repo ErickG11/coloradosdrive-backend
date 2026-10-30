@@ -291,4 +291,11 @@ export class EmailService {
       ].join('\n'),
     });
   }
+  async sendApplicationRejectedEmail(params: { to: string; motivo: string }): Promise<void> {
+    await this.transporter.sendMail({ from: env.EMAIL_FROM, to: params.to,
+      subject: 'Revisión de tu solicitud de ColoradosDrive',
+      text: `Tu solicitud no fue aprobada. Motivo: ${params.motivo}\nPuedes contactar a la escuela para más información.`,
+    });
+  }
+
 }

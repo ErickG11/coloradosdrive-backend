@@ -436,6 +436,7 @@ export class SolicitudService {
     adminId: string,
     input: { estado: 'aprobado' | 'rechazado'; motivoRechazo?: string },
   ): Promise<{ id: string; estado: 'aprobado' | 'rechazado' }> {
+    if (input.estado === 'rechazado' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
     const solicitud = await this.getOrThrow(solicitudId);
     if (solicitud.estado !== 'pendiente_revision') {
       throw new AppError('La solicitud ya fue resuelta', 409);
@@ -469,6 +470,7 @@ export class SolicitudService {
     adminId: string,
     input: DecidirSolicitudInput,
   ): Promise<DecidirSolicitudResult> {
+    if (input.estado === 'rechazada' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
     const solicitud = await this.getOrThrow(solicitudId);
     if (solicitud.estado !== 'pendiente_revision') {
       throw new AppError('La solicitud ya fue resuelta', 409);
@@ -486,7 +488,7 @@ export class SolicitudService {
           reviewed_at: reviewedAt,
         })
         .eq('id', solicitudId)
-        .eq('estado', 'pendiente_revision')
+        .eq('estado', 'pendiente_revision').is('reviewed_at', null)
         .select()
         .maybeSingle();
       if (error) {
@@ -495,7 +497,11 @@ export class SolicitudService {
       if (!data) {
         throw new AppError('La solicitud ya fue resuelta', 409);
       }
-      return { id: solicitudId, estado: 'rechazada', studentId: null, correoEnviado: null };
+      await recordSolicitudAudit(this.supabase, solicitudId, adminId, 'solicitud_rechazada');
+      let correoEnviado = true;
+      try { await this.emailService.sendApplicationRejectedEmail({ to: solicitud.correo, motivo: input.motivoRechazo?.trim() ?? '' }); }
+      catch { correoEnviado = false; }
+      return { id: solicitudId, estado: 'rechazada', studentId: null, correoEnviado };
     }
 
     if (!solicitud.cedula || !solicitud.nombre_completo || !solicitud.correo_verificado) {

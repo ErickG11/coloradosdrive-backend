@@ -259,7 +259,7 @@ describe('solicitudes de inscripción (admin)', () => {
       });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-        .mockReturnValueOnce(updateChain);
+        .mockReturnValueOnce(updateChain).mockReturnValueOnce(createChain({ data: null, error: null }));
 
       const res = await request(app)
         .patch(url)
@@ -271,7 +271,7 @@ describe('solicitudes de inscripción (admin)', () => {
         id: solicitudId,
         estado: 'rechazada',
         studentId: null,
-        correoEnviado: null,
+        correoEnviado: true,
       });
       expect(updateChain.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -283,6 +283,20 @@ describe('solicitudes de inscripción (admin)', () => {
       expect(mockedCreateUser).not.toHaveBeenCalled();
     });
 
+    it('exige motivo antes de rechazar', async () => {
+      const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'rechazada' });
+      expect(res.body.code).toBe('MOTIVO_REQUERIDO');
+      expect(mockedFrom).not.toHaveBeenCalled();
+    });
+    it('conserva rechazo si falla el correo', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
+        .mockReturnValueOnce(createChain({ data: buildSolicitud({ estado: 'rechazada' }), error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
+      mockedSendMail.mockRejectedValueOnce(new Error('SMTP'));
+      const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'rechazada', motivoRechazo: 'Revisar documentos' });
+      expect(res.status).toBe(200);
+      expect(res.body.correoEnviado).toBe(false);
+    });
     describe('aprobación', () => {
       function buildCohortRow(overrides: Partial<Record<string, unknown>> = {}) {
         return {
