@@ -17,6 +17,7 @@ import { AccountService } from '../services/account.service';
 import { CohortAssignmentService } from '../services/cohortAssignment.service';
 import { EmailService } from '../services/email.service';
 import { SolicitudService, type DecidirSolicitudResult } from '../services/solicitud.service';
+import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPrivacy.service';
 import { AppError } from '../utils/AppError';
 
 const solicitudService = new SolicitudService(
@@ -116,4 +117,12 @@ export async function decidirSolicitud(
     req.body as DecidirSolicitudInput,
   );
   res.status(200).json(result);
+}
+
+const privacyService = new SolicitudPrivacyService(supabaseAdmin);
+export function avisoPrivacidad(_req: Request, res: Response): void {
+  res.json(privacyNotice());
+}
+export async function progresoSolicitud(req: Request, res: Response): Promise<void> {
+  res.json(await privacyService.progress(req.params.id));
 }

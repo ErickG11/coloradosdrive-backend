@@ -789,6 +789,25 @@ export interface Database {
           },
         ];
       };
+      solicitud_consentimientos: {
+        Row: {
+          id: string; solicitud_id: string; version_aviso: string;
+          acepto_tratamiento: boolean; declara_veracidad: boolean; aceptado_at: string;
+          representante_nombre: string | null; representante_cedula: string | null; representante_acepta: boolean;
+        };
+        Insert: {
+          solicitud_id: string; version_aviso: string; acepto_tratamiento: boolean; declara_veracidad: boolean;
+          representante_nombre?: string | null; representante_cedula?: string | null; representante_acepta?: boolean;
+        };
+        Update: Partial<Database['public']['Tables']['solicitud_consentimientos']['Insert']>;
+        Relationships: [];
+      };
+      solicitud_auditoria: {
+        Row: { id: string; solicitud_id: string; actor_id: string | null; accion: string; documento_id: string | null; creado_at: string };
+        Insert: { solicitud_id: string; actor_id?: string | null; accion: string; documento_id?: string | null };
+        Update: never;
+        Relationships: [];
+      };
       solicitudes_inscripcion: {
         Row: {
           id: string;

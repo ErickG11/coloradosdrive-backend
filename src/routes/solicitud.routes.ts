@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { body, param, query } from 'express-validator';
 
 import {
+  avisoPrivacidad,
+  progresoSolicitud,
   completarDatos,
   confirmarCodigo,
   decidirSolicitud,
@@ -173,3 +175,7 @@ solicitudAdminRouter.patch(
   validate,
   asyncHandler(decidirSolicitud),
 );
+
+export const privacyRouter = Router();
+privacyRouter.get('/aviso-privacidad', avisoPrivacidad);
+solicitudRouter.get('/:id/progreso', applicationRateLimiter, authenticateSolicitud, idParamValidator, validate, asyncHandler(progresoSolicitud));

@@ -17,6 +17,8 @@ function optionalEnv(name: string, fallback: string): string {
 
 export const env = {
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
+  SOLICITUD_RETENCION_DIAS: Number(optionalEnv('SOLICITUD_RETENCION_DIAS', '30')),
+  PRIVACY_CONTACT_EMAIL: optionalEnv('PRIVACY_CONTACT_EMAIL', requireEnv('EMAIL_USER')),
   TRUST_PROXY_HOPS: Number(optionalEnv('TRUST_PROXY_HOPS', '1')),
   PORT: Number(optionalEnv('PORT', '3000')),
   FRONTEND_URL: requireEnv('FRONTEND_URL'),
@@ -39,4 +41,8 @@ export const isProduction = env.NODE_ENV === 'production';
 
 if (!Number.isInteger(env.TRUST_PROXY_HOPS) || env.TRUST_PROXY_HOPS < 0 || env.TRUST_PROXY_HOPS > 2) {
   throw new Error('TRUST_PROXY_HOPS debe ser 0, 1 o 2');
+}
+
+if (!Number.isInteger(env.SOLICITUD_RETENCION_DIAS) || env.SOLICITUD_RETENCION_DIAS < 1) {
+  throw new Error('SOLICITUD_RETENCION_DIAS debe ser un entero positivo');
 }
