@@ -20,6 +20,7 @@ import {
 } from '../models/solicitud.model';
 import { calcularEdad, validateApplicant } from '../utils/solicitudAge';
 import { SolicitudPrivacyService } from './solicitudPrivacy.service';
+import { recordSolicitudAudit } from './solicitudAudit.service';
 import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { detectFileType } from '../utils/fileSignature';
@@ -432,6 +433,7 @@ export class SolicitudService {
   async revisarDocumento(
     solicitudId: string,
     documentoId: string,
+    adminId: string,
     input: { estado: 'aprobado' | 'rechazado'; motivoRechazo?: string },
   ): Promise<{ id: string; estado: 'aprobado' | 'rechazado' }> {
     const solicitud = await this.getOrThrow(solicitudId);
@@ -445,6 +447,7 @@ export class SolicitudService {
         estado: input.estado,
         motivo_rechazo: input.estado === 'rechazado' ? (input.motivoRechazo ?? null) : null,
         reviewed_at: new Date().toISOString(),
+        reviewed_by: adminId,
       })
       .eq('id', documentoId)
       .eq('solicitud_id', solicitudId)
@@ -457,6 +460,7 @@ export class SolicitudService {
       throw new AppError('El documento indicado no existe en esta solicitud', 404);
     }
 
+    await recordSolicitudAudit(this.supabase, solicitudId, adminId, `documento_${input.estado}`, documentoId);
     return { id: data.id, estado: input.estado };
   }
 
