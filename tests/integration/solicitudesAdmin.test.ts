@@ -237,7 +237,7 @@ describe('solicitudes de inscripción (admin)', () => {
       const res = await request(app)
         .patch(url)
         .set('Authorization', adminAuth())
-        .send({ estado: 'rechazada' });
+        .send({ estado: 'rechazada', motivoRechazo: 'Motivo de revisión' });
 
       expect(res.status).toBe(404);
     });
