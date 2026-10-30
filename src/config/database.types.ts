@@ -70,6 +70,10 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      eliminar_solicitud_reclamada: {
+        Args: { p_solicitud: string; p_claim: string; p_actor: string | null; p_accion: string };
+        Returns: undefined;
+      };
       finalizar_aprobacion_solicitud: {
         Args: { p_solicitud: string; p_actor: string; p_claim: string; p_student: string; p_enrollment: string };
         Returns: undefined;

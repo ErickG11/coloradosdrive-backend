@@ -9,6 +9,7 @@ import {
   confirmarCodigo,
   decidirSolicitud,
   documentoUrl,
+  eliminarSolicitud,
   listarSolicitudes,
   revisarDocumento,
   subirDocumento,
@@ -190,3 +191,5 @@ solicitudRouter.put('/:id/consentimiento', applicationRateLimiter, authenticateS
 
 
 solicitudAdminRouter.get('/:id/documentos/:docId/url', [idParamValidator, param('docId').isUUID()], validate, asyncHandler(documentoUrl));
+
+solicitudAdminRouter.delete('/:id', idParamValidator, validate, asyncHandler(eliminarSolicitud));
