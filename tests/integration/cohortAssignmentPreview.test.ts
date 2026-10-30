@@ -89,7 +89,7 @@ describe('POST /admin/cohort-assignment/preview', () => {
     });
   });
 
-  it('sin ninguna cohorte con matrícula abierta, responde cohortId null con mensaje', async () => {
+  it('sin ninguna cohorte con cupo y margen de cinco días, responde cohortId null con mensaje', async () => {
     mockedFrom.mockReturnValueOnce(createChain({ data: [], error: null })); // cohorts
 
     const res = await request(app)
@@ -100,7 +100,7 @@ describe('POST /admin/cohort-assignment/preview', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       cohortId: null,
-      mensaje: 'ninguna cohorte con matrícula abierta',
+      mensaje: 'ninguna cohorte con cupo y margen de cinco días',
     });
   });
 
