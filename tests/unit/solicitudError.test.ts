@@ -1,5 +1,5 @@
 import { AppError } from '../../src/utils/AppError';
-import { solicitudError, solicitudErrorCode } from '../../src/utils/solicitudError';
+import { normalizeSolicitudError, solicitudError, solicitudErrorCode } from '../../src/utils/solicitudError';
 
 describe('errores estables de solicitudes', () => {
   it.each([
@@ -14,4 +14,10 @@ describe('errores estables de solicitudes', () => {
     expect(solicitudErrorCode(new Error('detalle privado'))).toBe('ERROR_INTERNO');
     expect(solicitudErrorCode(solicitudError('Aviso', 409, 'AVISO_DESACTUALIZADO'))).toBe('AVISO_DESACTUALIZADO');
   });
+});
+
+it('traduce conflictos concurrentes de SQL sin exponer detalles', () => {
+ const error = Object.assign(new Error('detalle interno'), { code: 'SI409' });
+ expect(normalizeSolicitudError(error)).toMatchObject({statusCode:409,code:'SOLICITUD_CERRADA'});
+ expect(normalizeSolicitudError(error).message).not.toContain('detalle interno');
 });
