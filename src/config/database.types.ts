@@ -875,6 +875,7 @@ export interface Database {
           motivo_rechazo: string | null;
           uploaded_at: string;
           reviewed_at: string | null;
+          reviewed_by: string | null;
         };
         Insert: {
           id?: string;
@@ -889,6 +890,7 @@ export interface Database {
           motivo_rechazo: string | null;
           uploaded_at: string;
           reviewed_at: string | null;
+          reviewed_by: string | null;
         }>;
         Relationships: [];
       };

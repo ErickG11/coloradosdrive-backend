@@ -99,7 +99,7 @@ export async function revisarDocumento(
     estado: 'aprobado' | 'rechazado';
     motivoRechazo?: string;
   };
-  const result = await solicitudService.revisarDocumento(req.params.id, req.params.docId, {
+  const result = await solicitudService.revisarDocumento(req.params.id, req.params.docId, requireAdminId(req), {
     estado,
     motivoRechazo,
   });

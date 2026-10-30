@@ -154,7 +154,8 @@ describe('solicitudes de inscripción (admin)', () => {
       const updateChain = createChain({ data: { id: docId }, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-        .mockReturnValueOnce(updateChain);
+        .mockReturnValueOnce(updateChain)
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
 
       const res = await request(app)
         .patch(url)
@@ -164,7 +165,7 @@ describe('solicitudes de inscripción (admin)', () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ id: docId, estado: 'rechazado' });
       expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({ estado: 'rechazado', motivo_rechazo: 'Foto borrosa' }),
+        expect.objectContaining({ reviewed_by: adminId, estado: 'rechazado', motivo_rechazo: 'Foto borrosa' }),
       );
       // Solo puede tocar documentos de ESTA solicitud.
       expect(updateChain.eq).toHaveBeenCalledWith('solicitud_id', solicitudId);
@@ -174,7 +175,8 @@ describe('solicitudes de inscripción (admin)', () => {
       const updateChain = createChain({ data: { id: docId }, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-        .mockReturnValueOnce(updateChain);
+        .mockReturnValueOnce(updateChain)
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
 
       const res = await request(app)
         .patch(url)
@@ -183,7 +185,7 @@ describe('solicitudes de inscripción (admin)', () => {
 
       expect(res.status).toBe(200);
       expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({ estado: 'aprobado', motivo_rechazo: null }),
+        expect.objectContaining({ reviewed_by: adminId, estado: 'aprobado', motivo_rechazo: null }),
       );
     });
 
