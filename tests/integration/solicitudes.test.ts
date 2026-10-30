@@ -23,6 +23,8 @@ import { createApp } from '../../src/app';
 import { mailer } from '../../src/config/mailer';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { signSolicitudToken, verifySolicitudToken } from '../../src/utils/solicitudToken';
+import { AppError } from '../../src/utils/AppError';
+import { SolicitudPrivacyService } from '../../src/services/solicitudPrivacy.service';
 import { createChain } from '../helpers/supabaseMock';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
@@ -60,7 +62,7 @@ function buildSolicitud(overrides: Partial<Record<string, unknown>> = {}) {
     reviewed_by: null,
     reviewed_at: null,
     student_id: null,
-    solicitada_at: null,
+    solicitada_at: overrides.cedula ? '2026-01-02T12:00:00Z' : null,
     created_at: '2026-01-01T00:00:00Z',
     ...overrides,
   };
@@ -370,6 +372,21 @@ describe('solicitudes de inscripción (público)', () => {
   });
 
   describe('POST /solicitudes/:id/documentos', () => {
+    beforeEach(() => {
+      jest.spyOn(SolicitudPrivacyService.prototype, 'requireConsent').mockResolvedValue({
+        id: 'consent', solicitud_id: solicitudId, version_aviso: '2026-10-v1', acepto_tratamiento: true,
+        declara_veracidad: true, aceptado_at: '2026-01-01', representante_nombre: null, representante_cedula: null, representante_acepta: false,
+      });
+    });
+    afterEach(() => jest.restoreAllMocks());
+    it('rechaza documentos sin consentimiento vigente', async () => {
+      jest.spyOn(SolicitudPrivacyService.prototype, 'requireConsent').mockRejectedValueOnce(new AppError('Acepta el aviso', 409, { code: 'CONSENTIMIENTO_REQUERIDO' }));
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ cedula: VALID_CEDULA }), error: null }));
+      const res = await request(app).post(`/solicitudes/${solicitudId}/documentos`).set('Authorization', bearer())
+        .field('tipo_documento', 'cedula').attach('archivo', Buffer.from('%PDF-1'), { filename: 'd.pdf', contentType: 'application/pdf' });
+      expect(res.body.code).toBe('CONSENTIMIENTO_REQUERIDO');
+      expect(mockedStorageFrom).not.toHaveBeenCalled();
+    });
     // Firmas binarias reales: subirDocumento ya no confía en el
     // Content-Type declarado, así que un contenido de relleno (puros
     // 0x01) no pasaría la detección real y rompería los tests que no
