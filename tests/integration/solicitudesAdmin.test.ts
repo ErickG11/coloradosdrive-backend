@@ -3,6 +3,7 @@ import request from 'supertest';
 jest.mock('../../src/config/supabase', () => ({
   supabaseAdmin: {
     from: jest.fn(),
+    rpc: jest.fn(),
     storage: { from: jest.fn() },
     auth: { admin: { createUser: jest.fn(), deleteUser: jest.fn() } },
   },
@@ -26,6 +27,7 @@ import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
 import { signSolicitudToken } from '../../src/utils/solicitudToken';
 
+const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedFrom = supabaseAdmin.from as jest.Mock;
 const mockedStorageFrom = supabaseAdmin.storage.from as jest.Mock;
 const mockedCreateUser = supabaseAdmin.auth.admin.createUser as jest.Mock;
@@ -58,6 +60,7 @@ function buildSolicitud(overrides: Partial<Record<string, unknown>> = {}) {
     reviewed_by: null,
     reviewed_at: null,
     student_id: null,
+    solicitada_at: '2026-01-05T12:00:00Z',
     created_at: '2026-01-01T00:00:00Z',
     ...overrides,
   };
@@ -72,6 +75,7 @@ describe('solicitudes de inscripción (admin)', () => {
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    mockedRpc.mockReset().mockResolvedValue({ data: null, error: null });
     mockedFrom.mockReset();
     mockedStorageFrom.mockReset();
     mockedCreateUser.mockReset();
@@ -298,260 +302,61 @@ describe('solicitudes de inscripción (admin)', () => {
       expect(res.body.correoEnviado).toBe(false);
     });
     describe('aprobación', () => {
-      function buildCohortRow(overrides: Partial<Record<string, unknown>> = {}) {
-        return {
-          id: cohortId,
-          precio: '150.00',
-          cupo_maximo: 20,
-          fecha_inicio_matricula: '2026-01-01',
-          fecha_fin_matricula: '2026-12-31',
-          fecha_inicio_curso: '2026-02-01',
-          created_at: '2025-12-01T00:00:00Z',
-          ...overrides,
-        };
-      }
-
-      // Camino feliz: hay una cohorte del curso con matrícula abierta y
-      // cupo, así que la asignación automática la elige (6 llamadas a
-      // `.from`: getOrThrow, users insert, cohorts select, enrollments
-      // (ocupación), enrollments insert, solicitud update).
-      function mockApproveHappyPath() {
+      const consent = { id: 'consent', acepto_tratamiento: true, declara_veracidad: true };
+      function mockApproval(withCohort = true, losesClaim = false) {
+        const claim = createChain({ data: losesClaim ? null : { id: solicitudId }, error: null });
+        const profile = createChain({ data: null, error: null });
+        const enrollment = createChain({ data: { id: 'enrollment' }, error: null });
         mockedCreateUser.mockResolvedValue({ data: { user: { id: newStudentId } }, error: null });
-        const usersInsertChain = createChain({ data: null, error: null });
-        const cohortsSelectChain = createChain({ data: [buildCohortRow()], error: null });
-        const enrollmentsOcupadosChain = createChain({ data: [], error: null });
-        const enrollmentInsertChain = createChain({ data: null, error: null });
-        const updateChain = createChain({
-          data: buildSolicitud({ estado: 'aprobada' }),
-          error: null,
-        });
-        mockedFrom
-          .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null })) // getOrThrow
-          .mockReturnValueOnce(usersInsertChain)
-          .mockReturnValueOnce(cohortsSelectChain) // CohortAssignmentService: cohorts
-          .mockReturnValueOnce(enrollmentsOcupadosChain) // CohortAssignmentService: ocupación
-          .mockReturnValueOnce(enrollmentInsertChain) // insert enrollments
-          .mockReturnValueOnce(updateChain); // solicitud -> aprobada
-        return { usersInsertChain, cohortsSelectChain, enrollmentInsertChain, updateChain };
+        mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
+          .mockReturnValueOnce(createChain({ data: consent, error: null })).mockReturnValueOnce(claim);
+        if (!losesClaim) {
+          mockedFrom.mockReturnValueOnce(profile).mockReturnValueOnce(createChain({ data: withCohort ? [{ id: cohortId, precio: '150', cupo_maximo: 20, fecha_inicio_matricula: '2026-11-01', fecha_fin_matricula: '2026-11-30', fecha_inicio_curso: '2026-12-01', created_at: '2026-01-01' }] : [], error: null }));
+          if (withCohort) mockedFrom.mockReturnValueOnce(createChain({ data: [], error: null }));
+          mockedFrom.mockReturnValueOnce(enrollment);
+        }
+        return { claim, profile, enrollment };
       }
-
-      it('crea la cuenta con clave temporal, la fila en users (verificado + debe_cambiar_password) y guarda student_id', async () => {
-        const { usersInsertChain, updateChain } = mockApproveHappyPath();
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
+      it('crea perfil con nacimiento y finaliza checklist/auditoría por RPC', async () => {
+        const { profile, enrollment, claim } = mockApproval();
+        const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({
-          id: solicitudId,
-          estado: 'aprobada',
-          studentId: newStudentId,
-          correoEnviado: true,
-        });
-        expect(mockedCreateUser).toHaveBeenCalledWith(
-          expect.objectContaining({
-            email: 'ana@example.com',
-            email_confirm: true,
-            app_metadata: { role: 'estudiante' },
-          }),
-        );
-        expect(usersInsertChain.insert).toHaveBeenCalledWith({
-          id: newStudentId,
-          cedula: '1710034065',
-          nombre_completo: 'Ana Torres',
-          telefono: '0991234567',
-          rol: 'estudiante',
-          status: 'verificado',
-          debe_cambiar_password: true,
-        });
-        expect(updateChain.update).toHaveBeenCalledWith(
-          expect.objectContaining({
-            estado: 'aprobada',
-            student_id: newStudentId,
-            reviewed_by: adminId,
-          }),
-        );
-        // Guard contra doble aprobación concurrente.
-        expect(updateChain.eq).toHaveBeenCalledWith('estado', 'pendiente_revision');
+        expect(profile.insert).toHaveBeenCalledWith(expect.objectContaining({ fecha_nacimiento: '1995-05-20', debe_cambiar_password: true }));
+        expect(enrollment.insert).toHaveBeenCalledWith(expect.objectContaining({ cohort_id: cohortId, course_id: courseId }));
+        expect(claim.is).toHaveBeenCalledWith('reviewed_at', null);
+        expect(mockedRpc).toHaveBeenCalledWith('finalizar_aprobacion_solicitud', expect.objectContaining({ p_solicitud: solicitudId, p_actor: adminId, p_enrollment: 'enrollment' }));
+        expect(res.body.cohorteAsignada).toEqual({ cohortId, estado: 'activo' });
+        expect(mockedSendMail).toHaveBeenCalled();
       });
-
-      it('envía por correo la contraseña temporal que se usó al crear la cuenta', async () => {
-        mockApproveHappyPath();
-
-        await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        const createdPassword = (mockedCreateUser.mock.calls[0][0] as { password: string })
-          .password;
-        expect(mockedSendMail).toHaveBeenCalledTimes(1);
-        const mail = mockedSendMail.mock.calls[0][0] as { to: string; text: string };
-        expect(mail.to).toBe('ana@example.com');
-        expect(mail.text).toContain(createdPassword);
+      it('sin candidata queda pendiente de cohorte', async () => {
+        mockApproval(false);
+        const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });
+        expect(res.body.cohorteAsignada).toEqual({ cohortId: null, estado: 'pendiente_cohorte' });
       });
-
-      it('aprueba con total discreción: no exige documentos aprobados', async () => {
-        mockApproveHappyPath();
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        // getOrThrow, users insert, cohorts select, enrollments (ocupación),
-        // enrollment insert, solicitud update: ninguna consulta a
-        // solicitud_documentos.
-        expect(res.status).toBe(200);
-        expect(mockedFrom).toHaveBeenCalledTimes(6);
-        expect((mockedFrom.mock.calls as string[][]).map((c) => c[0])).not.toContain(
-          'solicitud_documentos',
-        );
-      });
-
-      it('asigna automáticamente la cohorte del curso al que aplicó y crea el enrollment activo', async () => {
-        const { cohortsSelectChain, enrollmentInsertChain } = mockApproveHappyPath();
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        expect(res.status).toBe(200);
-        expect(cohortsSelectChain.eq).toHaveBeenCalledWith('course_id', courseId);
-        expect(enrollmentInsertChain.insert).toHaveBeenCalledWith({
-          student_id: newStudentId,
-          cohort_id: cohortId,
-          status: 'activo',
-          monto_total: 150,
-        });
-      });
-
-      it('si ninguna cohorte del curso tiene matrícula abierta, crea el enrollment pendiente_cohorte', async () => {
-        mockedCreateUser.mockResolvedValue({ data: { user: { id: newStudentId } }, error: null });
-        const usersInsertChain = createChain({ data: null, error: null });
-        const enrollmentInsertChain = createChain({ data: null, error: null });
-        const updateChain = createChain({
-          data: buildSolicitud({ estado: 'aprobada' }),
-          error: null,
-        });
-        mockedFrom
-          .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null })) // getOrThrow
-          .mockReturnValueOnce(usersInsertChain)
-          .mockReturnValueOnce(createChain({ data: [], error: null })) // cohorts: ninguna del curso
-          .mockReturnValueOnce(enrollmentInsertChain)
-          .mockReturnValueOnce(updateChain);
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        expect(res.status).toBe(200);
-        expect(enrollmentInsertChain.insert).toHaveBeenCalledWith({
-          student_id: newStudentId,
-          cohort_id: null,
-          course_id: courseId,
-          status: 'pendiente_cohorte',
-          monto_total: null,
-        });
-      });
-
-      it('si el correo falla, la cuenta igual queda creada (no se revierte) y el error se registra', async () => {
-        mockApproveHappyPath();
-        mockedSendMail.mockRejectedValueOnce(new Error('smtp caído'));
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        expect(res.status).toBe(200);
-        expect(res.body).toMatchObject({
-          estado: 'aprobada',
-          studentId: newStudentId,
-          correoEnviado: false,
-        });
-        expect(mockedDeleteUser).not.toHaveBeenCalled();
-        expect(errorSpy).toHaveBeenCalled();
-      });
-
-      it('responde 409 sin crear nada si la solicitud no tiene los datos completos', async () => {
-        mockedFrom.mockReturnValueOnce(
-          createChain({
-            data: buildSolicitud({ cedula: null, nombre_completo: null }),
-            error: null,
-          }),
-        );
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        expect(res.status).toBe(409);
+      it('la aprobación competidora no crea una segunda cuenta', async () => {
+        mockApproval(true, true);
+        const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });
+        expect(res.body.code).toBe('SOLICITUD_CERRADA');
         expect(mockedCreateUser).not.toHaveBeenCalled();
       });
-
-      it('responde 409 si ya existe un usuario de Auth con ese correo, sin tocar la base', async () => {
-        mockedCreateUser.mockResolvedValue({
-          data: { user: null },
-          error: { code: 'email_exists' },
-        });
-        mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }));
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        expect(res.status).toBe(409);
-        expect(mockedFrom).toHaveBeenCalledTimes(1);
+      it('no crea cuenta sin consentimiento', async () => {
+        mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null })).mockReturnValueOnce(createChain({ data: null, error: null }));
+        const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });
+        expect(res.body.code).toBe('CONSENTIMIENTO_REQUERIDO');
+        expect(mockedCreateUser).not.toHaveBeenCalled();
       });
-
-      it('si la cédula ya existe en users, responde 409 y borra la cuenta de Auth recién creada', async () => {
-        mockedCreateUser.mockResolvedValue({ data: { user: { id: newStudentId } }, error: null });
-        mockedFrom
-          .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-          .mockReturnValueOnce(
-            createChain({ data: null, error: { code: '23505', message: 'duplicate' } }),
-          )
-          // Rollback: intenta borrar un enrollment huérfano (no llegó a
-          // crearse ninguno en este punto, pero el borrado es incondicional
-          // y no-op si no hay filas).
+      it('un fallo de correo no revierte la aprobación', async () => {
+        mockApproval(); mockedSendMail.mockRejectedValueOnce(new Error('SMTP'));
+        const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });
+        expect(res.status).toBe(200); expect(res.body.correoEnviado).toBe(false);
+        expect(mockedDeleteUser).not.toHaveBeenCalled();
+      });
+      it('compensa matrícula y Auth si falla la transacción final', async () => {
+        mockApproval(); mockedRpc.mockResolvedValueOnce({ error: { code: 'fallo' } });
+        mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }))
           .mockReturnValueOnce(createChain({ data: null, error: null }));
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        expect(res.status).toBe(409);
-        expect(mockedDeleteUser).toHaveBeenCalledWith(newStudentId);
-        expect(mockedSendMail).not.toHaveBeenCalled();
-      });
-
-      it('si otra aprobación ganó la carrera (el UPDATE no matchea), borra el enrollment y la cuenta creados, responde 409', async () => {
-        mockedCreateUser.mockResolvedValue({ data: { user: { id: newStudentId } }, error: null });
-        mockedFrom
-          .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null })) // getOrThrow
-          .mockReturnValueOnce(createChain({ data: null, error: null })) // users insert ok
-          .mockReturnValueOnce(createChain({ data: [buildCohortRow()], error: null })) // cohorts
-          .mockReturnValueOnce(createChain({ data: [], error: null })) // ocupación
-          .mockReturnValueOnce(createChain({ data: null, error: null })) // enrollment insert ok
-          .mockReturnValueOnce(createChain({ data: null, error: null })) // update: 0 filas
-          .mockReturnValueOnce(createChain({ data: null, error: null })); // rollback: borra enrollment
-
-        const res = await request(app)
-          .patch(url)
-          .set('Authorization', adminAuth())
-          .send({ estado: 'aprobada' });
-
-        expect(res.status).toBe(409);
-        expect(mockedDeleteUser).toHaveBeenCalledWith(newStudentId);
-        expect(mockedSendMail).not.toHaveBeenCalled();
+        const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });
+        expect(res.status).toBe(500); expect(mockedDeleteUser).toHaveBeenCalledWith(newStudentId);
       });
     });
   });
