@@ -4,6 +4,7 @@ import { AppError } from './AppError';
 export function solicitudErrorCode(error: unknown): string {
   if (!(error instanceof AppError)) return 'ERROR_INTERNO';
   if (error.code) return error.code;
+  if (error.message.startsWith('motivoRechazo')) return 'MOTIVO_REQUERIDO';
   if (error.message === 'Código inválido o vencido') return 'CODIGO_INVALIDO_O_VENCIDO';
   if (error.message.startsWith('Demasiados intentos fallidos')) return 'INTENTOS_AGOTADOS';
   if (error.statusCode === 429) return 'LIMITE_PETICIONES';
