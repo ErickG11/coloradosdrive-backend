@@ -351,8 +351,16 @@ describe('solicitudes de inscripción (admin)', () => {
         expect(res.status).toBe(200); expect(res.body.correoEnviado).toBe(false);
         expect(mockedDeleteUser).not.toHaveBeenCalled();
       });
+      it('recupera una aprobación confirmada aunque se pierda la respuesta RPC', async () => {
+        mockApproval(); mockedRpc.mockResolvedValueOnce({ error: { code: 'red' } });
+        mockedFrom.mockReturnValueOnce(createChain({ data: { estado: 'aprobada', student_id: newStudentId }, error: null }));
+        const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });
+        expect(res.status).toBe(200);
+        expect(mockedDeleteUser).not.toHaveBeenCalled();
+      });
       it('compensa matrícula y Auth si falla la transacción final', async () => {
         mockApproval(); mockedRpc.mockResolvedValueOnce({ error: { code: 'fallo' } });
+        mockedFrom.mockReturnValueOnce(createChain({ data: { estado: 'pendiente_revision' }, error: null }));
         mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }))
           .mockReturnValueOnce(createChain({ data: null, error: null }));
         const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobada' });

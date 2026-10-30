@@ -521,6 +521,7 @@ export class SolicitudService {
     if (!claim.data) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
     let account: { userId: string; temporaryPassword: string } | null = null;
     let assigned: { id: string; cohortId: string | null; estado: string };
+    let uncertain = false;
     try {
       account = await this.accountService.crearCuentaConClaveTemporal(solicitud.correo);
       const { error } = await this.supabase.from('users').insert({
@@ -533,8 +534,17 @@ export class SolicitudService {
       const result = await this.supabase.rpc('finalizar_aprobacion_solicitud', {
         p_solicitud: solicitudId, p_actor: adminId, p_claim: reviewedAt, p_student: account.userId, p_enrollment: assigned.id,
       });
-      if (result.error) throw result.error;
+      if (result.error) {
+        // Una respuesta perdida puede ocultar una transacción ya confirmada.
+        const confirmed = await this.supabase.from('solicitudes_inscripcion').select('estado,student_id').eq('id', solicitudId).maybeSingle();
+        if (confirmed.error) {
+          uncertain = true;
+          throw solicitudError('No se pudo confirmar la aprobación. Recarga antes de reintentar', 503, 'APROBACION_NO_CONFIRMADA');
+        }
+        if (confirmed.data?.estado !== 'aprobada' || confirmed.data.student_id !== account.userId) throw result.error;
+      }
     } catch (err) {
+      if (uncertain) throw err;
       if (account) {
         await this.eliminarEnrollmentDeEstudiante(account.userId);
         await this.accountService.eliminarCuenta(account.userId);
