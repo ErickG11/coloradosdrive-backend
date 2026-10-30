@@ -807,9 +807,11 @@ export interface Database {
           reviewed_by: string | null;
           reviewed_at: string | null;
           student_id: string | null;
+          solicitada_at: string | null;
           created_at: string;
         };
         Insert: {
+          solicitada_at?: string | null;
           id?: string;
           course_id: string;
           cedula?: string | null;
@@ -839,6 +841,7 @@ export interface Database {
           reviewed_by: string | null;
           reviewed_at: string | null;
           student_id: string | null;
+          solicitada_at: string | null;
           created_at: string;
         }>;
         Relationships: [];
