@@ -53,6 +53,8 @@ export interface VerificarCorreoInput {
 }
 
 export interface SolicitudAdminView {
+  solicitadaAt?: string | null;
+  consentimiento?: { version: string; aceptadoAt: string; representanteNombre: string | null; representanteCedula: string | null; representanteAcepta: boolean } | null;
   id: string;
   courseId: string;
   cedula: string | null;

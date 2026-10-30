@@ -42,7 +42,6 @@ const MAX_INTENTOS_ASIGNACION_COHORTE = 5;
 export const SOLICITUDES_BUCKET = 'solicitudes-documentos';
 export const CODE_TTL_MINUTES = 15;
 export const MAX_CODE_ATTEMPTS = 5;
-const SIGNED_URL_SECONDS = 300;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 const EXTENSION_BY_DETECTED_TYPE: Record<string, string> = {
@@ -335,23 +334,26 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   // Panel del admin
   // ---------------------------------------------------------------------
-  async listarParaAdmin(estado?: SolicitudEstado): Promise<SolicitudAdminView[]> {
+  async listarParaAdmin(estado?: SolicitudEstado, page = 1, pageSize = 20, q = ''): Promise<{ items: SolicitudAdminView[]; total: number; page: number; pageSize: number }> {
     // Las filas que solo verificaron el correo (sin cédula) son solicitudes
     // en progreso: todavía no hay nada que revisar.
     let query = this.supabase
       .from('solicitudes_inscripcion')
-      .select()
+      .select('*', { count: 'exact' })
       .not('cedula', 'is', null)
-      .order('created_at');
+      .order('created_at', { ascending: false }).order('id');
     if (estado) {
       query = query.eq('estado', estado);
     }
-    const { data: solicitudes, error } = await query;
+    // q se limita a caracteres literales para no inyectar operadores PostgREST.
+    const search = q.replace(/[^\p{L}\p{N}@. _-]/gu, '').trim();
+    if (search) query = query.or(`cedula.ilike.%${search}%,nombre_completo.ilike.%${search}%,correo.ilike.%${search}%`);
+    const { data: solicitudes, error, count } = await query.range((page - 1) * pageSize, page * pageSize - 1);
     if (error) {
       throw error;
     }
     if (solicitudes.length === 0) {
-      return [];
+      return { items: [], total: count ?? 0, page, pageSize };
     }
 
     const { data: documentos, error: docsError } = await this.supabase
@@ -365,11 +367,13 @@ export class SolicitudService {
       throw docsError;
     }
 
-    const urlByPath = await this.signPaths(documentos.map((d) => d.storage_path));
+    const urlByPath = new Map<string, string>();
+    const { data: consents, error: consentError } = await this.supabase.from('solicitud_consentimientos').select().in('solicitud_id', solicitudes.map(s => s.id)).order('aceptado_at', { ascending: false });
+    if (consentError) throw consentError;
     const relatedByCedula = await this.findRelatedByCedula(solicitudes);
 
-    return solicitudes.map((solicitud) =>
-      toAdminView(
+    const items = solicitudes.map((solicitud) => ({
+      ...toAdminView(
         solicitud,
         this.buildChecklist(
           solicitud,
@@ -378,7 +382,13 @@ export class SolicitudService {
         ),
         (relatedByCedula.get(solicitud.cedula) ?? []).filter((r) => r.id !== solicitud.id),
       ),
-    );
+      solicitadaAt: solicitud.solicitada_at,
+      consentimiento: ((): SolicitudAdminView['consentimiento'] => {
+        const c = consents.find(c => c.solicitud_id === solicitud.id);
+        return c ? { version: c.version_aviso, aceptadoAt: c.aceptado_at, representanteNombre: c.representante_nombre, representanteCedula: c.representante_cedula, representanteAcepta: c.representante_acepta } : null;
+      })(),
+    }));
+    return { items, total: count ?? 0, page, pageSize };
   }
 
   // Cualquier OTRA solicitud (de cualquier estado) que comparta cédula con
@@ -707,26 +717,6 @@ export class SolicitudService {
     if (deleteError) {
       throw deleteError;
     }
-  }
-
-  private async signPaths(paths: string[]): Promise<Map<string, string>> {
-    const urlByPath = new Map<string, string>();
-    if (paths.length === 0) {
-      return urlByPath;
-    }
-
-    const { data, error } = await this.supabase.storage
-      .from(SOLICITUDES_BUCKET)
-      .createSignedUrls(paths, SIGNED_URL_SECONDS);
-    if (error) {
-      throw new AppError('No se pudieron generar los enlaces de los documentos', 502);
-    }
-    for (const item of data) {
-      if (item.path && item.signedUrl) {
-        urlByPath.set(item.path, item.signedUrl);
-      }
-    }
-    return urlByPath;
   }
 
   private buildChecklist(

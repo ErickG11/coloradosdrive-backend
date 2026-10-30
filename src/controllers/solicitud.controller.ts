@@ -6,7 +6,6 @@ import type {
   CompletarDatosResult,
   ConfirmarCodigoResult,
   DecidirSolicitudInput,
-  SolicitudAdminView,
   SolicitudDatosInput,
   SolicitudDocumentoResult,
   SolicitudEstado,
@@ -85,10 +84,10 @@ function requireAdminId(req: Request): string {
 
 export async function listarSolicitudes(
   req: Request,
-  res: Response<SolicitudAdminView[]>,
+  res: Response,
 ): Promise<void> {
   const estado = req.query.estado as SolicitudEstado | undefined;
-  res.status(200).json(await solicitudService.listarParaAdmin(estado));
+  res.status(200).json(await solicitudService.listarParaAdmin(estado, Number(req.query.page ?? 1), Number(req.query.pageSize ?? 20), typeof req.query.q === 'string' ? req.query.q : ''));
 }
 
 export async function revisarDocumento(
@@ -130,3 +129,4 @@ export async function progresoSolicitud(req: Request, res: Response): Promise<vo
 export async function aceptarConsentimiento(req: Request, res: Response): Promise<void> {
   res.json(await privacyService.accept(req.params.id, req.body as { versionAviso: string; aceptoTratamiento: boolean; declaraVeracidad: boolean }));
 }
+

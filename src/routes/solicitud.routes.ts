@@ -141,6 +141,9 @@ const motivoValidator = body('motivoRechazo')
 solicitudAdminRouter.get(
   '/',
   [
+    query('page').optional().isInt({ min: 1, max: 1000000 }),
+    query('pageSize').optional().isInt({ min: 1, max: 100 }),
+    query('q').optional().isString().trim().isLength({ max: 100 }),
     query('estado')
       .optional()
       .isIn(SOLICITUD_ESTADOS)
@@ -183,3 +186,4 @@ solicitudRouter.get('/:id/progreso', applicationRateLimiter, authenticateSolicit
 
 solicitudRouter.put('/:id/consentimiento', applicationRateLimiter, authenticateSolicitud,
   [idParamValidator, body('versionAviso').isString()], validate, asyncHandler(aceptarConsentimiento));
+
