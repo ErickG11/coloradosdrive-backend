@@ -8,6 +8,7 @@ import type {
   CandidateCohort,
   CohortCandidateSnapshot,
 } from '../models/cohortAssignment.model';
+import { qualifiesForCohort } from '../utils/cohortEligibility';
 import { parseFechaCivil, SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
 
 const MS_PER_DAY = 86_400_000;
@@ -82,6 +83,14 @@ export function assignCohort(
   };
 }
 
+// Motor de inscripción pública. El motor manual anterior se conserva para
+// no cambiar el wizard ni la asignación administrativa de Alumnos.
+export function assignSolicitudCohort(requestedAt: Date, candidates: CandidateCohort[]): AssignmentResult {
+  const eligible = candidates.filter(c => qualifiesForCohort(requestedAt, c.fechaFinMatricula, c.cupoOcupado, c.cupoMaximo));
+  eligible.sort((a, b) => a.fechaInicioCurso.getTime() - b.fechaInicioCurso.getTime() || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+  return eligible[0] ? { cohortId: eligible[0].id, warning: null } : { cohortId: null };
+}
+
 // ---------------------------------------------------------------------
 // Wrapper con acceso a base de datos: obtiene las candidatas reales de un
 // curso (con su ocupación actual, SIEMPRE fresca) y aplica assignCohort.
@@ -137,6 +146,13 @@ export class CohortAssignmentService {
       precio: winner ? winner.precio : null,
       cohortNombre: winner?.nombre ?? null,
     };
+  }
+
+  async assignCohortForSolicitud(courseId: string, requestedAt: Date, excludeCohortIds: readonly string[] = []): Promise<AssignCohortForCourseResult> {
+    const candidates = await this.candidatesForCourse(courseId, excludeCohortIds);
+    const result = assignSolicitudCohort(requestedAt, candidates);
+    const winner = candidates.find(c => c.id === result.cohortId);
+    return { cohortId: winner?.id ?? null, warning: null, precio: winner?.precio ?? null, cohortNombre: winner?.nombre ?? null };
   }
 
   async candidatesForCourse(
