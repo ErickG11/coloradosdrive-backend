@@ -18,6 +18,7 @@ import {
   type SolicitudTipoDocumento,
   type UploadedFile,
 } from '../models/solicitud.model';
+import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { detectFileType } from '../utils/fileSignature';
 import { signSolicitudToken } from '../utils/solicitudToken';
@@ -133,12 +134,18 @@ export class SolicitudService {
       throw new AppError('Ya existe una solicitud aprobada para este correo', 409);
     }
 
+    const selectedCourse = existing?.solicitada_at ? existing.course_id : courseId;
+    const { data: course, error: courseError } = await this.supabase.from('courses')
+      .select('id').eq('id', selectedCourse).maybeSingle();
+    if (courseError) throw courseError;
+    if (!course) throw solicitudError('El curso no existe', 404, 'CURSO_NO_ENCONTRADO');
+
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const codeFields = {
       // El curso se guarda/actualiza aquí también en un reintento: si el
       // postulante vuelve a pedir código para otro curso, esta solicitud
       // en progreso refleja su elección más reciente.
-      course_id: courseId,
+      course_id: selectedCourse,
       codigo_verificacion: hashCode(code),
       codigo_expira_at: new Date(Date.now() + CODE_TTL_MINUTES * 60_000).toISOString(),
       // Un código nuevo reinicia el contador: los intentos fallidos contra

@@ -61,6 +61,7 @@ function buildSolicitud(overrides: Partial<Record<string, unknown>> = {}) {
     reviewed_by: null,
     reviewed_at: null,
     student_id: null,
+    solicitada_at: null,
     created_at: '2026-01-01T00:00:00Z',
     ...overrides,
   };
@@ -104,6 +105,7 @@ describe('solicitudes de inscripción (público)', () => {
       const insertChain = createChain({ data: null, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: null, error: null })) // findByCorreo: no existe
+        .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
         .mockReturnValueOnce(insertChain);
 
       const res = await request(app)
@@ -131,6 +133,7 @@ describe('solicitudes de inscripción (público)', () => {
       const updateChain = createChain({ data: null, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
+        .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
         .mockReturnValueOnce(updateChain);
 
       const res = await request(app)
@@ -161,6 +164,7 @@ describe('solicitudes de inscripción (público)', () => {
     it('responde 502 si el correo no se pudo enviar', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: null, error: null }))
+        .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
         .mockReturnValueOnce(createChain({ data: null, error: null }));
       mockedSendMail.mockRejectedValueOnce(new Error('smtp caído'));
 
@@ -172,6 +176,24 @@ describe('solicitudes de inscripción (público)', () => {
     });
   });
 
+  it('rechaza un curso inexistente antes de emitir el correo', async () => {
+    mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }))
+      .mockReturnValueOnce(createChain({ data: null, error: null }));
+    const res = await request(app).post('/solicitudes/verificar-correo').send({ correo: 'ana@example.com', courseId });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('CURSO_NO_ENCONTRADO');
+    expect(mockedSendMail).not.toHaveBeenCalled();
+  });
+  it('conserva curso y fechas después del primer guardado', async () => {
+    const update = createChain({ data: null, error: null });
+    mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ solicitada_at: '2026-01-02T12:00:00Z' }), error: null }))
+      .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null })).mockReturnValueOnce(update);
+    const res = await request(app).post('/solicitudes/verificar-correo').send({ correo: 'ana@example.com', courseId: otraSolicitudId });
+    expect(res.status).toBe(200);
+    expect(update.update.mock.calls[0][0]).toMatchObject({ course_id: courseId });
+    expect(update.update.mock.calls[0][0]).not.toHaveProperty('solicitada_at');
+    expect(update.update.mock.calls[0][0]).not.toHaveProperty('created_at');
+  });
   describe('POST /solicitudes/confirmar-codigo', () => {
     const future = (): string => new Date(Date.now() + 10 * 60_000).toISOString();
 
