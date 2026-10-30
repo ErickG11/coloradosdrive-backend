@@ -14,7 +14,7 @@ import { instructorAdminRouter, instructorSelfRouter } from './instructor.routes
 import { practiceSlotRouter } from './practiceSlot.routes';
 import { practiceSlotGenerationRouter } from './practiceSlotGeneration.routes';
 import { publicCourseRouter } from './publicCourse.routes';
-import { solicitudAdminRouter, solicitudRouter } from './solicitud.routes';
+import { privacyRouter, solicitudAdminRouter, solicitudRouter } from './solicitud.routes';
 import { userRouter } from './user.routes';
 import { studentAdminRouter } from './studentAdmin.routes';
 import { notificationRouter } from './notification.routes';
@@ -40,6 +40,7 @@ apiRouter.use('/users', userRouter);
 apiRouter.use('/admin/estudiantes', studentAdminRouter);
 apiRouter.use('/admin/instructores', instructorAdminRouter);
 apiRouter.use('/instructores', instructorSelfRouter);
+apiRouter.use('/public', privacyRouter);
 apiRouter.use('/solicitudes', solicitudRouter);
 apiRouter.use('/admin/solicitudes', solicitudAdminRouter);
 apiRouter.use('/admin/enrollments', practiceSlotGenerationRouter);
