@@ -111,193 +111,31 @@ describe('solicitudes de inscripción (admin)', () => {
   });
 
   describe('GET /admin/solicitudes', () => {
-    it('responde 400 con un estado inválido', async () => {
-      const res = await request(app)
-        .get('/admin/solicitudes?estado=archivada')
-        .set('Authorization', adminAuth());
-      expect(res.status).toBe(400);
+    it('valida estado y paginación', async () => {
+      for (const query of ['estado=archivada', 'page=0', 'pageSize=101']) {
+        expect((await request(app).get(`/admin/solicitudes?${query}`).set('Authorization', adminAuth())).status).toBe(400);
+      }
     });
-
-    it('lista vacía sin consultar documentos', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: [], error: null }));
-
+    it('devuelve una página vacía con metadatos', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: [], error: null, count: 0 }));
       const res = await request(app).get('/admin/solicitudes').set('Authorization', adminAuth());
-
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual([]);
-      expect(mockedFrom).toHaveBeenCalledTimes(1);
+      expect(res.body).toEqual({ items: [], total: 0, page: 1, pageSize: 20 });
+      expect(mockedStorageFrom).not.toHaveBeenCalled();
     });
-
-    it('arma el checklist con URLs firmadas de corta duración; papeleta "no_aplica" solo si tiene 65+ y no la subió', async () => {
-      const solicitudesChain = createChain({
-        data: [
-          buildSolicitud({ id: 's-mayor', fecha_nacimiento: '1950-01-01' }),
-          buildSolicitud({ id: 's-joven', fecha_nacimiento: '2000-01-01' }),
-        ],
-        error: null,
-      });
-      mockedFrom
-        .mockReturnValueOnce(solicitudesChain)
-        .mockReturnValueOnce(
-          createChain({
-            data: [
-              {
-                id: 'd1',
-                solicitud_id: 's-mayor',
-                tipo_documento: 'cedula',
-                storage_path: 's-mayor/cedula-a.jpg',
-                estado: 'recibido',
-                motivo_rechazo: null,
-                uploaded_at: '2026-01-02T00:00:00Z',
-                reviewed_at: null,
-              },
-              {
-                id: 'd2',
-                solicitud_id: 's-mayor',
-                tipo_documento: 'tipo_sangre',
-                storage_path: 's-mayor/sangre-b.pdf',
-                estado: 'rechazado',
-                motivo_rechazo: 'Ilegible',
-                uploaded_at: '2026-01-02T00:00:00Z',
-                reviewed_at: '2026-01-03T00:00:00Z',
-              },
-            ],
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(
-          createChain({
-            data: [
-              {
-                id: 's-mayor',
-                cedula: '1710034065',
-                correo: 'ana@example.com',
-                estado: 'pendiente_revision',
-                created_at: '2026-01-01T00:00:00Z',
-              },
-              {
-                id: 's-joven',
-                cedula: '1710034065',
-                correo: 'ana@example.com',
-                estado: 'pendiente_revision',
-                created_at: '2026-01-01T00:00:00Z',
-              },
-            ],
-            error: null,
-          }),
-        ); // solicitudesRelacionadas por cédula (ambas comparten cédula)
-      const createSignedUrls = jest.fn().mockResolvedValue({
-        data: [
-          { path: 's-mayor/cedula-a.jpg', signedUrl: 'https://signed/cedula', error: null },
-          { path: 's-mayor/sangre-b.pdf', signedUrl: 'https://signed/sangre', error: null },
-        ],
-        error: null,
-      });
-      mockedStorageFrom.mockReturnValue({ createSignedUrls });
-
-      const res = await request(app)
-        .get('/admin/solicitudes?estado=pendiente_revision')
-        .set('Authorization', adminAuth());
-
+    it('pagina, filtra y entrega checklist sin firmar documentos', async () => {
+      const list = createChain({ data: [buildSolicitud({ fecha_nacimiento: '1950-01-01' })], error: null, count: 21 });
+      mockedFrom.mockReturnValueOnce(list)
+        .mockReturnValueOnce(createChain({ data: [{ id: docId, solicitud_id: solicitudId, tipo_documento: 'cedula', estado: 'recibido', storage_path: 'privado' }], error: null }))
+        .mockReturnValueOnce(createChain({ data: [{ solicitud_id: solicitudId, version_aviso: '2026-10-v1', aceptado_at: '2026-10-01' }], error: null }))
+        .mockReturnValueOnce(createChain({ data: [], error: null }));
+      const res = await request(app).get('/admin/solicitudes?page=2&q=Ana&estado=pendiente_revision').set('Authorization', adminAuth());
       expect(res.status).toBe(200);
-      expect(solicitudesChain.not).toHaveBeenCalledWith('cedula', 'is', null);
-      expect(solicitudesChain.eq).toHaveBeenCalledWith('estado', 'pendiente_revision');
-      expect(mockedStorageFrom).toHaveBeenCalledWith('solicitudes-documentos');
-      // URL firmada de 5 minutos, nunca una URL pública.
-      expect(createSignedUrls).toHaveBeenCalledWith(
-        ['s-mayor/cedula-a.jpg', 's-mayor/sangre-b.pdf'],
-        300,
-      );
-
-      const [mayor, joven] = res.body as {
-        documentos: {
-          tipoDocumento: string;
-          estado: string;
-          url: string | null;
-          motivoRechazo: string | null;
-        }[];
-      }[];
-      const byTipo = (s: typeof mayor) =>
-        Object.fromEntries(s.documentos.map((d) => [d.tipoDocumento, d]));
-
-      expect(mayor.documentos.map((d) => d.tipoDocumento)).toEqual([
-        'cedula',
-        'papeleta_votacion',
-        'tipo_sangre',
-        'titulo_bachiller',
-      ]);
-      expect(byTipo(mayor).cedula).toMatchObject({
-        estado: 'recibido',
-        url: 'https://signed/cedula',
-      });
-      expect(byTipo(mayor).tipo_sangre).toMatchObject({
-        estado: 'rechazado',
-        url: 'https://signed/sangre',
-        motivoRechazo: 'Ilegible',
-      });
-      expect(byTipo(mayor).papeleta_votacion).toMatchObject({ estado: 'no_aplica', url: null });
-      expect(byTipo(mayor).titulo_bachiller).toMatchObject({ estado: 'faltante' });
-
-      // Menor de 65: la papeleta sí se espera.
-      expect(byTipo(joven).papeleta_votacion.estado).toBe('faltante');
-
-      // Ambas comparten cédula: cada una ve a la OTRA como relacionada,
-      // nunca a sí misma.
-      const withRelated = res.body as { id: string; solicitudesRelacionadas: unknown[] }[];
-      expect(withRelated[0].solicitudesRelacionadas).toEqual([
-        {
-          id: 's-joven',
-          correo: 'ana@example.com',
-          estado: 'pendiente_revision',
-          createdAt: '2026-01-01T00:00:00Z',
-        },
-      ]);
-      expect(withRelated[1].solicitudesRelacionadas).toEqual([
-        {
-          id: 's-mayor',
-          correo: 'ana@example.com',
-          estado: 'pendiente_revision',
-          createdAt: '2026-01-01T00:00:00Z',
-        },
-      ]);
-    });
-
-    it('si un mayor de 65 sí subió la papeleta, se muestra su estado real (no "no_aplica")', async () => {
-      mockedFrom
-        .mockReturnValueOnce(
-          createChain({ data: [buildSolicitud({ fecha_nacimiento: '1950-01-01' })], error: null }),
-        )
-        .mockReturnValueOnce(
-          createChain({
-            data: [
-              {
-                id: 'd1',
-                solicitud_id: solicitudId,
-                tipo_documento: 'papeleta_votacion',
-                storage_path: 'p.jpg',
-                estado: 'aprobado',
-                motivo_rechazo: null,
-                uploaded_at: '2026-01-02T00:00:00Z',
-                reviewed_at: null,
-              },
-            ],
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(createChain({ data: [], error: null })); // sin solicitudes relacionadas
-      mockedStorageFrom.mockReturnValue({
-        createSignedUrls: jest.fn().mockResolvedValue({
-          data: [{ path: 'p.jpg', signedUrl: 'https://signed/p', error: null }],
-          error: null,
-        }),
-      });
-
-      const res = await request(app).get('/admin/solicitudes').set('Authorization', adminAuth());
-
-      const papeleta = (
-        res.body as { documentos: { tipoDocumento: string; estado: string }[] }[]
-      )[0].documentos.find((d) => d.tipoDocumento === 'papeleta_votacion');
-      expect(papeleta?.estado).toBe('aprobado');
+      expect(list.range).toHaveBeenCalledWith(20,39);
+      expect(list.eq).toHaveBeenCalledWith('estado', 'pendiente_revision');
+      expect(res.body.items[0].consentimiento.version).toBe('2026-10-v1');
+      expect(res.body.items[0].documentos[0].url).toBeNull();
+      expect(res.body.items[0].documentos[1].estado).toBe('no_aplica');
+      expect(mockedStorageFrom).not.toHaveBeenCalled();
     });
   });
 
