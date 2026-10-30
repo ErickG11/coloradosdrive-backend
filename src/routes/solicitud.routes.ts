@@ -11,7 +11,7 @@ import {
   verificarCorreo,
 } from '../controllers/solicitud.controller';
 import { authenticate } from '../middlewares/auth.middleware';
-import { applicationRateLimiter, verificationRateLimiter } from '../middlewares/rateLimit';
+import { applicationRateLimiter, verificationRateLimiter, sendCodeIpLimiter, sendCodeEmailLimiter } from '../middlewares/rateLimit';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { authenticateSolicitud } from '../middlewares/solicitudAuth.middleware';
 import { uploadDocumento } from '../middlewares/upload';
@@ -39,7 +39,8 @@ const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID v
 
 solicitudRouter.post(
   '/verificar-correo',
-  verificationRateLimiter,
+  sendCodeIpLimiter,
+  sendCodeEmailLimiter,
   [
     correoValidator,
     body('courseId').isUUID().withMessage('courseId debe ser un UUID válido'),

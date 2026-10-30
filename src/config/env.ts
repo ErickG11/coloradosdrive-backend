@@ -17,6 +17,7 @@ function optionalEnv(name: string, fallback: string): string {
 
 export const env = {
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
+  TRUST_PROXY_HOPS: Number(optionalEnv('TRUST_PROXY_HOPS', '1')),
   PORT: Number(optionalEnv('PORT', '3000')),
   FRONTEND_URL: requireEnv('FRONTEND_URL'),
   SUPABASE_URL: requireEnv('SUPABASE_URL'),
@@ -35,3 +36,7 @@ if (env.SOLICITUD_TOKEN_SECRET.length < 32) {
 }
 
 export const isProduction = env.NODE_ENV === 'production';
+
+if (!Number.isInteger(env.TRUST_PROXY_HOPS) || env.TRUST_PROXY_HOPS < 0 || env.TRUST_PROXY_HOPS > 2) {
+  throw new Error('TRUST_PROXY_HOPS debe ser 0, 1 o 2');
+}
