@@ -628,36 +628,6 @@ export class SolicitudService {
     return data;
   }
 
-  // Borra los archivos de Storage y luego las filas: si Storage falla no
-  // se pierde la referencia a archivos que seguirían existiendo.
-  private async borrarDocumentos(solicitudId: string): Promise<void> {
-    const { data, error } = await this.supabase
-      .from('solicitud_documentos')
-      .select()
-      .eq('solicitud_id', solicitudId);
-    if (error) {
-      throw error;
-    }
-    if (data.length === 0) {
-      return;
-    }
-
-    const { error: removeError } = await this.supabase.storage
-      .from(SOLICITUDES_BUCKET)
-      .remove(data.map((d) => d.storage_path));
-    if (removeError) {
-      throw new AppError('No se pudieron eliminar los documentos anteriores', 502);
-    }
-
-    const { error: deleteError } = await this.supabase
-      .from('solicitud_documentos')
-      .delete()
-      .eq('solicitud_id', solicitudId);
-    if (deleteError) {
-      throw deleteError;
-    }
-  }
-
   private buildChecklist(
     solicitud: SolicitudRow,
     documentos: DocumentoRow[],
