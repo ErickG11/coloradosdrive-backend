@@ -76,6 +76,7 @@ export interface SolicitudDatosInput {
   nombreCompleto: string;
   telefono?: string;
   fechaNacimiento: string;
+  representante?: { nombre: string; cedula: string; acepta: true };
 }
 
 export interface ConfirmarCodigoResult {

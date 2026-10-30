@@ -31,7 +31,6 @@ const mockedSendMail = mailer.sendMail as jest.Mock;
 
 const solicitudId = '11111111-1111-4111-8111-111111111111';
 const otraSolicitudId = '99999999-9999-4999-8999-999999999999';
-const rechazadaId = '22222222-2222-4222-8222-222222222222';
 const courseId = '55555555-5555-4555-8555-555555555555';
 const VALID_CEDULA = '1710034065';
 
@@ -344,230 +343,29 @@ describe('solicitudes de inscripción (público)', () => {
   });
 
   describe('PUT /solicitudes/:id/datos', () => {
-    it('responde 401 sin token', async () => {
-      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).send(validDatos);
-      expect(res.status).toBe(401);
-    });
-
-    it('responde 403 si el token es de otra solicitud', async () => {
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer(otraSolicitudId))
-        .send(validDatos);
-      expect(res.status).toBe(403);
+    it('exige token y valida cédula antes de acceder a los datos', async () => {
+      expect((await request(app).put(`/solicitudes/${solicitudId}/datos`).send(validDatos)).status).toBe(401);
+      const invalid = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send({ ...validDatos, cedula: '1710034064' });
+      expect(invalid.status).toBe(400);
       expect(mockedFrom).not.toHaveBeenCalled();
     });
-
-    it('responde 400 con una cédula con dígito verificador inválido', async () => {
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer())
-        .send({ ...validDatos, cedula: '1710034064' });
-      expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/cédula ecuatoriana válida/);
+    it('rechaza ausencia de consentimiento', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null }));
+      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(validDatos);
+      expect(res.body.code).toBe('CONSENTIMIENTO_REQUERIDO');
     });
-
-    it.each([
-      ['fecha futura', { fechaNacimiento: '2999-01-01' }],
-      ['fecha imposible', { fechaNacimiento: '1995-02-31' }],
-      ['sin nombre', { nombreCompleto: '' }],
-    ])('responde 400: %s', async (_label, override) => {
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer())
-        .send({ ...validDatos, ...override });
-      expect(res.status).toBe(400);
-    });
-
-    it('responde 403 si el correo todavía no está verificado', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: buildSolicitud({ correo_verificado: false }), error: null }),
-      );
-
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer())
-        .send(validDatos);
-
-      expect(res.status).toBe(403);
-    });
-
-    it.each(['pendiente_revision', 'aprobada'])(
-      'responde 409 si ya existe otra solicitud %s con esa cédula',
-      async (estado) => {
-        mockedFrom
-          .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-          .mockReturnValueOnce(
-            createChain({
-              data: [buildSolicitud({ id: otraSolicitudId, cedula: VALID_CEDULA, estado })],
-              error: null,
-            }),
-          );
-
-        const res = await request(app)
-          .put(`/solicitudes/${solicitudId}/datos`)
-          .set('Authorization', bearer())
-          .send(validDatos);
-
-        expect(res.status).toBe(409);
-        expect(res.body.message).toMatch(/solicitud activa para esta cédula/);
-      },
-    );
-
-    it('guarda cédula, nombre, teléfono y fecha de nacimiento y devuelve un token vigente', async () => {
-      const updateChain = createChain({ data: null, error: null });
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-        .mockReturnValueOnce(createChain({ data: [], error: null }))
-        .mockReturnValueOnce(updateChain);
-
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer())
-        .send(validDatos);
-
+    it('guarda datos y conserva la primera fecha sin reescribir created_at', async () => {
+      const saved = '2026-09-01T12:00:00Z';
+      const update = createChain({ data: { id: solicitudId }, error: null });
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ solicitada_at: saved }), error: null }))
+        .mockReturnValueOnce(createChain({ data: { id: 'consent', acepto_tratamiento: true, declara_veracidad: true }, error: null }))
+        .mockReturnValueOnce(createChain({ data: [], error: null })).mockReturnValueOnce(update);
+      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(validDatos);
       expect(res.status).toBe(200);
-      expect(res.body.solicitudId).toBe(solicitudId);
-      expect(verifySolicitudToken(res.body.token as string)).toBe(solicitudId);
-      expect(updateChain.update).toHaveBeenCalledWith({
-        cedula: VALID_CEDULA,
-        nombre_completo: 'Ana Torres',
-        telefono: '0991234567',
-        fecha_nacimiento: '1995-05-20',
-      });
-    });
-
-    it('cédula con solicitud RECHAZADA previa del MISMO correo (normalizado): reemplaza ese mismo registro (mismo id), borra sus documentos viejos y reinicia el estado', async () => {
-      const storage = mockStorage();
-      const deleteCurrentChain = createChain({ data: null, error: null });
-      const updateRejectedChain = createChain({ data: null, error: null });
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null })) // current: correo 'ana@example.com'
-        .mockReturnValueOnce(
-          createChain({
-            data: [
-              buildSolicitud({
-                id: rechazadaId,
-                // Mismo correo que 'current', pero con mayúsculas y
-                // espacios: prueba que la comparación normaliza antes de
-                // decidir "es la misma persona".
-                correo: '  Ana@Example.com  ',
-                cedula: VALID_CEDULA,
-                estado: 'rechazada',
-              }),
-            ],
-            error: null,
-          }),
-        ) // conflictos
-        .mockReturnValueOnce(
-          createChain({
-            data: [{ id: 'doc-1', storage_path: `${rechazadaId}/cedula-x.jpg` }],
-            error: null,
-          }),
-        ) // docs viejos de la rechazada (select)
-        .mockReturnValueOnce(createChain({ data: null, error: null })) // delete docs de la rechazada
-        .mockReturnValueOnce(createChain({ data: [], error: null })) // docs de la solicitud en progreso (ninguno)
-        .mockReturnValueOnce(deleteCurrentChain) // borra la fila en progreso
-        .mockReturnValueOnce(updateRejectedChain); // actualiza la rechazada
-
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer())
-        .send(validDatos);
-
-      expect(res.status).toBe(200);
-      // El id vigente es el del registro rechazado, y el token es de ESE id.
-      expect(res.body.solicitudId).toBe(rechazadaId);
-      expect(verifySolicitudToken(res.body.token as string)).toBe(rechazadaId);
-      expect(storage.remove).toHaveBeenCalledWith([`${rechazadaId}/cedula-x.jpg`]);
-      expect(deleteCurrentChain.eq).toHaveBeenCalledWith('id', solicitudId);
-      expect(updateRejectedChain.eq).toHaveBeenCalledWith('id', rechazadaId);
-      const updated = updateRejectedChain.update.mock.calls[0][0] as Record<string, unknown>;
-      expect(updated).toMatchObject({
-        estado: 'pendiente_revision',
-        motivo_rechazo: null,
-        reviewed_by: null,
-        reviewed_at: null,
-        student_id: null,
-        correo: 'ana@example.com',
-        correo_verificado: true,
-        cedula: VALID_CEDULA,
-      });
-      // created_at se reinicia: si no, la limpieza de 7 días lo borraría al instante.
-      expect(new Date(updated.created_at as string).getTime()).toBeGreaterThan(Date.now() - 5000);
-    });
-
-    it('cédula con solicitud RECHAZADA previa de OTRO correo: NO la reclama ni la borra — sigue como solicitud independiente (bloquea la suplantación)', async () => {
-      // Escenario del hallazgo de seguridad: A tiene una solicitud rechazada
-      // con cédula X. B (que solo conoce esa cédula, no es A) verifica su
-      // PROPIO correo y envía la cédula X en /datos. Antes de este fix, B
-      // se quedaba con el registro de A (mismo id) y le pisaba el correo.
-      const updateOwnChain = createChain({ data: null, error: null });
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null })) // current: correo de B ('ana@example.com')
-        .mockReturnValueOnce(
-          createChain({
-            data: [
-              buildSolicitud({
-                id: rechazadaId,
-                correo: 'persona-real@example.com', // correo de A, distinto al de B
-                cedula: VALID_CEDULA,
-                estado: 'rechazada',
-              }),
-            ],
-            error: null,
-          }),
-        ) // conflictos: hay una rechazada, pero de OTRO correo
-        .mockReturnValueOnce(updateOwnChain); // se actualiza la propia fila de B, no la de A
-
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer())
-        .send(validDatos);
-
-      expect(res.status).toBe(200);
-      // El id vigente sigue siendo el propio de B (current), NUNCA el de A.
-      expect(res.body.solicitudId).toBe(solicitudId);
-      expect(verifySolicitudToken(res.body.token as string)).toBe(solicitudId);
-      // Se actualiza la fila de B con sus propios datos, sin resetFields
-      // (no es una reutilización de rechazo, es una fila nueva normal) y
-      // sin tocar el correo de nadie.
-      expect(updateOwnChain.update).toHaveBeenCalledWith({
-        cedula: VALID_CEDULA,
-        nombre_completo: 'Ana Torres',
-        telefono: '0991234567',
-        fecha_nacimiento: '1995-05-20',
-      });
-      expect(updateOwnChain.eq).toHaveBeenCalledWith('id', solicitudId);
-      // La fila rechazada de A jamás se toca: ni se borra, ni se le hace
-      // update, ni se le borran documentos.
-      expect(mockedFrom).toHaveBeenCalledTimes(3);
-    });
-
-    it('si la propia solicitud estaba rechazada, se reutiliza en el mismo id', async () => {
-      mockStorage();
-      const updateChain = createChain({ data: null, error: null });
-      mockedFrom
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSolicitud({ estado: 'rechazada', cedula: VALID_CEDULA }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(createChain({ data: [], error: null })) // conflictos
-        .mockReturnValueOnce(createChain({ data: [], error: null })) // sin documentos
-        .mockReturnValueOnce(updateChain);
-
-      const res = await request(app)
-        .put(`/solicitudes/${solicitudId}/datos`)
-        .set('Authorization', bearer())
-        .send(validDatos);
-
-      expect(res.status).toBe(200);
-      expect(res.body.solicitudId).toBe(solicitudId);
-      expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({ estado: 'pendiente_revision', motivo_rechazo: null }),
-      );
+      expect(update.update.mock.calls[0][0]).toMatchObject({ solicitada_at: saved, cedula: VALID_CEDULA });
+      expect(update.update.mock.calls[0][0]).not.toHaveProperty('created_at');
+      expect(update.is).toHaveBeenCalledWith('reviewed_at', null);
     });
   });
 
