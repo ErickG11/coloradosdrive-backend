@@ -215,7 +215,7 @@ describe('solicitudes de inscripción (público)', () => {
     });
 
     it('si el código no coincide, cuenta el intento fallido y devuelve el mismo mensaje genérico', async () => {
-      const updateChain = createChain({ data: null, error: null });
+      const updateChain = createChain({ data: { id: solicitudId }, error: null });
       mockedFrom
         .mockReturnValueOnce(
           createChain({
@@ -236,10 +236,13 @@ describe('solicitudes de inscripción (público)', () => {
       expect(res.status).toBe(400);
       expect(res.body.message).toBe('Código inválido o vencido');
       expect(updateChain.update).toHaveBeenCalledWith({ intentos_codigo: 3 });
+      expect(updateChain.eq).toHaveBeenCalledWith('intentos_codigo', 2);
+      expect(updateChain.eq).toHaveBeenCalledWith('codigo_verificacion', sha256('123456'));
+      expect(updateChain.gt).toHaveBeenCalledWith('codigo_expira_at', expect.any(String));
     });
 
     it('al llegar al 5º intento fallido, invalida el código y responde 429 (hay que pedir uno nuevo)', async () => {
-      const updateChain = createChain({ data: null, error: null });
+      const updateChain = createChain({ data: { id: solicitudId }, error: null });
       mockedFrom
         .mockReturnValueOnce(
           createChain({
@@ -288,7 +291,7 @@ describe('solicitudes de inscripción (público)', () => {
     });
 
     it('con el código correcto marca el correo verificado, limpia el código y devuelve un token temporal', async () => {
-      const updateChain = createChain({ data: null, error: null });
+      const updateChain = createChain({ data: { id: solicitudId }, error: null });
       mockedFrom
         .mockReturnValueOnce(
           createChain({
