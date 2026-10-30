@@ -1,60 +1,28 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-
 import type { Database } from '../config/database.types';
-
-// Antigüedad a partir de la cual una solicitud SIN ningún documento se
-// considera abandonada. Las que tienen al menos un documento nunca
-// expiran automáticamente: esperan revisión humana sin importar cuánto
-// tarde el admin.
+import { env } from '../config/env';
+import { SolicitudDeletionService } from './solicitudDeletion.service';
 export const ABANDONED_AFTER_DAYS = 7;
-
+const DAY_MS = 86400000;
 export class SolicitudCleanupService {
-  constructor(private readonly supabase: SupabaseClient<Database>) {}
-
-  // Devuelve cuántas solicitudes se eliminaron.
+  constructor(private readonly supabase: SupabaseClient<Database>, private readonly retentionDays = env.SOLICITUD_RETENCION_DIAS) {}
   async purgeAbandoned(now: Date = new Date()): Promise<number> {
-    const cutoff = new Date(now.getTime() - ABANDONED_AFTER_DAYS * 24 * 60 * 60_000).toISOString();
-
-    const { data: old, error } = await this.supabase
-      .from('solicitudes_inscripcion')
-      .select('id')
-      .eq('estado', 'pendiente_revision')
-      .lt('created_at', cutoff);
-    if (error) {
-      throw error;
+    const cutoff = new Date(now.getTime() - Math.min(ABANDONED_AFTER_DAYS, this.retentionDays) * DAY_MS).toISOString();
+    const { data: rows, error } = await this.supabase.from('solicitudes_inscripcion').select('id,estado,created_at,reviewed_at')
+      .in('estado', ['pendiente_revision', 'rechazada']).lt('created_at', cutoff);
+    if (error) throw error;
+    let count = 0;
+    const deletion = new SolicitudDeletionService(this.supabase);
+    for (const row of rows) {
+      if (row.estado === 'pendiente_revision' && row.reviewed_at) continue;
+      const base = row.estado === 'rechazada' ? row.reviewed_at ?? row.created_at : row.created_at;
+      const age = (now.getTime() - new Date(base).getTime()) / DAY_MS;
+      const retentionDue = age >= this.retentionDays;
+      if (!retentionDue && (row.estado !== 'pendiente_revision' || age < ABANDONED_AFTER_DAYS)) continue;
+      try {
+        if (await deletion.remove(row.id, null, 'purga_retencion', !retentionDue)) count++;
+      } catch { console.error('solicitud_cleanup_item_failed'); }
     }
-    if (old.length === 0) {
-      return 0;
-    }
-
-    const { data: withDocs, error: docsError } = await this.supabase
-      .from('solicitud_documentos')
-      .select('solicitud_id')
-      .in(
-        'solicitud_id',
-        old.map((s) => s.id),
-      );
-    if (docsError) {
-      throw docsError;
-    }
-
-    const protectedIds = new Set(withDocs.map((d) => d.solicitud_id));
-    const abandonedIds = old.map((s) => s.id).filter((id) => !protectedIds.has(id));
-    if (abandonedIds.length === 0) {
-      return 0;
-    }
-
-    // Si justo entre las dos consultas se subió un documento, la FK
-    // (on delete restrict) hace fallar este delete en vez de perderlo.
-    const { error: deleteError } = await this.supabase
-      .from('solicitudes_inscripcion')
-      .delete()
-      .in('id', abandonedIds)
-      .eq('estado', 'pendiente_revision');
-    if (deleteError) {
-      throw deleteError;
-    }
-
-    return abandonedIds.length;
+    return count;
   }
 }
