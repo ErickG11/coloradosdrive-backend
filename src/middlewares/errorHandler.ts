@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 
 import { isProduction } from '../config/env';
-import { solicitudErrorCode } from '../utils/solicitudError';
+import { normalizeSolicitudError, solicitudErrorCode } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 
 interface ErrorResponseBody {
@@ -23,11 +23,12 @@ export function errorHandler(
   _next: NextFunction,
 ): void {
   if (/^\/(?:admin\/)?solicitudes(?:\/|$|\?)/.test(req.originalUrl)) {
-    const operational = err instanceof AppError;
-    res.status(operational ? err.statusCode : 500).json({
+    const normalized = normalizeSolicitudError(err);
+    const operational = normalized instanceof AppError;
+    res.status(operational ? normalized.statusCode : 500).json({
       status: 'error',
-      message: operational ? err.message : 'No se pudo completar la operación',
-      code: solicitudErrorCode(err),
+      message: operational ? normalized.message : 'No se pudo completar la operación',
+      code: solicitudErrorCode(normalized),
     });
     return;
   }

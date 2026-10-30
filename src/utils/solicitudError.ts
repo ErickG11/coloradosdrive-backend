@@ -5,7 +5,7 @@ export function solicitudErrorCode(error: unknown): string {
   if (!(error instanceof AppError)) return 'ERROR_INTERNO';
   if (error.code) return error.code;
   if (error.message.startsWith('motivoRechazo')) return 'MOTIVO_REQUERIDO';
-  if (error.message === 'Código inválido o vencido') return 'CODIGO_INVALIDO_O_VENCIDO';
+  if (error.message === 'codigo debe tener 6 dígitos' || error.message === 'Código inválido o vencido') return 'CODIGO_INVALIDO_O_VENCIDO';
   if (error.message.startsWith('Demasiados intentos fallidos')) return 'INTENTOS_AGOTADOS';
   if (error.statusCode === 429) return 'LIMITE_PETICIONES';
   if (error.message === 'Ya existe una solicitud aprobada para este correo') return 'CORREO_YA_APROBADO';
@@ -20,4 +20,11 @@ export function solicitudErrorCode(error: unknown): string {
 
 export function solicitudError(message: string, status: number, code: string): AppError {
   return new AppError(message, status, { code });
+}
+
+export function normalizeSolicitudError(error: Error): Error {
+  const code = 'code' in error ? error.code : undefined;
+  if (code === 'SI409') return solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
+  if (code === 'SI403') return solicitudError('Acepta el aviso de privacidad vigente', 409, 'CONSENTIMIENTO_REQUERIDO');
+  return error;
 }
