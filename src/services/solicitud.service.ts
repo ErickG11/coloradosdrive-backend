@@ -21,6 +21,7 @@ import {
 import { calcularEdad, validateApplicant } from '../utils/solicitudAge';
 import { SolicitudPrivacyService } from './solicitudPrivacy.service';
 import { recordSolicitudAudit } from './solicitudAudit.service';
+import { logSolicitudFailure } from '../utils/solicitudLog';
 import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { detectFileType } from '../utils/fileSignature';
@@ -165,8 +166,8 @@ export class SolicitudService {
         code,
         expiresInMinutes: CODE_TTL_MINUTES,
       });
-    } catch (err) {
-      console.error('No se pudo enviar el código de verificación:', err);
+    } catch {
+      logSolicitudFailure('verification_email_failed');
       throw new AppError('No se pudo enviar el código de verificación. Intenta de nuevo', 502);
     }
   }
@@ -594,10 +595,7 @@ export class SolicitudService {
   private async eliminarEnrollmentDeEstudiante(studentId: string): Promise<void> {
     const { error } = await this.supabase.from('enrollments').delete().eq('student_id', studentId);
     if (error) {
-      console.error(
-        `No se pudo borrar el enrollment huérfano del estudiante ${studentId} durante el rollback:`,
-        error,
-      );
+      logSolicitudFailure('enrollment_rollback_failed');
     }
   }
 
