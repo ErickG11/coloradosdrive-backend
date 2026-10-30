@@ -15,3 +15,15 @@ it('reanuda datos sin devolver identidad ni enlaces de documentos', async () => 
   expect(result).toMatchObject({ datosGuardados: true, consentimientoVigente: false, documentos: [{ tipo: 'cedula', estado: 'recibido' }] });
   expect(result).not.toHaveProperty('cedula');
 });
+
+it('rechaza versión antigua y casillas falsas antes de escribir', async () => {
+  const from = jest.fn();
+  const service = new SolicitudPrivacyService({ from } as unknown as SupabaseClient<Database>);
+  await expect(service.accept('s', { versionAviso: 'viejo', aceptoTratamiento: true, declaraVeracidad: true })).rejects.toMatchObject({ code: 'AVISO_DESACTUALIZADO' });
+  await expect(service.accept('s', { versionAviso: '2026-10-v1', aceptoTratamiento: false, declaraVeracidad: true })).rejects.toMatchObject({ code: 'CONSENTIMIENTO_REQUERIDO' });
+  expect(from).not.toHaveBeenCalled();
+});
+it('exige un registro vigente persistido', async () => {
+  const from = createSupabaseFromMock([{ data: null, error: null }]);
+  await expect(new SolicitudPrivacyService({ from } as unknown as SupabaseClient<Database>).requireConsent('s')).rejects.toMatchObject({ code: 'CONSENTIMIENTO_REQUERIDO' });
+});
