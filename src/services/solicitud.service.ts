@@ -248,9 +248,9 @@ export class SolicitudService {
     const solicitud = await this.getOrThrow(solicitudId);
 
     if (solicitud.estado !== 'pendiente_revision') {
-      throw new AppError('Esta solicitud ya no admite documentos', 409);
+      throw solicitudError('Esta solicitud ya no admite documentos', 409, 'SOLICITUD_CERRADA');
     }
-    if (!solicitud.cedula) {
+    if (!solicitud.cedula || !solicitud.solicitada_at) {
       throw new AppError('Completa tus datos (cédula) antes de subir documentos', 409);
     }
 
@@ -259,6 +259,7 @@ export class SolicitudService {
     // verifica el contenido real por su firma binaria, no lo que dice el
     // multipart. `file.mimetype` ya no se usa para decidir nada de acá en
     // adelante.
+    await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
     const detectedType = detectFileType(file.buffer);
     if (!detectedType) {
       throw new AppError('Tipo de archivo no permitido (solo JPG, PNG o PDF)', 400);
