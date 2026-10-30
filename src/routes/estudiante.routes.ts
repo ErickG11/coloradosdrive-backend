@@ -1,3 +1,4 @@
+import { StudentPendingDocumentsService } from '../services/studentPendingDocuments.service';
 import { Router } from 'express';
 import { body, query } from 'express-validator';
 import {
@@ -22,6 +23,10 @@ import { AppError } from '../utils/AppError';
 export const estudianteRouter = Router();
 
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
+estudianteRouter.get('/documentos-pendientes', asyncHandler(async (req, res) => {
+  if (!req.user) throw new AppError('Authentication required', 401);
+  res.json(await new StudentPendingDocumentsService(supabaseAdmin).get(req.user.id));
+}));
 estudianteRouter.get('/practice-history/enrollments', asyncHandler(studentPracticeEnrollments));
 estudianteRouter.get(
   '/practice-history',
