@@ -177,56 +177,33 @@ export class SolicitudService {
 
   async confirmarCodigo(correoInput: string, codigo: string): Promise<ConfirmarCodigoResult> {
     const correo = correoInput.trim().toLowerCase();
-    const row = await this.findByCorreo(correo);
-
-    // Mismo mensaje para "no existe", "sin código", "vencido" y "no
-    // coincide": no se revela cuál de los casos fue.
-    const invalid = new AppError('Código inválido o vencido', 400);
-    if (!row?.codigo_verificacion || !row.codigo_expira_at) {
-      throw invalid;
-    }
-    if (new Date(row.codigo_expira_at).getTime() <= Date.now()) {
-      throw invalid;
-    }
-
-    const expected = Buffer.from(row.codigo_verificacion, 'hex');
-    const received = Buffer.from(hashCode(codigo), 'hex');
-    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+    const invalid = new AppError('Código inválido o vencido', 400, { code: 'CODIGO_INVALIDO_O_VENCIDO' });
+    for (let retry = 0; retry < 5; retry++) {
+      const row = await this.findByCorreo(correo);
+      if (!row?.codigo_verificacion || !row.codigo_expira_at ||
+          new Date(row.codigo_expira_at).getTime() <= Date.now()) throw invalid;
+      const expected = Buffer.from(row.codigo_verificacion, 'hex');
+      const received = Buffer.from(hashCode(codigo), 'hex');
+      const matches = expected.length === received.length && timingSafeEqual(expected, received);
       const attempts = row.intentos_codigo + 1;
-      // Al llegar al máximo, se invalida el código ya mismo (no solo se
-      // cuenta): un intento #6 con el código correcto tampoco debe pasar,
-      // así que limpiarlo aquí es lo que realmente lo hace cumplir.
-      const lockedOut = attempts >= MAX_CODE_ATTEMPTS;
-      const { error: attemptError } = await this.supabase
-        .from('solicitudes_inscripcion')
-        .update(
-          lockedOut
-            ? { intentos_codigo: attempts, codigo_verificacion: null, codigo_expira_at: null }
-            : { intentos_codigo: attempts },
-        )
-        .eq('id', row.id);
-      if (attemptError) {
-        throw attemptError;
-      }
-      throw lockedOut
-        ? new AppError('Demasiados intentos fallidos. Solicita un nuevo código', 429)
-        : invalid;
+      const lockedOut = !matches && attempts >= MAX_CODE_ATTEMPTS;
+      const fields = matches
+        ? { correo_verificado: true, codigo_verificacion: null, codigo_expira_at: null, intentos_codigo: 0 }
+        : lockedOut
+          ? { intentos_codigo: attempts, codigo_verificacion: null, codigo_expira_at: null }
+          : { intentos_codigo: attempts };
+      // CAS: ningún fallo concurrente se pierde y un código correcto se consume una sola vez.
+      const { data, error } = await this.supabase.from('solicitudes_inscripcion')
+        .update(fields).eq('id', row.id).eq('codigo_verificacion', row.codigo_verificacion)
+        .eq('intentos_codigo', row.intentos_codigo).eq('codigo_expira_at', row.codigo_expira_at)
+        .gt('codigo_expira_at', new Date().toISOString()).select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) continue;
+      if (matches) return { solicitudId: row.id, token: signSolicitudToken(row.id) };
+      if (lockedOut) throw new AppError('Demasiados intentos fallidos. Solicita un nuevo código', 429, { code: 'INTENTOS_AGOTADOS' });
+      throw invalid;
     }
-
-    const { error } = await this.supabase
-      .from('solicitudes_inscripcion')
-      .update({
-        correo_verificado: true,
-        codigo_verificacion: null,
-        codigo_expira_at: null,
-        intentos_codigo: 0,
-      })
-      .eq('id', row.id);
-    if (error) {
-      throw error;
-    }
-
-    return { solicitudId: row.id, token: signSolicitudToken(row.id) };
+    throw invalid;
   }
 
   // ---------------------------------------------------------------------
