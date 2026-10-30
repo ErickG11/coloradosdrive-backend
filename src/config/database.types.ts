@@ -70,6 +70,10 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      finalizar_aprobacion_solicitud: {
+        Args: { p_solicitud: string; p_actor: string; p_claim: string; p_student: string; p_enrollment: string };
+        Returns: undefined;
+      };
       list_student_pending_practice_ratings: {
         Args: { p_student: string; p_page: number; p_page_size: number };
         Returns: PracticeRatingPage<PracticeRatingPendingItem>;
