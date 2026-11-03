@@ -1,3 +1,8 @@
+// Límites persistentes tienen su propia suite con RPC reales en memoria.
+jest.mock('../../src/middlewares/enrollmentLimits.middleware',()=>({
+  reserveEnrollmentCodeIp:(_req:unknown,_res:unknown,next:()=>void)=>{next();},
+  reserveEnrollmentCode:(_req:unknown,_res:unknown,next:()=>void)=>{next();},
+}));
 import { createHash } from 'node:crypto';
 
 import request from 'supertest';

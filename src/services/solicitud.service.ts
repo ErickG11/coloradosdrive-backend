@@ -1,4 +1,6 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { EnrollmentLimitsService } from './enrollmentLimits.service';
+import type { EnrollmentSummary } from '../models/enrollmentLimits.model';
 
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 
@@ -297,7 +299,7 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   // Panel del admin
   // ---------------------------------------------------------------------
-  async resumen():Promise<{pendientes:number;documentosPorRevisar:number}>{const r=await this.supabase.rpc('resumen_solicitudes');if(r.error)throw r.error;return r.data;}
+  async resumen():Promise<EnrollmentSummary>{return new EnrollmentLimitsService(this.supabase).summary();}
 
   async listarParaAdmin(estado?: SolicitudEstado | 'con_documentos_por_revisar', page = 1, pageSize = 20, q = ''): Promise<{ items: SolicitudAdminView[]; total: number; page: number; pageSize: number }> {
     // Las filas que solo verificaron el correo (sin cédula) son solicitudes

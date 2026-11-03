@@ -18,7 +18,7 @@ import {
   verificarCorreo,
 } from '../controllers/solicitud.controller';
 import { authenticate } from '../middlewares/auth.middleware';
-import { applicationRateLimiter, verificationRateLimiter, sendCodeIpLimiter, sendCodeEmailLimiter } from '../middlewares/rateLimit';
+import { applicationRateLimiter, verificationRateLimiter } from '../middlewares/rateLimit';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { authenticateSolicitud } from '../middlewares/solicitudAuth.middleware';
 import { uploadDocumento } from '../middlewares/upload';
@@ -31,6 +31,10 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { isValidCedulaEcuatoriana } from '../utils/cedula';
 import { verifyEnrollmentCaptcha } from '../middlewares/captcha.middleware';
+import {
+  reserveEnrollmentCodeIp,
+  reserveEnrollmentCode,
+} from '../middlewares/enrollmentLimits.middleware';
 
 // ---------------------------------------------------------------------------
 // Público (postulante): solicitudes de inscripción online. Sin cuenta de
@@ -49,14 +53,11 @@ const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID v
 
 solicitudRouter.post(
   '/verificar-correo',
-  sendCodeIpLimiter,
+  reserveEnrollmentCodeIp,
   verifyEnrollmentCaptcha,
-  sendCodeEmailLimiter,
-  [
-    correoValidator,
-    body('courseId').isUUID().withMessage('courseId debe ser un UUID válido'),
-  ],
+  [correoValidator, body('courseId').isUUID().withMessage('courseId debe ser un UUID válido')],
   validate,
+  reserveEnrollmentCode,
   asyncHandler(verificarCorreo),
 );
 
@@ -154,7 +155,7 @@ solicitudAdminRouter.get(
     query('q').optional().isString().trim().isLength({ max: 100 }),
     query('estado')
       .optional()
-      .isIn([...SOLICITUD_ESTADOS,'con_documentos_por_revisar'])
+      .isIn([...SOLICITUD_ESTADOS, 'con_documentos_por_revisar'])
       .withMessage('estado debe ser uno de: ' + SOLICITUD_ESTADOS.join(', ')),
   ],
   validate,
@@ -190,16 +191,40 @@ solicitudAdminRouter.patch(
 
 export const privacyRouter = Router();
 privacyRouter.get('/aviso-privacidad', avisoPrivacidad);
-solicitudRouter.get('/:id/progreso', applicationRateLimiter, authenticateSolicitud, idParamValidator, validate, asyncHandler(progresoSolicitud));
+solicitudRouter.get(
+  '/:id/progreso',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  idParamValidator,
+  validate,
+  asyncHandler(progresoSolicitud),
+);
 
-solicitudRouter.put('/:id/consentimiento', applicationRateLimiter, authenticateSolicitud,
-  [idParamValidator, body('versionAviso').isString()], validate, asyncHandler(aceptarConsentimiento));
+solicitudRouter.put(
+  '/:id/consentimiento',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  [idParamValidator, body('versionAviso').isString()],
+  validate,
+  asyncHandler(aceptarConsentimiento),
+);
 
-
-solicitudAdminRouter.get('/:id/documentos/:docId/url', [idParamValidator, param('docId').isUUID()], validate, asyncHandler(documentoUrl));
+solicitudAdminRouter.get(
+  '/:id/documentos/:docId/url',
+  [idParamValidator, param('docId').isUUID()],
+  validate,
+  asyncHandler(documentoUrl),
+);
 
 solicitudAdminRouter.delete('/:id', idParamValidator, validate, asyncHandler(eliminarSolicitud));
 
-solicitudRouter.post('/:id/enviar',applicationRateLimiter,authenticateSolicitud,idParamValidator,validate,asyncHandler(enviarSolicitud));
+solicitudRouter.post(
+  '/:id/enviar',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  idParamValidator,
+  validate,
+  asyncHandler(enviarSolicitud),
+);
 
-solicitudAdminRouter.get('/resumen',asyncHandler(resumenSolicitudes));
+solicitudAdminRouter.get('/resumen', asyncHandler(resumenSolicitudes));

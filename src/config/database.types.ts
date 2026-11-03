@@ -31,6 +31,7 @@ import type {
 import type { PracticeRecovery } from '../services/studentAccess.service';
 import type { StudentDeletionOperation } from '../services/studentDeletion.service';
 import type { StudentProfileResult } from '../services/studentProfile.service';
+import type { EnrollmentSummaryRow, EnrollmentReservation, EnrollmentDraftReservation } from '../models/enrollmentLimits.model';
 
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
 export type StudentStatus =
@@ -72,7 +73,10 @@ export interface Database {
     Functions: {
       enviar_solicitud: {Args:{p_id:string;p_version:string};Returns:{id:string;estado:string;enviadaAt:string}};
       correo_tiene_cuenta: {Args:{p_correo:string};Returns:boolean};
-      resumen_solicitudes: {Args:Record<string,never>;Returns:{pendientes:number;documentosPorRevisar:number}};
+      resumen_solicitudes: {Args:Record<string,never>;Returns:EnrollmentSummaryRow|null};
+      reservar_limite_inscripcion:{Args:{p_operacion:string;p_ip_hash:string|null;p_correo_hash:string|null;p_topes:Record<string,number>;p_solicitud?:string|null};Returns:EnrollmentReservation|null};
+      crear_borrador_limitado:{Args:{p_correo:string;p_curso:string;p_codigo:string;p_expira:string;p_topes:Record<string,number>};Returns:EnrollmentDraftReservation|null};
+      actualizar_config_inscripcion:{Args:{p_actor:string;p_abiertas:boolean};Returns:{inscripcionesAbiertas:boolean}|null};
       revisar_documento_solicitud: {Args:{p_solicitud:string;p_documento:string;p_actor:string;p_estado:string;p_motivo:string|null};Returns:{id:string;estado:'aprobado'|'rechazado'}};
       eliminar_solicitud_reclamada: {
         Args: { p_solicitud: string; p_claim: string; p_actor: string | null; p_accion: string };
@@ -288,6 +292,7 @@ export interface Database {
       };
     };
     Tables: {
+      app_settings:{Row:{id:boolean;inscripciones_abiertas:boolean;updated_by:string|null;updated_at:string};Insert:{id?:boolean;inscripciones_abiertas?:boolean;updated_by?:string|null};Update:{inscripciones_abiertas?:boolean;updated_by?:string|null;updated_at?:string};Relationships:[]};
       practice_attendance_events: {
         Row: AttendanceEventRow & { transaction_id: number };
         Insert: Omit<AttendanceEventRow, 'id' | 'created_at'> & {
@@ -483,6 +488,7 @@ export interface Database {
       };
       courses: {
         Row: {
+          edad_minima: number;
           id: string;
           nombre: string;
           tipo: CourseType;
@@ -492,6 +498,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
+          edad_minima?: number;
           id?: string;
           nombre: string;
           tipo: CourseType;
@@ -499,6 +506,7 @@ export interface Database {
           horas_requeridas?: number | null;
         };
         Update: Partial<{
+          edad_minima: number;
           nombre: string;
           tipo: CourseType;
           descripcion: string | null;
