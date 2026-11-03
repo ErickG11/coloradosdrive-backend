@@ -1,22 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
-import { env } from '../config/env';
-import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
+import { PRIVACY_NOTICE_VERSION, TERMS_VERSION } from '../config/privacy';
 import { MOTIVOS_RECHAZO } from '../config/enrollmentCatalog';
 import { calcularEdad } from '../utils/solicitudAge';
-import { solicitudError } from '../utils/solicitudError';
+import { requireKnownFields } from '../utils/enrollmentSanitization';
+import { privacyContent } from '../config/enrollmentLegal';
+import { normalizeSolicitudError, solicitudError } from '../utils/solicitudError';
 
 type Consent = Database['public']['Tables']['solicitud_consentimientos']['Row'];
-export function privacyNotice(): {
-  version: string;
-  contactoDerechos: string;
-  retencionDias: number;
-} {
-  return {
-    version: PRIVACY_NOTICE_VERSION,
-    contactoDerechos: env.PRIVACY_CONTACT_EMAIL,
-    retencionDias: env.SOLICITUD_RETENCION_DIAS,
-  };
+export function privacyNotice(): ReturnType<typeof privacyContent> {
+  return privacyContent();
 }
 export class SolicitudPrivacyService {
   constructor(private readonly db: SupabaseClient<Database>) {}
@@ -26,9 +19,10 @@ export class SolicitudPrivacyService {
       .select()
       .eq('solicitud_id', id)
       .eq('version_aviso', PRIVACY_NOTICE_VERSION)
+      .eq('version_terminos', TERMS_VERSION)
       .maybeSingle();
     if (error) throw error;
-    return data?.acepto_tratamiento && data.declara_veracidad ? data : null;
+    return data?.acepto_tratamiento && data.declara_veracidad && data.acepto_terminos ? data : null;
   }
   async requireConsent(id: string): Promise<Consent> {
     const consent = await this.currentConsent(id);
@@ -42,39 +36,63 @@ export class SolicitudPrivacyService {
   }
   async accept(
     id: string,
-    input: { versionAviso: unknown; aceptoTratamiento: unknown; declaraVeracidad: unknown },
-  ): Promise<{ version: string }> {
+    input: unknown,
+  ): Promise<{
+    version: string;
+    versionAviso: string;
+    versionTerminos: string;
+    aceptadoAt: string;
+  }> {
+    requireKnownFields(input, [
+      'versionAviso',
+      'versionTerminos',
+      'aceptoTratamiento',
+      'declaraVeracidad',
+      'aceptoTerminos',
+      'representanteAcepta',
+    ]);
     if (input.versionAviso !== PRIVACY_NOTICE_VERSION)
       throw solicitudError(
-        'El aviso cambió. Revisa la versión vigente',
+        'El aviso cambió. Revisa la versión vigente.',
         409,
         'AVISO_DESACTUALIZADO',
       );
-    if (input.aceptoTratamiento !== true || input.declaraVeracidad !== true)
-      throw solicitudError('Debes aceptar ambas declaraciones', 400, 'CONSENTIMIENTO_REQUERIDO');
-    const { data: row, error: rowError } = await this.db
-      .from('solicitudes_inscripcion')
-      .select('correo_verificado,estado,reviewed_at,enviada_at')
-      .eq('id', id)
-      .maybeSingle();
-    if (rowError) throw rowError;
-    if (!row) throw solicitudError('La solicitud no existe', 404, 'NO_ENCONTRADO');
-    if (!row.correo_verificado) throw solicitudError('Verifica tu correo', 403, 'ACCESO_DENEGADO');
-    if (row.enviada_at)
-      throw solicitudError('La solicitud ya fue enviada', 409, 'SOLICITUD_ENVIADA');
-    if (row.estado === 'rechazada' || row.estado === 'aprobada' || row.reviewed_at)
-      throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
-    const { error } = await this.db.from('solicitud_consentimientos').upsert(
-      {
-        solicitud_id: id,
-        version_aviso: PRIVACY_NOTICE_VERSION,
-        acepto_tratamiento: true,
-        declara_veracidad: true,
-      },
-      { onConflict: 'solicitud_id,version_aviso', ignoreDuplicates: true },
-    );
-    if (error) throw error;
-    return { version: PRIVACY_NOTICE_VERSION };
+    if (input.versionTerminos !== TERMS_VERSION)
+      throw solicitudError(
+        'Los términos cambiaron. Revisa la versión vigente.',
+        409,
+        'TERMINOS_DESACTUALIZADOS',
+      );
+    if (
+      input.aceptoTratamiento !== true ||
+      input.declaraVeracidad !== true ||
+      input.aceptoTerminos !== true
+    )
+      throw solicitudError(
+        'Acepta el tratamiento, la declaración de veracidad y los términos.',
+        400,
+        'CONSENTIMIENTO_REQUERIDO',
+      );
+    if (input.representanteAcepta !== undefined && typeof input.representanteAcepta !== 'boolean')
+      throw solicitudError(
+        'La autorización del representante debe ser un booleano.',
+        400,
+        'REPRESENTANTE_INVALIDO',
+      );
+    const { data, error } = await this.db.rpc('aceptar_consentimiento_inscripcion', {
+      p_id: id,
+      p_version_aviso: PRIVACY_NOTICE_VERSION,
+      p_version_terminos: TERMS_VERSION,
+      p_representante: input.representanteAcepta === true,
+    });
+    if (error) throw normalizeSolicitudError(error);
+    if (!data)
+      throw solicitudError(
+        'No se pudo registrar el consentimiento. Intenta de nuevo.',
+        503,
+        'SERVICIO_NO_DISPONIBLE',
+      );
+    return data;
   }
   async progress(id: string): Promise<{
     courseId: string;
