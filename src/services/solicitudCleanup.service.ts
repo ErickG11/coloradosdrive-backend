@@ -18,7 +18,7 @@ export class SolicitudCleanupService {
       const base = row.estado === 'rechazada' ? row.reviewed_at ?? row.created_at : row.created_at;
       const age = (now.getTime() - new Date(base).getTime()) / DAY_MS;
       const retentionDue = age >= this.retentionDays;
-      if (!retentionDue && (row.estado !== 'pendiente_revision' || age < ABANDONED_AFTER_DAYS)) continue;
+      if (row.estado === 'pendiente_revision' ? age < ABANDONED_AFTER_DAYS : !retentionDue) continue;
       try {
         if (await deletion.remove(row.id, null, 'purga_retencion', false)) count++;
       } catch { console.error('solicitud_cleanup_item_failed'); }
