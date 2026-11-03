@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import type { Notification, NotificationRow, NotificationsPage } from '../models/notification.model';
+import { normalizeSolicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 
@@ -16,6 +17,12 @@ function toNotification(row: NotificationRow): Notification {
 
 export class NotificationService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
+
+  async reviewDocument(id:string,doc:string,actor:string,input:{estado:'aprobado'|'rechazado';motivoRechazo?:string}):Promise<{id:string;estado:'aprobado'|'rechazado'}>{
+    const result=await this.supabase.rpc('revisar_documento_solicitud',{p_solicitud:id,p_documento:doc,p_actor:actor,p_estado:input.estado,p_motivo:input.motivoRechazo??null});
+    if(result.error)throw normalizeSolicitudError(result.error);
+    return result.data;
+  }
 
   async list(userId: string, page: number, pageSize: number): Promise<NotificationsPage> {
     const { data, error } = await this.supabase.rpc('list_user_notifications', {
