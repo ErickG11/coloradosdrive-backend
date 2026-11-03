@@ -23,7 +23,7 @@ leer `inscripcion-043.md` para las excepciones autorizadas y prueba de Realtime.
 | ENROLLMENT_CODES_PER_IP_HOUR        | 60                                    | Solicitudes de código por grupo de IP/hora                                           |
 | ENROLLMENT_RATE_HMAC_SECRET         | SOLICITUD_TOKEN_SECRET                | Secreto dedicado opcional, mínimo 32 caracteres; F07 separará contexto criptográfico |
 | ADMIN_MFA_REQUIRED                  | false                                 | Enrolar primero; activar solo después de F21/F39                                     |
-| CAPTCHA_PROVIDER                    | off en local; turnstile en producción | Implementación y guardas de arranque en F06                                          |
+| CAPTCHA_PROVIDER                    | off en local; turnstile en producción | Validación activa en backend desde F06                                               |
 | TURNSTILE_SECRET_KEY                | Vacío                                 | Credencial solo servidor; no se devuelve en configuración pública                    |
 | NEXT_PUBLIC_TURNSTILE_SITE_KEY      | Vacío                                 | Clave pública para widget y configuración de inscripción                             |
 
@@ -32,8 +32,8 @@ significa agotado. Rechazar negativos, fracciones, notación exponencial e infin
 Ningún validador de configuración imprime valores secretos. `.env.example` contiene
 solo valores ficticios/vacíos. No se modifica `.env`.
 
-La configuración de F03 **no activa** aún captcha, MFA, límites persistentes o
-nuevos endpoints; esas tareas tienen implementación y pruebas propias pendientes.
+F03 solo define configuración; F06 activa la validación de captcha en el backend.
+MFA, límites persistentes y los endpoints restantes siguen pendientes de sus tareas.
 
 ## Catálogos del servidor
 
@@ -99,3 +99,31 @@ el web service previsto no se puede registrar como método manual.
 Estos validadores se conectarán a los contratos nuevos en F09–F15. Las rutas
 actuales conservan temporalmente su contrato hasta esa sustitución, documentada
 para despliegue conjunto; F05 no presume endpoints ya adaptados.
+
+## Captcha del servidor (F06)
+
+Antes de emitir códigos, el servidor valida captchaToken contra Siteverify con
+secret, response y remoteip tomado de Express. No sigue redirects y corta a los
+5 segundos; no registra cuerpos, tokens, IP ni excepciones del proveedor. El
+límite IP existente precede al captcha; los límites persistentes HMAC se conectarán
+al completar F07. La caída/timeout/JSON inválido/fallo de configuración del proveedor
+produce 503 VERIFICACION_NO_DISPONIBLE con sugerencia de contacto por WhatsApp;
+un token rechazado produce 400 CAPTCHA_INVALIDO. No se accede a DB ni correo si
+el middleware rechaza la verificación. En producción se exige hostname igual al
+host de FRONTEND_URL.
+
+CAPTCHA_PROVIDER=off funciona solo fuera de production, sin claves ni red.
+Turnstile exige ambas claves al arrancar; producción también rechaza las claves
+dummy. Para probar widget local cuando esté F27:
+
+```dotenv
+CAPTCHA_PROVIDER=turnstile
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+```
+
+Son claves **públicas de prueba** documentadas por Cloudflare, no credenciales.
+Nunca usarlas en producción. El widget todavía se construirá en F27; local puede
+seguir con off. Fuentes:
+[Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/),
+[claves de prueba](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).

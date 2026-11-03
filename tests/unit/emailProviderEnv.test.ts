@@ -79,6 +79,7 @@ describe('configuración por proveedor de correo', () => {
   it('SMTP sigue permitido en producción y Railway', () => {
     process.env.NODE_ENV = 'production';
     process.env.RAILWAY_ENVIRONMENT = 'production';
+    process.env.CAPTCHA_PROVIDER = 'turnstile';
     expect(readEnv().EMAIL_PROVIDER).toBe('smtp');
   });
 
