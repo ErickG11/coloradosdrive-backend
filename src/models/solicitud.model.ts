@@ -100,6 +100,9 @@ export interface SolicitudDocumentoResult {
   tipoDocumento: SolicitudTipoDocumento;
   estado: SolicitudDocumentoEstado;
   uploadedAt: string;
+  subtipo?: string;
+  mimeType?: string;
+  tamano?: number;
 }
 
 export interface DecidirSolicitudInput {

@@ -7,6 +7,9 @@ jest.mock('../../src/middlewares/enrollmentLimits.middleware', () => ({
   reserveEnrollmentCode: (_req: unknown, _res: unknown, next: () => void) => {
     next();
   },
+  reserveEnrollmentUpload: (_req: unknown, _res: unknown, next: () => void) => {
+    next();
+  },
 }));
 jest.mock('../../src/config/supabase', () => ({
   supabaseAdmin: { from: jest.fn(), rpc: jest.fn() },

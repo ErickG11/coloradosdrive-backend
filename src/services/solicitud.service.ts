@@ -16,8 +16,6 @@ import {
   type SolicitudRelacionada,
   type SolicitudDocumentoResult,
   type SolicitudEstado,
-  type SolicitudTipoDocumento,
-  type UploadedFile,
 } from '../models/solicitud.model';
 import { calcularEdad, validateApplicant } from '../utils/solicitudAge';
 import { SolicitudPrivacyService } from './solicitudPrivacy.service';
@@ -28,11 +26,13 @@ import { AppError } from '../utils/AppError';
 import { PRIVACY_NOTICE_VERSION, TERMS_VERSION } from '../config/privacy';
 import { normalizeSolicitudError } from '../utils/solicitudError';
 import { NotificationService } from './notification.service';
-import { SolicitudDocumentStorage } from './solicitudDocumentStorage.service';
+import { SolicitudCertificateStorage } from './solicitudCertificateStorage.service';
+import { prepareCertificate } from '../utils/certificateFile';
+import { NIVELES_ESTUDIOS, type NivelEstudios } from '../config/enrollmentCatalog';
 import { env } from '../config/env';
 import { enrollmentRateKey } from '../utils/enrollmentRateKey';
-import { normalizeEnrollmentEmail } from '../utils/enrollmentSanitization';
-import { validateEnrollmentData, validateVerificationCode } from '../utils/enrollmentValidation';
+import { normalizeEnrollmentEmail, requireKnownFields } from '../utils/enrollmentSanitization';
+import { validateCertificateSubtype, validateEnrollmentData, validateVerificationCode } from '../utils/enrollmentValidation';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
@@ -216,27 +216,34 @@ export class SolicitudService {
     return result.data;
   }
 
-  async subirDocumento(
+  // Un solo certificado de estudios, solo si el nivel declarado lo admite. Los filtros de
+  // tamaño y los topes ya corrieron antes de leer el archivo (middlewares de la ruta).
+  async subirCertificado(
     solicitudId: string,
-    tipoDocumento: SolicitudTipoDocumento,
-    file: UploadedFile,
+    file: { buffer: Buffer; mimetype: string; originalname: string },
+    body: unknown,
   ): Promise<SolicitudDocumentoResult> {
+    const fields = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+    requireKnownFields(fields, ['subtipo']);
     const solicitud = await this.getOrThrow(solicitudId);
-
-    if (solicitud.estado !== 'pendiente_revision' || solicitud.reviewed_at) {
+    if (!['borrador', 'devuelta'].includes(solicitud.estado))
       throw solicitudError('Esta solicitud ya no admite documentos', 409, 'SOLICITUD_CERRADA');
-    }
-    if (!solicitud.cedula || !solicitud.solicitada_at) {
-      throw new AppError('Completa tus datos (cédula) antes de subir documentos', 409);
-    }
-
-    // El Content-Type que declara el cliente es falsificable (basta con
-    // cambiar la extensión al subir); para documentos de identidad se
-    // verifica el contenido real por su firma binaria, no lo que dice el
-    // multipart. `file.mimetype` ya no se usa para decidir nada de acá en
-    // adelante.
-    await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
-    return new SolicitudDocumentStorage(this.supabase).upload(solicitudId,tipoDocumento,file);
+    if (!solicitud.correo_verificado)
+      throw solicitudError('Verifica tu correo', 403, 'CORREO_NO_VERIFICADO');
+    const nivel = solicitud.nivel_estudios;
+    if (!nivel || !solicitud.datos_actualizados_at || !(nivel in NIVELES_ESTUDIOS))
+      throw solicitudError('Completa tus datos y tu nivel de estudios primero', 409, 'DATOS_REQUERIDOS');
+    const config = NIVELES_ESTUDIOS[nivel as NivelEstudios];
+    if (config.archivo === 'ninguno')
+      throw solicitudError('Tu nivel de estudios no requiere archivo', 409, 'NIVEL_NO_REQUIERE_ARCHIVO');
+    const subtipo = validateCertificateSubtype(nivel as NivelEstudios, fields.subtipo);
+    const prepared = await prepareCertificate(file);
+    return new SolicitudCertificateStorage(this.supabase).save(
+      solicitudId,
+      { nivel, marca: solicitud.datos_actualizados_at },
+      subtipo,
+      prepared,
+    );
   }
 
   // ---------------------------------------------------------------------

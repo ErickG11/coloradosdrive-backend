@@ -49,6 +49,16 @@ export function normalizeSolicitudError(error: Error): Error {
     SI427: [400, 'FECHA_INVALIDA', 'Ingresa una fecha de nacimiento real y no futura.'],
     SI428: [503, 'CURSO_NO_DISPONIBLE', 'El curso no está disponible. Contacta a la escuela.'],
     SI429: [409, 'DATOS_NO_REGISTRADOS', MENSAJE_DATOS_DUPLICADOS],
+    SI433: [
+      409,
+      'DATOS_CAMBIARON',
+      'Tus datos cambiaron mientras subías el archivo. Vuelve a intentarlo.',
+    ],
+    SI434: [
+      400,
+      'SUBTIPO_CERTIFICADO_INVALIDO',
+      'Ese documento no corresponde a tu nivel de estudios.',
+    ],
     SI431: [
       400,
       'NIVEL_ESTUDIOS_NO_ADMITIDO',

@@ -8,7 +8,6 @@ import type {
   DecidirSolicitudInput,
   SolicitudDocumentoResult,
   SolicitudEstado,
-  SolicitudTipoDocumento,
   VerificarCorreoInput,
 } from '../models/solicitud.model';
 import { AccountService } from '../services/account.service';
@@ -65,15 +64,18 @@ export async function subirDocumento(
   res: Response<SolicitudDocumentoResult>,
 ): Promise<void> {
   if (!req.file) {
-    throw new AppError('El archivo es obligatorio (campo "archivo")', 400);
+    throw new AppError('El archivo es obligatorio (campo "archivo")', 400, {
+      code: 'ARCHIVO_INVALIDO',
+    });
   }
-
-  const result = await solicitudService.subirDocumento(
-    req.params.id,
-    (req.body as { tipo_documento: SolicitudTipoDocumento }).tipo_documento,
-    { buffer: req.file.buffer, mimetype: req.file.mimetype, size: req.file.size },
+  const { buffer, mimetype, originalname } = req.file;
+  res.status(201).json(
+    await solicitudService.subirCertificado(
+      req.params.id,
+      { buffer, mimetype, originalname },
+      req.body as unknown,
+    ),
   );
-  res.status(201).json(result);
 }
 
 // --- Admin ---------------------------------------------------------------

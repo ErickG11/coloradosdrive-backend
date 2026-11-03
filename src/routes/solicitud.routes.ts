@@ -22,19 +22,16 @@ import { authenticate } from '../middlewares/auth.middleware';
 import { applicationRateLimiter, verificationRateLimiter } from '../middlewares/rateLimit';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { authenticateSolicitud } from '../middlewares/solicitudAuth.middleware';
-import { uploadDocumento } from '../middlewares/upload';
+import { uploadCertificado } from '../middlewares/uploadCertificado';
 import { validateFields as validate } from '../middlewares/validate';
-import {
-  DOCUMENTO_ESTADOS_REVISION,
-  SOLICITUD_ESTADOS,
-  TIPOS_DOCUMENTO,
-} from '../models/solicitud.model';
+import { DOCUMENTO_ESTADOS_REVISION, SOLICITUD_ESTADOS } from '../models/solicitud.model';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireKnownFields } from '../utils/enrollmentSanitization';
 import { verifyEnrollmentCaptcha } from '../middlewares/captcha.middleware';
 import {
   reserveEnrollmentCodeIp,
   reserveEnrollmentCode,
+  reserveEnrollmentUpload,
 } from '../middlewares/enrollmentLimits.middleware';
 
 // ---------------------------------------------------------------------------
@@ -99,14 +96,10 @@ solicitudRouter.post(
   '/:id/documentos',
   applicationRateLimiter,
   authenticateSolicitud,
-  uploadDocumento,
-  [
-    idParamValidator,
-    body('tipo_documento')
-      .isIn(TIPOS_DOCUMENTO)
-      .withMessage('tipo_documento debe ser uno de: ' + TIPOS_DOCUMENTO.join(', ')),
-  ],
+  idParamValidator,
   validate,
+  reserveEnrollmentUpload,
+  uploadCertificado,
   asyncHandler(subirDocumento),
 );
 
