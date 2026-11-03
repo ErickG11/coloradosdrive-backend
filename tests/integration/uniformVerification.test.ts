@@ -30,7 +30,10 @@ test.each(['nuevo', 'solicitud', 'cuenta', 'error_bd'])(
   async (branch) => {
     const logs = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     (mailer.sendMail as jest.Mock).mockClear();
-    (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({ data: branch === 'cuenta', error: null });
+    (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({
+      data: { emitir: ['nuevo', 'solicitud'].includes(branch), correo: 'ana@example.invalid' },
+      error: branch === 'error_bd' ? { code: 'DB_ERROR', message: 'datos ficticios privados' } : null,
+    });
     (supabaseAdmin.from as jest.Mock).mockImplementation((table: string) =>
       createChain({
         data:

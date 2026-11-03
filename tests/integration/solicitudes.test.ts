@@ -1,3 +1,12 @@
+import type * as SolicitudAuthModule from '../../src/middlewares/solicitudAuth.middleware';
+import type * as SupabaseMockModule from '../helpers/supabaseMock';
+// Fixture independiente para la lectura de estado del middleware; conserva firma/scope reales.
+// La matriz completa y el estado persistido se prueban en solicitudScope.test.ts.
+jest.mock('../../src/middlewares/solicitudAuth.middleware',()=>{
+  const actual=jest.requireActual<typeof SolicitudAuthModule>('../../src/middlewares/solicitudAuth.middleware');
+  const {createChain}=jest.requireActual<typeof SupabaseMockModule>('../helpers/supabaseMock');
+  return {...actual,authenticateSolicitud:actual.createSolicitudAuth({from:()=>createChain({data:{estado:'borrador',correo_verificado:true},error:null})} as unknown as Parameters<typeof actual.createSolicitudAuth>[0])};
+});
 // Límites persistentes tienen su propia suite con RPC reales en memoria.
 jest.mock('../../src/middlewares/enrollmentLimits.middleware',()=>({
   reserveEnrollmentCodeIp:(_req:unknown,_res:unknown,next:()=>void)=>{next();},
@@ -100,255 +109,100 @@ describe('solicitudes de inscripción (público)', () => {
     mockedSendMail.mockReset().mockResolvedValue({});
   });
 
-  describe('POST /solicitudes/verificar-correo', () => {
-    it('responde 400 con un correo inválido', async () => {
-      const res = await request(app)
-        .post('/solicitudes/verificar-correo')
-        .send({ correo: 'no-es-correo' });
-      expect(res.status).toBe(400);
-      expect(mockedFrom).not.toHaveBeenCalled();
+  describe('POST /solicitudes/verificar-correo',()=>{
+    it('responde 400 con un correo inválido',async()=>{
+      const res=await request(app).post('/solicitudes/verificar-correo').send({correo:'no-es-correo'});
+      expect(res.status).toBe(400);expect(mockedFrom).not.toHaveBeenCalled();
     });
-
-    it('crea la solicitud en progreso, guarda solo el HASH del código y lo envía por correo', async () => {
-      const insertChain = createChain({ data: null, error: null });
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: null, error: null })) // findByCorreo: no existe
-        .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
-        .mockReturnValueOnce(insertChain);
-
-      const res = await request(app)
-        .post('/solicitudes/verificar-correo')
-        .send({ correo: '  Ana@Example.com ', courseId });
-
-      expect(res.status).toBe(200);
-      expect(mockedSendMail).toHaveBeenCalledTimes(1);
-      const mail = mockedSendMail.mock.calls[0][0] as { to: string; text: string };
-      expect(mail.to).toBe('ana@example.com');
-      const code = /: (\d{6})/.exec(mail.text)?.[1] ?? '';
-      expect(code).toMatch(/^\d{6}$/);
-
-      const inserted = insertChain.insert.mock.calls[0][0] as Record<string, string>;
-      expect(inserted.correo).toBe('ana@example.com');
-      expect(inserted.codigo_verificacion).toBe(sha256(code));
-      expect(inserted.codigo_verificacion).not.toContain(code);
-      // Vence en 15 minutos.
-      const minutes = (new Date(inserted.codigo_expira_at).getTime() - Date.now()) / 60_000;
-      expect(minutes).toBeGreaterThan(14);
-      expect(minutes).toBeLessThanOrEqual(15);
+    it('crea con presupuesto, guarda HASH y envía el mismo código',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{emitir:true,id:solicitudId,correo:'ana@example.com'},error:null});
+      const res=await request(app).post('/solicitudes/verificar-correo').send({correo:' Ana@Example.com ',courseId});
+      expect(res.status).toBe(200);expect(mockedSendMail).toHaveBeenCalledTimes(1);
+      const code=/: (\d{6})/.exec((mockedSendMail.mock.calls[0][0] as {text:string}).text)?.[1]??'';
+      const args=(supabaseAdmin.rpc as jest.Mock).mock.calls[0][1];
+      expect(args.p_codigo_hash).toBe(sha256(code));expect(args).not.toHaveProperty('codigo');
+      expect(args.p_topes.solicitudes).toBe(150);expect(args.p_correo).toBe('ana@example.com');
     });
-
-    it('reutiliza la solicitud existente del correo (solo renueva el código)', async () => {
-      const updateChain = createChain({ data: null, error: null });
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-        .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
-        .mockReturnValueOnce(updateChain);
-
-      const res = await request(app)
-        .post('/solicitudes/verificar-correo')
-        .send({ correo: 'ana@example.com', courseId });
-
-      expect(res.status).toBe(200);
-      expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({ codigo_verificacion: expect.any(String) }),
-      );
-      // No pisa correo_verificado: un tercero no puede "des-verificar" a alguien.
-      expect(updateChain.update.mock.calls[0][0]).not.toHaveProperty('correo_verificado');
+    it('reutiliza expediente y su dirección original al enviar OTP',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{emitir:true,id:solicitudId,correo:'original@example.com'},error:null});
+      await request(app).post('/solicitudes/verificar-correo').send({correo:'ana@example.com',courseId});
+      expect(mockedSendMail).toHaveBeenCalledWith(expect.objectContaining({to:'original@example.com'}));
     });
-
-    it('responde éxito genérico si el correo ya tiene una cuenta', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: null, error: null }),
-      );
-      mockedFrom.mockReturnValueOnce(createChain({data:{id:courseId},error:null}));
-      (supabaseAdmin.rpc as jest.Mock).mockResolvedValueOnce({data:true,error:null});
-      const res = await request(app)
-        .post('/solicitudes/verificar-correo')
-        .send({ correo: 'ana@example.com', courseId });
-
-      expect(res.status).toBe(200);
+    it('cuenta sin solicitud conserva éxito sin código',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{emitir:false},error:null});
+      expect((await request(app).post('/solicitudes/verificar-correo').send({correo:'ana@example.com',courseId})).status).toBe(200);
       expect(mockedSendMail).not.toHaveBeenCalled();
     });
-
-    it('conserva éxito genérico aunque falle el correo', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: null, error: null }))
-        .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
-        .mockReturnValueOnce(createChain({ data: null, error: null }));
-      mockedSendMail.mockRejectedValueOnce(new Error('smtp caído'));
-
-      const res = await request(app)
-        .post('/solicitudes/verificar-correo')
-        .send({ correo: 'ana@example.com', courseId });
-
-      expect(res.status).toBe(200);
+    it('conserva éxito aunque falle correo',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{emitir:true,correo:'ana@example.com'},error:null});
+      mockedSendMail.mockRejectedValueOnce(new Error('SMTP ficticio'));
+      expect((await request(app).post('/solicitudes/verificar-correo').send({correo:'ana@example.com',courseId})).status).toBe(200);
     });
   });
-
-  it('curso inexistente conserva respuesta uniforme sin emitir el correo', async () => {
-    mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }))
-      .mockReturnValueOnce(createChain({ data: null, error: null }));
-    const res = await request(app).post('/solicitudes/verificar-correo').send({ correo: 'ana@example.com', courseId });
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({message:'Te enviamos un código de verificación a tu correo'});
-    expect(mockedSendMail).not.toHaveBeenCalled();
+  it('curso inexistente conserva éxito sin correo',async()=>{
+    (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{emitir:false},error:null});
+    const res=await request(app).post('/solicitudes/verificar-correo').send({correo:'ana@example.com',courseId});
+    expect(res.status).toBe(200);expect(mockedSendMail).not.toHaveBeenCalled();
   });
-  it('conserva curso y fechas después del primer guardado', async () => {
-    const update = createChain({ data: null, error: null });
-    mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ solicitada_at: '2026-01-02T12:00:00Z' }), error: null }))
-      .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null })).mockReturnValueOnce(update);
-    const res = await request(app).post('/solicitudes/verificar-correo').send({ correo: 'ana@example.com', courseId: otraSolicitudId });
-    expect(res.status).toBe(200);
-    expect(update.update.mock.calls[0][0]).not.toHaveProperty('course_id');
-    expect(update.update.mock.calls[0][0]).not.toHaveProperty('solicitada_at');
-    expect(update.update.mock.calls[0][0]).not.toHaveProperty('created_at');
+  it('no actualiza datos/curso desde el cliente al solicitar código',async()=>{
+    (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{emitir:true,correo:'ana@example.com'},error:null});
+    await request(app).post('/solicitudes/verificar-correo').send({correo:'ana@example.com',courseId:otraSolicitudId});
+    expect(mockedFrom).not.toHaveBeenCalled();
+    expect((supabaseAdmin.rpc as jest.Mock).mock.calls[0][1]).not.toHaveProperty('created_at');
   });
-  describe('POST /solicitudes/confirmar-codigo', () => {
-    const future = (): string => new Date(Date.now() + 10 * 60_000).toISOString();
-
-    it('responde 400 si el código no tiene 6 dígitos', async () => {
-      const res = await request(app)
-        .post('/solicitudes/confirmar-codigo')
-        .send({ correo: 'ana@example.com', codigo: '12' });
-      expect(res.status).toBe(400);
-    });
-
-    it('responde 400 con el mismo mensaje si el código no existe o venció (sin consumir un intento)', async () => {
-      const cases = [
-        buildSolicitud({ codigo_verificacion: null, codigo_expira_at: null }), // sin código
-        buildSolicitud({
-          codigo_verificacion: sha256('654321'),
-          codigo_expira_at: new Date(Date.now() - 1000).toISOString(), // vencido
-        }),
-      ];
-      const messages = new Set<string>();
-
-      for (const row of cases) {
-        mockedFrom.mockReturnValueOnce(createChain({ data: row, error: null }));
-        const res = await request(app)
-          .post('/solicitudes/confirmar-codigo')
-          .send({ correo: 'ana@example.com', codigo: '654321' });
+  it.each(['estado', 'scope', 'solicitudId'])(
+    'rechaza el campo protegido %s antes de emitir o consumir un código', async (campo) => {
+      for (const [ruta, cuerpo] of [
+        ['verificar-correo', { correo: 'ana@example.com', courseId }],
+        ['confirmar-codigo', { correo: 'ana@example.com', codigo: '012345' }],
+      ] as const) {
+        const res = await request(app).post(`/solicitudes/${ruta}`).send({ ...cuerpo, [campo]: 'aprobada' });
         expect(res.status).toBe(400);
-        messages.add(res.body.message as string);
+        expect(res.body.code).toBe('CAMPO_NO_PERMITIDO');
       }
-      // Correo inexistente.
-      mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }));
-      const res = await request(app)
-        .post('/solicitudes/confirmar-codigo')
-        .send({ correo: 'nadie@example.com', codigo: '654321' });
-      expect(res.status).toBe(400);
-      messages.add(res.body.message as string);
-
-      expect(messages.size).toBe(1);
-      // Ninguno de estos casos hace un segundo llamado a .from (no hay
-      // intento que contar: no existe código vigente contra el cual fallar).
-      expect(mockedFrom).toHaveBeenCalledTimes(3);
+      expect(supabaseAdmin.rpc).not.toHaveBeenCalled();
+      expect(mockedSendMail).not.toHaveBeenCalled();
+    },
+  );
+  it('captcha off ignora un token opcional sin validarlo', async () => {
+    (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{emitir:true,correo:'ana@example.com'},error:null});
+    const res = await request(app).post('/solicitudes/verificar-correo').send({correo:'ana@example.com',courseId,captchaToken:{ignorado:true}});
+    expect(res.status).toBe(200);
+    expect(mockedSendMail).toHaveBeenCalledTimes(1);
+  });
+  describe('POST /solicitudes/confirmar-codigo',()=>{
+    it('responde 400 si no tiene seis dígitos',async()=>{
+      expect((await request(app).post('/solicitudes/confirmar-codigo').send({correo:'ana@example.com',codigo:'12'})).status).toBe(400);
     });
-
-    it('si el código no coincide, cuenta el intento fallido y devuelve el mismo mensaje genérico', async () => {
-      const updateChain = createChain({ data: { id: solicitudId }, error: null });
-      mockedFrom
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSolicitud({
-              codigo_verificacion: sha256('123456'),
-              codigo_expira_at: future(),
-              intentos_codigo: 2,
-            }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(updateChain);
-
-      const res = await request(app)
-        .post('/solicitudes/confirmar-codigo')
-        .send({ correo: 'ana@example.com', codigo: '654321' });
-
-      expect(res.status).toBe(400);
-      expect(res.body.message).toBe('Código inválido o vencido');
-      expect(updateChain.update).toHaveBeenCalledWith({ intentos_codigo: 3 });
-      expect(updateChain.eq).toHaveBeenCalledWith('intentos_codigo', 2);
-      expect(updateChain.eq).toHaveBeenCalledWith('codigo_verificacion', sha256('123456'));
-      expect(updateChain.gt).toHaveBeenCalledWith('codigo_expira_at', expect.any(String));
+    it('mismo error para desconocido, vencido y ausente; cuenta cada fallo en SQL',async()=>{
+      const messages=new Set<string>();
+      for(const correo of ['ana@example.com','vencido@example.com','nadie@example.com']){
+        (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{resultado:'invalido'},error:null});
+        const res=await request(app).post('/solicitudes/confirmar-codigo').send({correo,codigo:'654321'});
+        expect(res.status).toBe(400);messages.add(res.body.message as string);
+      }
+      expect(messages.size).toBe(1);expect(supabaseAdmin.rpc).toHaveBeenCalledTimes(3);
     });
-
-    it('al llegar al 5º intento fallido, invalida el código y responde 429 (hay que pedir uno nuevo)', async () => {
-      const updateChain = createChain({ data: { id: solicitudId }, error: null });
-      mockedFrom
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSolicitud({
-              codigo_verificacion: sha256('123456'),
-              codigo_expira_at: future(),
-              intentos_codigo: 4,
-            }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(updateChain);
-
-      const res = await request(app)
-        .post('/solicitudes/confirmar-codigo')
-        .send({ correo: 'ana@example.com', codigo: '654321' });
-
-      expect(res.status).toBe(429);
-      expect(res.body.message).toMatch(/Solicita un nuevo código/);
-      expect(updateChain.update).toHaveBeenCalledWith({
-        intentos_codigo: 5,
-        codigo_verificacion: null,
-        codigo_expira_at: null,
-      });
+    it('fallo se registra una vez mediante RPC atómica',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{resultado:'invalido'},error:null});
+      const res=await request(app).post('/solicitudes/confirmar-codigo').send({correo:'ana@example.com',codigo:'654321'});
+      expect(res.status).toBe(400);expect(supabaseAdmin.rpc).toHaveBeenCalledTimes(1);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith('confirmar_codigo_inscripcion',expect.objectContaining({p_codigo_hash:sha256('654321')}));
     });
-
-    it('tras el bloqueo, incluso el código correcto original ya no sirve (quedó invalidado)', async () => {
-      // Simula el estado que deja el test anterior: el código ya fue
-      // limpiado por el propio bloqueo.
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: buildSolicitud({
-            codigo_verificacion: null,
-            codigo_expira_at: null,
-            intentos_codigo: 5,
-          }),
-          error: null,
-        }),
-      );
-
-      const res = await request(app)
-        .post('/solicitudes/confirmar-codigo')
-        .send({ correo: 'ana@example.com', codigo: '654321' });
-
-      expect(res.status).toBe(400);
+    it('al décimo fallo responde 429 con límite diario',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{resultado:'limite'},error:null});
+      const res=await request(app).post('/solicitudes/confirmar-codigo').send({correo:'ana@example.com',codigo:'654321'});
+      expect(res.status).toBe(429);expect(res.body.code).toBe('CUPO_DIARIO_AGOTADO');
     });
-
-    it('con el código correcto marca el correo verificado, limpia el código y devuelve un token temporal', async () => {
-      const updateChain = createChain({ data: { id: solicitudId }, error: null });
-      mockedFrom
-        .mockReturnValueOnce(
-          createChain({
-            data: buildSolicitud({
-              correo_verificado: false,
-              codigo_verificacion: sha256('654321'),
-              codigo_expira_at: future(),
-            }),
-            error: null,
-          }),
-        )
-        .mockReturnValueOnce(updateChain);
-
-      const res = await request(app)
-        .post('/solicitudes/confirmar-codigo')
-        .send({ correo: 'ana@example.com', codigo: '654321' });
-
-      expect(res.status).toBe(200);
-      expect(res.body.solicitudId).toBe(solicitudId);
-      expect(verifySolicitudToken(res.body.token as string)).toBe(solicitudId);
-      expect(updateChain.update).toHaveBeenCalledWith({
-        correo_verificado: true,
-        codigo_verificacion: null,
-        codigo_expira_at: null,
-        intentos_codigo: 0,
-      });
+    it('tras bloqueo diario incluso código correcto queda bloqueado',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{resultado:'limite'},error:null});
+      expect((await request(app).post('/solicitudes/confirmar-codigo').send({correo:'ana@example.com',codigo:'012345'})).status).toBe(429);
+    });
+    it('código correcto devuelve token de edición sin exponer estado',async()=>{
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValue({data:{resultado:'valido',id:solicitudId,scope:'edicion'},error:null});
+      const res=await request(app).post('/solicitudes/confirmar-codigo').send({correo:'ana@example.com',codigo:'654321'});
+      expect(res.status).toBe(200);expect(res.body.solicitudId).toBe(solicitudId);
+      expect(verifySolicitudToken(res.body.token as string)).toBe(solicitudId);expect(res.body).not.toHaveProperty('estado');
     });
   });
 

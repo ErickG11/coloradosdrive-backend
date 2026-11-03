@@ -1,4 +1,4 @@
-import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { EnrollmentLimitsService } from './enrollmentLimits.service';
 import type { EnrollmentSummary } from '../models/enrollmentLimits.model';
 
@@ -28,9 +28,13 @@ import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
 import { normalizeSolicitudError } from '../utils/solicitudError';
-import { normalizeEmail, normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
+import { normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
 import { NotificationService } from './notification.service';
 import { SolicitudDocumentStorage } from './solicitudDocumentStorage.service';
+import { env } from '../config/env';
+import { enrollmentRateKey } from '../utils/enrollmentRateKey';
+import { normalizeEnrollmentEmail } from '../utils/enrollmentSanitization';
+import { validateVerificationCode } from '../utils/enrollmentValidation';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
@@ -49,7 +53,7 @@ const MAX_INTENTOS_ASIGNACION_COHORTE = 5;
 
 export const SOLICITUDES_BUCKET = 'solicitudes-documentos';
 export const CODE_TTL_MINUTES = 15;
-export const MAX_CODE_ATTEMPTS = 5;
+export const MAX_CODE_ATTEMPTS = env.ENROLLMENT_FAILED_CODES_PER_EMAIL_DAILY_CAP;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 // Filtro barato en Multer, ANTES de bufferizar el archivo completo (ver
@@ -118,96 +122,34 @@ export class SolicitudService {
   // Verificación de correo
   // ---------------------------------------------------------------------
   async verificarCorreo(correoInput: string, courseId: string): Promise<void> {
-    const correo = normalizeEmail(correoInput);
-    const existing = await this.findByCorreo(correo);
-
-
-    const selectedCourse = existing ? existing.course_id : courseId;
-    const { data: course, error: courseError } = await this.supabase.from('courses')
-      .select('id').eq('id', courseId).maybeSingle();
-    if (courseError) throw courseError;
-    if (!course) throw solicitudError('El curso no existe', 404, 'CURSO_NO_ENCONTRADO');
-    if (!existing?.student_id) {
-      const account=await this.supabase.rpc('correo_tiene_cuenta',{p_correo:correo});
-      if(account.error)throw account.error;
-      if(account.data)return;
-    }
-
-
-    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-    const codeFields = {
-      // El curso se guarda/actualiza aquí también en un reintento: si el
-      // postulante vuelve a pedir código para otro curso, esta solicitud
-      // en progreso refleja su elección más reciente.
-      ...(existing ? {} : {course_id: selectedCourse}),
-      codigo_verificacion: hashCode(code),
-      codigo_expira_at: new Date(Date.now() + CODE_TTL_MINUTES * 60_000).toISOString(),
-      // Un código nuevo reinicia el contador: los intentos fallidos contra
-      // el código ANTERIOR ya no aplican a este.
-      intentos_codigo: 0,
-    };
-
-    if (existing) {
-      const { error } = await this.supabase
-        .from('solicitudes_inscripcion')
-        .update(codeFields)
-        .eq('id', existing.id);
-      if (error) {
-        throw error;
-      }
-    } else {
-      const { error } = await this.supabase
-        .from('solicitudes_inscripcion')
-        .insert({ correo, course_id:selectedCourse, ...codeFields });
-      if (error) {
-        if(isUniqueViolation(error))return;
-        throw error;
-      }
-    }
-
-    try {
-      await this.emailService.sendVerificationCodeEmail({
-        to: correo,
-        code,
-        expiresInMinutes: CODE_TTL_MINUTES,
-      });
-    } catch {
-      logSolicitudFailure('verification_email_failed');
-      // Misma respuesta pública: tampoco el fallo del proveedor revela existencia.
-      return;
-    }
+    const correo=normalizeEnrollmentEmail(correoInput).correo;
+    const code=String(randomInt(0,1_000_000)).padStart(6,'0');
+    const {data,error}=await this.supabase.rpc('emitir_codigo_inscripcion',{
+      p_correo:correo,p_curso:courseId,p_codigo_hash:hashCode(code),
+      p_expira:new Date(Date.now()+CODE_TTL_MINUTES*60000).toISOString(),
+      p_correo_hash:enrollmentRateKey('correo',correo,env.ENROLLMENT_RATE_HMAC_SECRET),
+      p_topes:new EnrollmentLimitsService(this.supabase).topes(),
+    });
+    if(error)throw error;
+    if(data?.motivo==='cerradas')throw solicitudError('Las inscripciones están cerradas. Contacta a la escuela.',503,'INSCRIPCIONES_CERRADAS');
+    if(data?.motivo==='limite')throw solicitudError('Se alcanzó el cupo diario de solicitudes. Contacta a la escuela.',429,'CUPO_DIARIO_AGOTADO');
+    if(data?.emitir!==true||!data.correo)return;
+    try {await this.emailService.sendVerificationCodeEmail({to:data.correo,code,expiresInMinutes:CODE_TTL_MINUTES});}
+    catch {logSolicitudFailure('verification_email_failed');}
   }
 
-  async confirmarCodigo(correoInput: string, codigo: string): Promise<ConfirmarCodigoResult> {
-    const correo = normalizeEmail(correoInput);
-    if(!/^[0-9]{6}$/.test(codigo))throw solicitudError('El código debe tener exactamente 6 dígitos',400,'CODIGO_INVALIDO_O_VENCIDO');
-    const invalid = new AppError('Código inválido o vencido', 400, { code: 'CODIGO_INVALIDO_O_VENCIDO' });
-    for (let retry = 0; retry < 5; retry++) {
-      const row = await this.findByCorreo(correo);
-      if (!row?.codigo_verificacion || !row.codigo_expira_at ||
-          new Date(row.codigo_expira_at).getTime() <= Date.now()) throw invalid;
-      const expected = Buffer.from(row.codigo_verificacion, 'hex');
-      const received = Buffer.from(hashCode(codigo), 'hex');
-      const matches = expected.length === received.length && timingSafeEqual(expected, received);
-      const attempts = row.intentos_codigo + 1;
-      const lockedOut = !matches && attempts >= MAX_CODE_ATTEMPTS;
-      const fields = matches
-        ? { correo_verificado: true, codigo_verificacion: null, codigo_expira_at: null, intentos_codigo: 0 }
-        : lockedOut
-          ? { intentos_codigo: attempts, codigo_verificacion: null, codigo_expira_at: null }
-          : { intentos_codigo: attempts };
-      // CAS: ningún fallo concurrente se pierde y un código correcto se consume una sola vez.
-      const { data, error } = await this.supabase.from('solicitudes_inscripcion')
-        .update(fields).eq('id', row.id).eq('codigo_verificacion', row.codigo_verificacion)
-        .eq('intentos_codigo', row.intentos_codigo).eq('codigo_expira_at', row.codigo_expira_at)
-        .gt('codigo_expira_at', new Date().toISOString()).select('id').maybeSingle();
-      if (error) throw error;
-      if (!data) continue;
-      if (matches) return { solicitudId: row.id, token: signSolicitudToken(row.id) };
-      if (lockedOut) throw new AppError('Demasiados intentos fallidos. Solicita un nuevo código', 429, { code: 'INTENTOS_AGOTADOS' });
-      throw invalid;
-    }
-    throw invalid;
+  async confirmarCodigo(correoInput:string,codigo:string):Promise<ConfirmarCodigoResult> {
+    const correo=normalizeEnrollmentEmail(correoInput).correo;
+    validateVerificationCode(codigo);
+    const {data,error}=await this.supabase.rpc('confirmar_codigo_inscripcion',{
+      p_correo:correo,p_codigo_hash:hashCode(codigo),
+      p_correo_hash:enrollmentRateKey('correo',correo,env.ENROLLMENT_RATE_HMAC_SECRET),
+      p_topes:new EnrollmentLimitsService(this.supabase).topes(),
+    });
+    if(error||!data)throw solicitudError('No se pudo comprobar el código. Intenta de nuevo.',503,'VERIFICACION_NO_DISPONIBLE');
+    if(data.resultado==='limite')throw solicitudError('Alcanzaste el máximo diario de intentos. Intenta mañana.',429,'CUPO_DIARIO_AGOTADO');
+    if(data.resultado!=='valido'||!data.id||!data.scope)throw solicitudError('Código inválido o vencido',400,'CODIGO_INVALIDO_O_VENCIDO');
+    return {solicitudId:data.id,token:signSolicitudToken(data.id,undefined,data.scope)};
   }
 
   // ---------------------------------------------------------------------
@@ -557,18 +499,6 @@ export class SolicitudService {
     if (error) {
       logSolicitudFailure('enrollment_rollback_failed');
     }
-  }
-
-  private async findByCorreo(correo: string): Promise<SolicitudRow | null> {
-    const { data, error } = await this.supabase
-      .from('solicitudes_inscripcion')
-      .select()
-      .eq('correo', correo)
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    return data;
   }
 
   private async getOrThrow(solicitudId: string): Promise<SolicitudRow> {
