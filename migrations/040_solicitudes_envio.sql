@@ -90,7 +90,7 @@ grant execute on function public.enviar_solicitud(uuid,text) to service_role;
 
 create view public.solicitudes_admin with (security_invoker=true) as
  select s.*,
- (select count(*)::integer from public.solicitud_documentos d where d.solicitud_id=s.id and d.estado='recibido') documentos_por_revisar,
+ case when s.estado in ('pendiente_revision','aprobada') then (select count(*)::integer from public.solicitud_documentos d where d.solicitud_id=s.id and d.estado='recibido') else 0 end documentos_por_revisar,
  case when s.estado='pendiente_revision' then 0 else 1 end orden_grupo,
  case when s.estado='pendiente_revision' then s.enviada_at end pendiente_desde,
  case when s.estado<>'pendiente_revision' then s.reviewed_at end decidida_at

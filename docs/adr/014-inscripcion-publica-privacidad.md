@@ -22,3 +22,21 @@ La solicitud precede a la cuenta de estudiante. El proyecto comparte Supabase en
 ## Consecuencias y límites
 
 La revisión sigue siendo humana y no certifica autenticidad externa. La aplicación necesita 037–039; no se aplican automáticamente. El esquema no implica que el texto legal haya sido aprobado. Los límites en memoria requieren un proceso único o un store compartido si se replica. Una caída de proceso durante Auth puede requerir recuperación manual. Los horarios, reservas temporales, precios comerciales y Kushki quedan fuera de este incremento.
+
+## Adenda T43–T54 — envío explícito y continuidad documental
+
+Guardar datos conserva un borrador privado; solo `enviada_at`, fijada una vez por
+una operación validada, lo hace revisable por el admin. Cédula y título de bachiller
+son obligatorios para enviar; papeleta y sangre pueden completarse después. El
+estado público se deriva en el servidor y solo se devuelve con un token obtenido
+al verificar el correo. El envío de códigos conserva la misma respuesta pública,
+sin revelar existencia de cuentas ni solicitudes. Se reutiliza la solicitud original,
+incluso para consultar una decisión; no se permiten nuevos expedientes por reintento.
+
+Una decisión de solicitud es definitiva, pero no cierra el trabajo documental de un
+alumno aprobado. Cada decisión documental es definitiva hasta una nueva subida de
+un rechazado, y se registra con auditoría y notificación en la misma transacción.
+Los archivos digitales y el checklist físico son estados independientes. La sesión
+del alumno permite subir exclusivamente al expediente vinculado por student_id;
+no se vinculan expedientes por inferencia de cédula o correo. Los borradores se
+purgan a siete días con sus archivos; las enviadas pendientes quedan para revisión.

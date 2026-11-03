@@ -68,9 +68,9 @@ Sin prefijo /api. Públicos sin Authorization; los pasos de solicitud usan Beare
 - PUT /solicitudes/:id/consentimiento {versionAviso,aceptoTratamiento:true,declaraVeracidad:true} → {version}. Conserva fecha de la aceptación original de esa versión.
 - PUT /solicitudes/:id/datos {cedula,nombreCompleto,telefono?,fechaNacimiento,representante?:{nombre,cedula,acepta:true}} → {solicitudId,token}. Exige consentimiento vigente, mínimo 15; representante obligatorio de 15 a 17. Primera escritura exitosa fija solicitada_at; un trigger conserva fecha y curso frente a concurrencia. Reintentos rechazados conservan ambas fechas originales.
 - POST /solicitudes/:id/documentos multipart archivo + tipo_documento → {id,tipoDocumento,estado,uploadedAt}, 201. JPG/PNG/PDF, firma binaria y máximo 5 MiB. Datos/consentimiento obligatorios. No reemplaza aprobados. Documentos faltantes nunca bloquean la aprobación.
-- GET /admin/solicitudes?estado=&q=&page=1&pageSize=20 → {items,total,page,pageSize}. Máximo 100 por página. Búsqueda literal acotada; items contienen checklist SIN URL, solicitadaAt y consentimiento:{version,aceptadoAt,representanteNombre,representanteCedula,representanteAcepta}. Solo solicitudes con cédula.
+- GET /admin/solicitudes?estado=&q=&page=1&pageSize=20 → {items,total,page,pageSize}. Máximo 100 por página. Búsqueda literal acotada; items contienen checklist SIN URL, solicitadaAt y consentimiento:{version,aceptadoAt,representanteNombre,representanteCedula,representanteAcepta}. Solo solicitudes enviadas.
 - GET /admin/solicitudes/:id/documentos/:docId/url → {url,expiresIn:300}. Registra acceso antes de firmar; no prefirmar toda la tabla. No registrar ni persistir enlaces.
-- PATCH /admin/solicitudes/:id/documentos/:docId {estado:aprobado|rechazado,motivoRechazo?} → {id,estado}. Motivo obligatorio para rechazo; revisor y auditoría. Solo decide documentos en recibido: una decisión previa devuelve 409 DOCUMENTO_YA_REVISADO; una solicitud resuelta o reclamada devuelve 409 SOLICITUD_CERRADA. La resubida de un rechazado vuelve a recibido y limpia motivo, fecha y revisor; no sobrescribe una aprobación ni otra resubida concurrente.
+- PATCH /admin/solicitudes/:id/documentos/:docId {estado:aprobado|rechazado,motivoRechazo?} → {id,estado}. Motivo obligatorio para rechazo; revisor y auditoría. Solo decide documentos en recibido: una decisión previa devuelve 409 DOCUMENTO_YA_REVISADO; una solicitud rechazada o reclamada devuelve 409 SOLICITUD_CERRADA; las aprobadas conservan revisión documental. La resubida de un rechazado vuelve a recibido y limpia motivo, fecha y revisor; no sobrescribe una aprobación ni otra resubida concurrente.
 - PATCH /admin/solicitudes/:id {estado:aprobada|rechazada,motivoRechazo?} → {id,estado,studentId,correoEnviado,cohorteAsignada?}. Motivo obligatorio para rechazo. Aprobación exige datos/consentimiento; reclama reviewed_at antes de crear Auth. Copia nacimiento; crea documentos físicos pendientes (papeleta no_aplica desde 65). cohorteAsignada={cohortId:null|uuid,estado:activo|pendiente_cohorte}. Fallo SMTP no revierte; correoEnviado=false.
 - DELETE /admin/solicitudes/:id → 204, solo no aprobadas. Storage primero; SQL/auditoría después. Si Storage falla, conserva rutas para reintentar. Aprobadas usan eliminación existente de Alumnos.
 - GET /estudiantes/documentos-pendientes → {documentosPendientes:[tipo],fechaLimite:null|YYYY-MM-DD,diasRestantes:null|number,cohortePendiente:boolean}. Unión de pendientes de matrículas vigentes A/B; fecha más próxima si hay varias. Días civiles de Guayaquil, puede ser negativo.
@@ -81,7 +81,7 @@ Errores de solicitudes: {status:"error",message,code}, sin stack. Códigos princ
 
 Función única de margen en utils/cohortEligibility.ts: cierre menos día de solicitud en America/Guayaquil >=5, con cupo; ordenar por inicio de curso. No exige que matrícula haya abierto. Solicitud el 5: cierre el 9 no; el 10 y el 11 sí. Si se llena una candidata durante el INSERT, vuelve a consultar excluyéndola; sin candidata, pendiente_cohorte. El motor anterior se conserva para wizard manual y Alumnos; el preview público administrativo usa el nuevo. No se conservan horarios online porque esta etapa todavía no los captura.
 
-Cron a las 03:00 America/Guayaquil: rechazadas N días desde revisión (created_at si falta); pendientes N días desde created_at; se conserva eliminación a 7 días sin documentos. Revalida ausencia documental después del reclamo para no borrar una subida concurrente. No purga aprobadas ni decisiones en curso. Auditoría conserva UUID/evento/actor/fecha, nunca nombres, cédulas, correos o motivos.
+Cron a las 03:00 America/Guayaquil: rechazadas N días desde revisión (created_at si falta); borradores a siete días desde created_at, con sus documentos. Nunca purga enviadas pendientes ni aprobadas. El reclamo revalida enviada_at para no borrar un envío concurrente. Auditoría conserva UUID/evento/actor/fecha, nunca nombres, cédulas, correos o motivos.
 
 ## Prueba manual futura (no ejecutada por el agente)
 
@@ -91,7 +91,7 @@ Cron a las 03:00 America/Guayaquil: rechazadas N días desde revisión (created_
 4. Reenviar y recargar: token desaparece; re-verificar permite consultar progreso. Curso ya fijado conserva original.
 5. Revisar /privacidad: borrador, versión, contacto y retención. Probar casillas ausentes y versión antigua directamente contra API.
 6. Probar 14 años (rechazado), 15–17 sin representante (rechazado), representante válido y adulto. Calendario permite seleccionar fechas; error aparece junto al campo.
-7. Subir JPG/PNG/PDF, >5 MiB, contenido con MIME falsificado, reemplazar recibido/rechazado y probar aprobado. Finalizar sin documentos.
+7. Subir JPG/PNG/PDF, >5 MiB, contenido con MIME falsificado, reemplazar recibido/rechazado y probar aprobado. Intentar enviar sin los obligatorios (bloqueado); con cédula y título, enviar conservando opcionales pendientes.
 8. Admin: paginar/buscar/filtrar; abrir documento solo al pulsar Ver; comprobar auditoría y enlace vencido; aprobar/rechazar con motivo. Dos aprobaciones simultáneas deben crear una sola cuenta.
 9. Comprobar cohortes con solicitud el 5/cierre el 9, 10 y 11; matrícula aún no abierta; sin cupo; sin candidatas.
 10. Revisar credenciales, cambio obligatorio de contraseña, nacimiento y checklist físico. Marcar físicos desde matrícula existente; inicio alumno muestra pendientes y plazo.
@@ -103,3 +103,98 @@ Cron a las 03:00 America/Guayaquil: rechazadas N días desde revisión (created_
 Retirar primero frontend dependiente; revertir versión backend antes de retirar SQL. Rollback SQL inverso: 039 → 038 → 037. Exportar consentimientos antes de 037; se conserva auditoría. El borrado de datos/Storage no se recupera con rollback; requiere respaldo. Si un proceso muere tras reclamar una aprobación, no liberar a ciegas: revisar Auth, users, enrollments, solicitud y auditoría; resolver coherentemente antes de reintentar. Una respuesta RPC perdida se verifica antes de compensar; si tampoco se puede consultar, devuelve APROBACION_NO_CONFIRMADA y conserva el reclamo para revisión.
 
 No se instalaron dependencias ni se ejecutaron scripts test:*-db, SQL remoto o servidores. La validación SQL de estos archivos queda pendiente de aplicación manual; Jest simula proveedores.
+
+## Evolución T43–T54: envío explícito y documentos del alumno
+
+Aplicar **manualmente 040 y después 041**, con los preflight, verificaciones con
+ROLLBACK y rollback del mismo número. No se aplicaron desde el agente. Desplegar
+backend y frontend juntos después de las migraciones. 040 agrega `enviada_at`,
+backfill, índices parciales, la vista privada `solicitudes_admin` y RPC exclusivas
+de service_role. 041 amplía el constraint de notificaciones y agrega la revisión
+atómica de documento + auditoría + notificación de bandeja (sin correo). RLS y
+el bucket siguen privados; no se agregan permisos a anon ni authenticated.
+
+El backfill solo marca registros con datos guardados y ambos obligatorios; usa
+el mayor uploaded_at de cédula y título. Antes de desplegar, revisar expedientes
+legacy decididos sin estos documentos: no entran en el nuevo listado hasta que
+la escuela resuelva su documentación. El rollback de 040 pierde las fechas de
+envío; exportarlas primero. El índice antiguo de cédulas vuelve a ser más
+restrictivo: resolver borradores duplicados antes de revertir. El rollback de
+041 se detiene si existen notificaciones nuevas, para no eliminarlas en silencio.
+
+Estados públicos derivados: `borrador` (enviada_at nula), `enviada`
+(pendiente_revision con enviada_at), `aprobada`, `rechazada`. Guardar datos o subir
+archivos no envía la solicitud. La cédula y el título son obligatorios para enviar;
+rechazado cuenta como presente. Papeleta y tipo de sangre son opcionales por ahora.
+Un envío validado es idempotente y conserva enviada_at. Los datos y consentimiento
+se congelan tras enviar. Los borradores se purgan a los siete días con sus archivos,
+aunque tengan documentos; las enviadas pendientes no se purgan. Se conserva la
+retención configurada de rechazadas.
+
+### Contratos nuevos y modificados
+
+- POST `/solicitudes/verificar-correo`: mismo 200 y mensaje genérico para todos los
+  correos válidos; no revela solicitud ni cuenta, tampoco un fallo SMTP. Un correo
+  con cuenta sin solicitud no crea registro ni recibe código utilizable. Una
+  solicitud existente (incluida aprobada vinculada a su alumno) permite verificar
+  para consultar estado; nunca crea otra ni cambia curso o datos.
+- GET `/solicitudes/:id/progreso`, solo tras verificar: estado derivado, enviadaAt
+  y motivoRechazo únicamente si rechazada, además de los campos previos.
+- POST `/solicitudes/:id/enviar`, token temporal: `{id,estado,enviadaAt}`. Valida
+  correo, consentimiento vigente, datos, representante y documentos obligatorios.
+  Falta de obligatorios: 400 SOLICITUD_INCOMPLETA, `faltantes` y
+  `detalles:{faltantes:[cedula|titulo_bachiller]}`. El dato sensible no aparece en logs.
+- PUT datos/consentimiento después del envío: 409 SOLICITUD_ENVIADA. Cédula duplicada
+  en solicitud enviada/aprobada o usuario: 409 CEDULA_YA_REGISTRADA. Campos inválidos
+  incluyen código y field. Nombre de 5–100 caracteres y dos palabras; teléfono local
+  09 o convencional 02–07, normalizando +593; edad entre 15 y 100, representante
+  distinto, correo máximo 254, código de seis dígitos y archivos no vacíos hasta 5 MiB.
+- GET `/admin/solicitudes`: solo enviadas; pendientes primero por enviada_at asc,
+  decididas por reviewed_at desc, desempate id asc. Filtro adicional
+  con_documentos_por_revisar; filas agregan enviadaAt y documentosPorRevisar.
+  Ninguna operación administrativa permite decidir ni ver un borrador.
+- GET `/admin/solicitudes/resumen`: `{pendientes,documentosPorRevisar}`. Los conteos
+  usan índices y no descargan expedientes. El sidebar consulta cada 30 segundos
+  visible, al recuperar foco y tras decisiones/eliminaciones. El aviso no aparece
+  en la primera carga, solo al crecer el número.
+- PATCH documento: permite pendientes o aprobadas, nunca rechazadas. El estado del
+  documento debe ser recibido; decisión + auditoría + notificación son atómicas.
+  No se puede volver a decidir; reemplazar uno rechazado reinicia la revisión.
+- GET `/estudiantes/documentos`: sesión de alumno activo con contraseña actualizada;
+  `{documentos:[{tipo,estado,motivoRechazo,uploadedAt,reviewedAt,obligatorio,exento,
+  estadoFisico}],puedeSubir}`. Estado digital: sin_subir/en_revision/aprobado/rechazado.
+  POST en esa ruta recibe archivo + tipo_documento, máximo 30 subidas/15 min/usuario,
+  usando el mismo helper y Storage privado del postulante. Aprobado bloquea con
+  DOCUMENTO_YA_APROBADO. No se ofrece enlace de descarga al alumno: no hay endpoint
+  de firmado propio autorizado en este alcance; no se reutilizan enlaces del admin.
+
+Mapeo físico mínimo uno a uno: cedula→cedula, papeleta_votacion→papeleta_votacion,
+tipo_sangre→tipo_sangre, titulo_bachiller→titulo_bachiller. No hay desajustes de nombres.
+Se muestra pendiente si alguna matrícula activa/pendiente de cohorte lo requiere;
+sin filas, Sin registro; todos exentos, No aplica. No se marca entrega física al
+aprobar un archivo digital. La aprobación conserva estados digitales e inicializa
+el checklist físico pendiente (exención de papeleta desde 65). Un alumno de matrícula
+manual sin solicitud vinculada puede consultar su checklist, pero no subir archivos:
+no se crea un expediente implícito ni se vincula por cédula.
+
+### Guion manual adicional (después de aplicar 040/041)
+
+1. Verificar dos veces un mismo correo en borrador, enviada, aprobada y rechazada;
+   antes del código no debe divulgarse el estado. Probar cuenta sin solicitud.
+2. Intentar enviar sin cédula, sin título y sin ambos: mensajes específicos y foco
+   al resumen; ningún POST si faltan en cliente. Repetir contra API: 400 con faltantes.
+3. Enviar ambos; repetir POST y comprobar misma fecha. Cambiar datos/consentimiento:
+   409. Subir opcionales después del envío sin reabrir ni duplicar solicitud.
+4. Probar nombres de una palabra, cédula repetida, representante igual, cumpleaños
+   de 15/100 años, fecha futura, teléfonos +593/09/convencional y PDF vacío/falso/>5 MiB.
+5. Admin: borradores ausentes, orden/paginación estable, resumen, filtro documental,
+   badge obligatorios y fecha. Decidir borrador debe devolver 409. Abrir otra pestaña,
+   revisar documento y comprobar conflicto/actualización en la primera.
+6. Aprobar, entrar como alumno tras cambiar contraseña y consultar Mis documentos;
+   revisar archivo aprobado/rechazado, reemplazar solo no aprobados. Confirmar que
+   otra cuenta y la cuenta inactiva no acceden; comprobar exención desde 65.
+7. Admin revisa un reemplazo de solicitud aprobada: notificación única para el alumno,
+   con motivo si corresponde. Checklist físico sigue independiente.
+8. Ver contador en cero, 1 y más de 99; carga inicial sin aviso, aumento con aviso,
+   pestaña oculta sin polling, foco y decisión refrescan. Revisar ambos temas a
+   375/768/1280 px, navegación por teclado y errores junto al campo.

@@ -3,4 +3,6 @@ begin read only;
 select to_regclass('public.solicitudes_inscripcion'),to_regclass('public.solicitud_documentos'),to_regclass('public.notifications');
 select student_id,count(*) from public.solicitudes_inscripcion where student_id is not null group by student_id having count(*)>1;
 select id from public.solicitudes_inscripcion where estado='pendiente_revision' and reviewed_at is not null;
+-- Decisiones legacy sin requisitos: reconciliar antes del despliegue.
+select s.id,s.estado from public.solicitudes_inscripcion s where s.estado<>'pendiente_revision' and (s.cedula is null or s.solicitada_at is null or (select count(*) from public.solicitud_documentos d where d.solicitud_id=s.id and d.tipo_documento in ('cedula','titulo_bachiller'))<2);
 rollback;
