@@ -302,10 +302,13 @@ export class SolicitudService {
             motivo_rechazo: null,
             uploaded_at: now,
             reviewed_at: null,
+            reviewed_by: null,
           })
           .eq('id', existing.id)
+          .neq('estado', 'aprobado')
+          .eq('storage_path', existing.storage_path)
           .select()
-          .single()
+          .maybeSingle()
       : await this.supabase
           .from('solicitud_documentos')
           .insert({
@@ -316,10 +319,11 @@ export class SolicitudService {
           .select()
           .single();
 
-    if (error) {
+    if (error || !data) {
       // Compensación: no dejar un objeto huérfano en Storage.
       await bucket.remove([storagePath]).catch(() => undefined);
-      throw error;
+      if (error) throw error;
+      throw solicitudError('El documento cambió durante la subida. Consulta de nuevo tu progreso', 409, 'DOCUMENTO_YA_REVISADO');
     }
 
     if (existing) {
@@ -441,7 +445,7 @@ export class SolicitudService {
     if (input.estado === 'rechazado' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
     const solicitud = await this.getOrThrow(solicitudId);
     if (solicitud.estado !== 'pendiente_revision' || solicitud.reviewed_at) {
-      throw new AppError('La solicitud ya fue resuelta', 409);
+      throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
     }
 
     const { data, error } = await this.supabase
@@ -454,12 +458,19 @@ export class SolicitudService {
       })
       .eq('id', documentoId)
       .eq('solicitud_id', solicitudId)
+      .eq('estado', 'recibido')
       .select()
       .maybeSingle();
     if (error) {
       throw error;
     }
     if (!data) {
+      const current = await this.supabase.from('solicitud_documentos').select('id,estado')
+        .eq('id', documentoId).eq('solicitud_id', solicitudId).maybeSingle();
+      if (current.error) throw current.error;
+      if (current.data) {
+        throw solicitudError('Este documento ya fue revisado. Actualiza la solicitud', 409, 'DOCUMENTO_YA_REVISADO');
+      }
       throw new AppError('El documento indicado no existe en esta solicitud', 404);
     }
 

@@ -577,9 +577,28 @@ describe('solicitudes de inscripción (público)', () => {
 
       expect(res.status).toBe(201);
       expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({ estado: 'recibido', motivo_rechazo: null, reviewed_at: null }),
+        expect.objectContaining({ estado: 'recibido', motivo_rechazo: null, reviewed_at: null, reviewed_by: null }),
       );
+      expect(res.body.estado).toBe('recibido');
+      expect(updateChain.neq).toHaveBeenCalledWith('estado', 'aprobado');
+      expect(updateChain.eq).toHaveBeenCalledWith('storage_path', `${solicitudId}/cedula-viejo.jpg`);
       expect(storage.remove).toHaveBeenCalledWith([`${solicitudId}/cedula-viejo.jpg`]);
+    });
+
+    it('no pisa una aprobación ni otra resubida concurrente y compensa solo el archivo nuevo', async () => {
+      const storage = mockStorage();
+      const update = createChain({ data: null, error: null });
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ cedula: VALID_CEDULA }), error: null }))
+        .mockReturnValueOnce(createChain({ data: { id: 'doc-1', estado: 'rechazado', storage_path: 'anterior.jpg' }, error: null }))
+        .mockReturnValueOnce(update);
+      const res = await upload();
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('DOCUMENTO_YA_REVISADO');
+      expect(update.neq).toHaveBeenCalledWith('estado', 'aprobado');
+      expect(update.eq).toHaveBeenCalledWith('storage_path', 'anterior.jpg');
+      const [uploadedPath] = storage.upload.mock.calls[0] as [string];
+      expect(storage.remove).toHaveBeenCalledWith([uploadedPath]);
+      expect(storage.remove).not.toHaveBeenCalledWith(['anterior.jpg']);
     });
 
     it('responde 409 si el documento ya fue aprobado', async () => {

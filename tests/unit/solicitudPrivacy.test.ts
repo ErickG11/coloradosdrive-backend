@@ -23,6 +23,15 @@ it('rechaza versión antigua y casillas falsas antes de escribir', async () => {
   await expect(service.accept('s', { versionAviso: '2026-10-v1', aceptoTratamiento: false, declaraVeracidad: true })).rejects.toMatchObject({ code: 'CONSENTIMIENTO_REQUERIDO' });
   expect(from).not.toHaveBeenCalled();
 });
+it('devuelve el motivo del documento rechazado para poder corregirlo sin exponer rutas', async () => {
+  const from = createSupabaseFromMock([
+    { data: { course_id: 'c', estado: 'pendiente_revision' }, error: null },
+    { data: null, error: null },
+    { data: [{ tipo_documento: 'cedula', estado: 'rechazado', motivo_rechazo: 'Foto borrosa', storage_path: 'privado' }], error: null },
+  ]);
+  const result = await new SolicitudPrivacyService({ from } as unknown as SupabaseClient<Database>).progress('s');
+  expect(result.documentos).toEqual([{ tipo: 'cedula', estado: 'rechazado', motivoRechazo: 'Foto borrosa' }]);
+});
 it('exige un registro vigente persistido', async () => {
   const from = createSupabaseFromMock([{ data: null, error: null }]);
   await expect(new SolicitudPrivacyService({ from } as unknown as SupabaseClient<Database>).requireConsent('s')).rejects.toMatchObject({ code: 'CONSENTIMIENTO_REQUERIDO' });
