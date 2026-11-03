@@ -72,3 +72,30 @@ dominio exacto y subdominios, no proveedores con nombres parecidos ni coincidenc
 de sufijos arbitrarios. Se puede ampliar tras revisar falsos positivos con soporte.
 No consulta servicios externos. El normalizador de correo existente ya delega en
 esta utilidad, sin revelar direcciones en errores ni logs.
+
+## Validadores del contrato final (F05)
+
+`enrollmentValidation.ts` contiene validadores puros con `AppError.code` y `field`:
+nombres/apellidos 2–60 (NFC, letras, apóstrofe, guion y espacios), cédula mediante
+el validador único `cedula.ts`, teléfono local/+593, sangre y nacionalidad de catálogo,
+fecha real no futura y edad máxima 100. La mínima depende del curso; se exige
+representante autorizado y distinto si la persona es menor de 18 y el curso lo
+permite. La edad usa el día civil de Guayaquil, no la fecha UTC.
+
+El código se mantiene como string de seis dígitos, incluidos ceros iniciales.
+Niveles bloqueados no salen del validador; el subtipo debe corresponder al nivel.
+Datos se guardarán primero; nivel de estudios puede completarse en el paso siguiente,
+y enviar exigirá ambos. La entrada `nacionalidadTipo` usa camelCase como el resto
+del contrato TypeScript; la columna SQL sigue llamándose `nacionalidad_tipo`.
+
+Las decisiones no aceptan actor, studentId, estado ni timestamps del cliente.
+Cada motivo usa su mensaje predefinido; solo OTRO exige mensaje plano de 10–300
+caracteres. VENCIDA es interno del job, no una decisión manual. Aprobar no tiene
+motivo de catálogo (el brief no define uno); no se inventa un código de aprobación.
+La nota interna se devuelve separada del mensaje en el DTO del servidor y nunca
+deberá exponerse en progreso/correos. Verificaciones no aceptan actor del cliente;
+el web service previsto no se puede registrar como método manual.
+
+Estos validadores se conectarán a los contratos nuevos en F09–F15. Las rutas
+actuales conservan temporalmente su contrato hasta esa sustitución, documentada
+para despliegue conjunto; F05 no presume endpoints ya adaptados.
