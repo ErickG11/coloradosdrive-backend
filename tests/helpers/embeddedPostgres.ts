@@ -12,11 +12,16 @@ export class EmbeddedPostgres {
       reject: (error: Error) => void;
     }
   >();
-  private readonly worker = new Worker(
-    `
+  private readonly worker: Worker;
+
+  constructor(options: { btreeGist?: boolean } = {}) {
+    this.worker = new Worker(
+      `
     const {parentPort,workerData} = require('node:worker_threads');
     const {PGlite} = require(workerData.modulePath);
-    const db = new PGlite();
+    const options = workerData.btreeGist
+      ? {extensions:{btree_gist:require(workerData.btreeGistPath).btree_gist}} : {};
+    const db = new PGlite(options);
     let queue = Promise.resolve();
     parentPort.on('message', message => {
       queue = queue.then(async () => {
@@ -31,10 +36,16 @@ export class EmbeddedPostgres {
       });
     });
   `,
-    { eval: true, workerData: { modulePath: require.resolve('@electric-sql/pglite') } },
-  );
+      {
+        eval: true,
+        workerData: {
+          modulePath: require.resolve('@electric-sql/pglite'),
+          btreeGist: options.btreeGist === true,
+          btreeGistPath: require.resolve('@electric-sql/pglite/contrib/btree_gist'),
+        },
+      },
+    );
 
-  constructor() {
     this.worker.on(
       'message',
       (message: { id: number; result?: unknown; error?: { message: string; code?: string } }) => {

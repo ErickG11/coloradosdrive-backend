@@ -77,14 +77,12 @@ Hay helpers SECURITY DEFINER privados que autorizan Broadcast
 Las políticas de `realtime.messages` requieren esos permisos; revocarlos rompería
 la autorización del canal. Las tablas de dominio no usan Postgres Changes.
 
-**Bloqueo antes de F02:** el texto de migración B exige revocar EXECUTE de todas
-las funciones SECURITY DEFINER para authenticated, sin excepción, pero también
-exige conservar Broadcast privado. No pueden cumplirse ambas reglas literalmente
-con las políticas actuales. Se necesita resolver si se permiten esos dos helpers
-privados (nunca `anon`/`PUBLIC`, nunca funciones de negocio de `public`) o si se
-autoriza sustituir el mecanismo de autorización de Broadcast. No se ha elegido
-ni implementado una excepción de permisos unilateralmente. Evidencia:
-`migrations/025_estudiantes_acceso.sql:138–165` y las políticas de 011/025.
+**Bloqueo de F02 resuelto por autorización expresa:** authenticated conserva
+EXECUTE únicamente en los dos helpers privados y USAGE de private; anon no recibe
+ninguno. Funciones de extensiones excluidas mediante pg_depend/deptype=e.
+La migración 043 conserva esas excepciones sin cambiar políticas Realtime.
+Detalle y prueba manual: `inscripcion-043.md`. Evidencia de las dependencias:
+`migrations/025_estudiantes_acceso.sql:138–165` y políticas de 011/025.
 
 Pruebas SQL nuevas: PostgreSQL embebido PGlite ya instalado, sin conexiones,
 sin servidores ni credenciales. No sustituye la verificación manual en Supabase.
