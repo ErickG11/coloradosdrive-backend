@@ -15,6 +15,28 @@ test('defaults de configuración sin exigir variables adicionales a tests/setupE
     ADMIN_MFA_REQUIRED: false,
   });
 });
+test('límites de correo son configurables y mantienen sus defaults', () => {
+  expect(loadEnrollmentConfig(source)).toMatchObject({
+    ENROLLMENT_CODES_PER_EMAIL_DAILY_CAP: 5,
+    ENROLLMENT_FAILED_CODES_PER_EMAIL_DAILY_CAP: 10,
+    ENROLLMENT_CODE_COOLDOWN_SECONDS: 60,
+  });
+  expect(
+    loadEnrollmentConfig({
+      ...source,
+      ENROLLMENT_CODES_PER_EMAIL_DAILY_CAP: '2',
+      ENROLLMENT_FAILED_CODES_PER_EMAIL_DAILY_CAP: '3',
+      ENROLLMENT_CODE_COOLDOWN_SECONDS: '90',
+    }),
+  ).toMatchObject({
+    ENROLLMENT_CODES_PER_EMAIL_DAILY_CAP: 2,
+    ENROLLMENT_FAILED_CODES_PER_EMAIL_DAILY_CAP: 3,
+    ENROLLMENT_CODE_COOLDOWN_SECONDS: 90,
+  });
+  expect(() => loadEnrollmentConfig({ ...source, ENROLLMENT_CODE_COOLDOWN_SECONDS: '0' })).toThrow(
+    'ENROLLMENT_CODE_COOLDOWN_SECONDS',
+  );
+});
 test.each([
   'ENROLLMENT_CODES_DAILY_CAP',
   'ENROLLMENT_NEW_REQUESTS_DAILY_CAP',

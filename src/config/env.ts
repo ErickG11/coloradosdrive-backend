@@ -48,7 +48,7 @@ export const env = {
     'PRIVACY_CONTACT_EMAIL',
     emailUser || 'privacidad@example.invalid',
   ),
-  TRUST_PROXY_HOPS: Number(optionalEnv('TRUST_PROXY_HOPS', '1')),
+  TRUST_PROXY_HOPS: Number(optionalEnv('TRUST_PROXY_HOPS', nodeEnv === 'production' ? '1' : '0')),
   PORT: Number(optionalEnv('PORT', '3000')),
   FRONTEND_URL: requireEnv('FRONTEND_URL'),
   SUPABASE_URL: requireEnv('SUPABASE_URL'),

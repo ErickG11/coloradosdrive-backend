@@ -1,4 +1,8 @@
 import { Router } from 'express';
+import {
+  publicEnrollmentConfigRouter,
+  adminEnrollmentConfigRouter,
+} from './enrollmentConfig.routes';
 import { adminDashboardRouter } from './adminDashboard.routes';
 
 import { cohortAssignmentRouter } from './cohortAssignment.routes';
@@ -21,6 +25,8 @@ import { notificationRouter } from './notification.routes';
 import { instructorRatingRouter } from './instructorRating.routes';
 
 export const apiRouter = Router();
+apiRouter.use('/public/inscripcion', publicEnrollmentConfigRouter);
+apiRouter.use('/admin/inscripciones', adminEnrollmentConfigRouter);
 apiRouter.use('/notifications', notificationRouter);
 apiRouter.use('/admin/instructor-ratings', instructorRatingRouter);
 apiRouter.use('/admin/dashboard', adminDashboardRouter);
