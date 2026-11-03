@@ -1,3 +1,4 @@
+import type { EnrollmentPersonalData } from '../utils/enrollmentValidation';
 import type {
   SolicitudDocumentoEstado,
   SolicitudEstado,
@@ -56,7 +57,13 @@ export interface SolicitudAdminView {
   enviadaAt?: string | null;
   documentosPorRevisar?: number;
   solicitadaAt?: string | null;
-  consentimiento?: { version: string; aceptadoAt: string; representanteNombre: string | null; representanteCedula: string | null; representanteAcepta: boolean } | null;
+  consentimiento?: {
+    version: string;
+    aceptadoAt: string;
+    representanteNombre: string | null;
+    representanteCedula: string | null;
+    representanteAcepta: boolean;
+  } | null;
   id: string;
   courseId: string;
   cedula: string | null;
@@ -75,13 +82,7 @@ export interface SolicitudAdminView {
   solicitudesRelacionadas: SolicitudRelacionada[];
 }
 
-export interface SolicitudDatosInput {
-  cedula: string;
-  nombreCompleto: string;
-  telefono?: string;
-  fechaNacimiento: string;
-  representante?: { nombre: string; cedula: string; acepta: true };
-}
+export type SolicitudDatosInput = Omit<EnrollmentPersonalData, 'nombreCompleto'>;
 
 export interface ConfirmarCodigoResult {
   solicitudId: string;
@@ -90,8 +91,7 @@ export interface ConfirmarCodigoResult {
 
 export interface CompletarDatosResult {
   solicitudId: string;
-  // Si la solicitud reemplazó un registro rechazado con otro id, el token
-  // anterior deja de servir: se devuelve uno nuevo para el id vigente.
+  // Renueva el token de edición para la misma solicitud verificada.
   token: string;
 }
 
