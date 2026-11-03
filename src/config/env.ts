@@ -1,5 +1,6 @@
 import { config as loadDotenv } from 'dotenv';
 import { loadEnrollmentConfig } from './enrollmentConfig';
+import { validateCaptchaConfiguration } from './captcha';
 
 loadDotenv();
 
@@ -65,6 +66,7 @@ export const env = {
 if (env.SOLICITUD_TOKEN_SECRET.length < 32) {
   throw new Error('SOLICITUD_TOKEN_SECRET must be at least 32 characters long');
 }
+validateCaptchaConfiguration(env);
 
 export const isProduction = env.NODE_ENV === 'production';
 

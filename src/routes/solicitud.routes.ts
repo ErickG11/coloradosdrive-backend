@@ -30,6 +30,7 @@ import {
 } from '../models/solicitud.model';
 import { asyncHandler } from '../utils/asyncHandler';
 import { isValidCedulaEcuatoriana } from '../utils/cedula';
+import { verifyEnrollmentCaptcha } from '../middlewares/captcha.middleware';
 
 // ---------------------------------------------------------------------------
 // Público (postulante): solicitudes de inscripción online. Sin cuenta de
@@ -49,6 +50,7 @@ const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID v
 solicitudRouter.post(
   '/verificar-correo',
   sendCodeIpLimiter,
+  verifyEnrollmentCaptcha,
   sendCodeEmailLimiter,
   [
     correoValidator,

@@ -12,3 +12,6 @@ process.env.EMAIL_USER = 'test-sender@test.local';
 process.env.EMAIL_PROVIDER = 'smtp';
 process.env.EMAIL_APP_PASSWORD = 'test-app-password';
 process.env.SOLICITUD_TOKEN_SECRET = 'test-solicitud-token-secret-0123456789abcdef';
+process.env.TURNSTILE_SECRET_KEY = 'turnstile-secret-ficticio-solo-tests';
+process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'turnstile-sitekey-ficticia-solo-tests';
+process.env.CAPTCHA_PROVIDER = 'off';
