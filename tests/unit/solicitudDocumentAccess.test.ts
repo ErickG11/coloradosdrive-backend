@@ -16,3 +16,7 @@ it('no firma si falla la auditoría', async () => {
   await expect(new SolicitudDocumentAccessService({ from, storage } as unknown as SupabaseClient<Database>).url('s', 'd', 'a')).rejects.toMatchObject({ code: 'AUDITORIA_NO_DISPONIBLE' });
   expect(storage.from).not.toHaveBeenCalled();
 });
+it('no expone archivos de un borrador al administrador',async()=>{
+  const from=createSupabaseFromMock([{data:null,error:null}]),storage={from:jest.fn()};
+  await expect(new SolicitudDocumentAccessService({from,storage} as unknown as SupabaseClient<Database>).url('borrador','d','admin')).rejects.toMatchObject({statusCode:404});expect(storage.from).not.toHaveBeenCalled();
+});
