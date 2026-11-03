@@ -20,6 +20,8 @@ import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPri
 import { SolicitudDocumentAccessService } from '../services/solicitudAudit.service';
 import { SolicitudDeletionService } from '../services/solicitudDeletion.service';
 import { AppError } from '../utils/AppError';
+import { uniformVerification } from '../utils/uniformVerification';
+import { MENSAJE_VERIFICACION_CORREO } from '../config/enrollmentCatalog';
 
 const solicitudService = new SolicitudService(
   supabaseAdmin,
@@ -35,8 +37,8 @@ export async function verificarCorreo(
   res: Response<{ message: string }>,
 ): Promise<void> {
   const { correo, courseId } = req.body as VerificarCorreoInput;
-  await solicitudService.verificarCorreo(correo, courseId);
-  res.status(200).json({ message: 'Te enviamos un código de verificación a tu correo' });
+  await uniformVerification(()=>solicitudService.verificarCorreo(correo,courseId));
+  res.status(200).json({ message: MENSAJE_VERIFICACION_CORREO });
 }
 
 export async function confirmarCodigo(
