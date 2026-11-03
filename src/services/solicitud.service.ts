@@ -244,7 +244,7 @@ export class SolicitudService {
       fecha_nacimiento: input.fechaNacimiento, solicitada_at: current.solicitada_at ?? new Date().toISOString(),
 
     }).eq('id', solicitudId).eq('estado', current.estado).is('enviada_at', null);
-    if (current.estado === 'pendiente_revision') update = update.is('reviewed_at', null);
+    update = update.is('reviewed_at', null);
     const { data, error } = await update.select('id').maybeSingle();
     if (error) throw isUniqueViolation(error) ? solicitudError('La cédula ya está registrada', 409, 'CEDULA_YA_REGISTRADA') : error;
     if (!data) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
@@ -404,6 +404,13 @@ export class SolicitudService {
     input: { estado: 'aprobado' | 'rechazado'; motivoRechazo?: string },
   ): Promise<{ id: string; estado: 'aprobado' | 'rechazado' }> {
     if (input.estado === 'rechazado' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
+    const row=await this.getOrThrow(solicitudId);
+    if(!row.enviada_at)throw solicitudError('La solicitud no ha sido enviada',409,'SOLICITUD_NO_ENVIADA');
+    if(row.estado==='rechazada'||(row.estado==='pendiente_revision'&&row.reviewed_at))throw solicitudError('La solicitud está cerrada o en resolución',409,'SOLICITUD_CERRADA');
+    const doc=await this.supabase.from('solicitud_documentos').select('id,estado').eq('id',documentoId).eq('solicitud_id',solicitudId).maybeSingle();
+    if(doc.error)throw doc.error;
+    if(!doc.data)throw solicitudError('El documento no existe en esta solicitud',404,'NO_ENCONTRADO');
+    if(doc.data.estado!=='recibido')throw solicitudError('Este documento ya fue revisado',409,'DOCUMENTO_YA_REVISADO');
     return new NotificationService(this.supabase).reviewDocument(solicitudId,documentoId,adminId,input);
   }
 

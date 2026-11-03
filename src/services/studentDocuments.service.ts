@@ -10,7 +10,7 @@ export interface StudentDocument {
 }
 export class StudentDocumentsService {
  constructor(private readonly db:SupabaseClient<Database>){}
- private async owner(studentId:string) {
+ private async owner(studentId:string):Promise<{solicitud:Pick<Database['public']['Tables']['solicitudes_inscripcion']['Row'],'id'|'estado'>|null;fechaNacimiento:string|null}> {
   const user=await this.db.from('users').select('activo,fecha_nacimiento,debe_cambiar_password').eq('id',studentId).eq('rol','estudiante').maybeSingle();
   if(user.error)throw user.error;
   if(!user.data?.activo)throw solicitudError('La cuenta está inactiva',403,'ACCOUNT_INACTIVE');
