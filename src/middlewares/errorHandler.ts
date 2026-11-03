@@ -10,6 +10,8 @@ interface ErrorResponseBody {
   stack?: string;
   code?: string;
   field?: string;
+  detalles?: Record<string, unknown>;
+  faltantes?: unknown;
 }
 
 export function notFoundHandler(req: Request, _res: Response, next: NextFunction): void {
@@ -22,13 +24,15 @@ export function errorHandler(
   res: Response<ErrorResponseBody>,
   _next: NextFunction,
 ): void {
-  if (/^\/(?:admin\/)?solicitudes(?:\/|$|\?)/.test(req.originalUrl)) {
+  if (/^\/(?:(?:admin\/)?solicitudes|estudiantes\/documentos)(?:\/|$|\?)/.test(req.originalUrl)) {
     const normalized = normalizeSolicitudError(err);
     const operational = normalized instanceof AppError;
     res.status(operational ? normalized.statusCode : 500).json({
       status: 'error',
       message: operational ? normalized.message : 'No se pudo completar la operación',
       code: solicitudErrorCode(normalized),
+      ...(operational && normalized.field ? { field: normalized.field } : {}),
+      ...(operational && normalized.detalles ? {detalles: normalized.detalles, ...(normalized.detalles.faltantes ? {faltantes: normalized.detalles.faltantes} : {})} : {}),
     });
     return;
   }
