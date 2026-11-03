@@ -5,8 +5,8 @@ export function invalidField(field: string, message: string, code = 'CAMPO_INVAL
   throw new AppError(message, 400, {code, field});
 }
 export function normalizeName(value: unknown, field = 'nombreCompleto'): string {
-  const name = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
-  if ([...name].length < 5 || [...name].length > 100 || !/^[\p{L}\p{M}]+(?:[ '\u2019-][\p{L}\p{M}]+)*$/u.test(name) || name.split(' ').length < 2) {
+  const name = typeof value === 'string' ? value.normalize('NFC').trim().replace(/\s+/g, ' ') : '';
+  if (Array.from(name).length < 5 || Array.from(name).length > 100 || !/^[\p{L}\p{M}]+(?:[ '\u2019-][\p{L}\p{M}]+)*$/u.test(name) || name.split(' ').length < 2) {
     invalidField(field, 'Ingresa nombres y apellidos: de 5 a 100 caracteres, solo letras, espacios, apóstrofe o guion.', 'NOMBRE_INVALIDO');
   }
   return name;

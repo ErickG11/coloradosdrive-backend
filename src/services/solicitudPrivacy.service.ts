@@ -30,7 +30,7 @@ export class SolicitudPrivacyService {
     if (!row) throw solicitudError('La solicitud no existe', 404, 'NO_ENCONTRADO');
     if (!row.correo_verificado) throw solicitudError('Verifica tu correo', 403, 'ACCESO_DENEGADO');
     if (row.enviada_at) throw solicitudError('La solicitud ya fue enviada',409,'SOLICITUD_ENVIADA');
-    if (row.estado === 'rechazada' || row.estado === 'aprobada' || (row.estado === 'pendiente_revision' && row.reviewed_at)) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
+    if (row.estado === 'rechazada' || row.estado === 'aprobada' || row.reviewed_at) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
     const { error } = await this.db.from('solicitud_consentimientos').upsert({
       solicitud_id: id, version_aviso: PRIVACY_NOTICE_VERSION, acepto_tratamiento: true, declara_veracidad: true,
     }, { onConflict: 'solicitud_id,version_aviso', ignoreDuplicates: true });
