@@ -18,6 +18,7 @@ export function validateApplicant(fecha: string, representante?: unknown, now?: 
   if (age > 100) throw solicitudError('La edad máxima es de 100 años cumplidos', 400, 'EDAD_MAXIMA');
   if (age >= 18) return null;
   const rep = representante as Partial<Representante> | null | undefined;
+  if (cedula && rep?.cedula === cedula) invalidField('representanteCedula','La cédula del representante debe ser distinta de la del postulante.','REPRESENTANTE_REQUERIDO');
   if (rep?.acepta !== true || typeof rep.nombre !== 'string' || !rep.nombre.trim() || rep.nombre.length > 200 ||
       typeof rep.cedula !== 'string' || !isValidCedulaEcuatoriana(rep.cedula) || rep.cedula === cedula) {
     throw solicitudError('Completa nombre, cédula válida y autorización del representante legal', 400, 'REPRESENTANTE_REQUERIDO');
