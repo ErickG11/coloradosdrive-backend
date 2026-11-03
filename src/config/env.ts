@@ -1,4 +1,5 @@
 import { config as loadDotenv } from 'dotenv';
+import { loadEnrollmentConfig } from './enrollmentConfig';
 
 loadDotenv();
 
@@ -58,6 +59,7 @@ export const env = {
   // "from" es siempre EMAIL_USER.
   EMAIL_FROM: emailUser || 'pruebas@example.invalid',
   SOLICITUD_TOKEN_SECRET: requireEnv('SOLICITUD_TOKEN_SECRET'),
+  ...loadEnrollmentConfig(process.env),
 };
 
 if (env.SOLICITUD_TOKEN_SECRET.length < 32) {
