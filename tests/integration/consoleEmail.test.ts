@@ -2,6 +2,7 @@
 jest.mock('../../src/middlewares/enrollmentLimits.middleware',()=>({
   reserveEnrollmentCodeIp:(_req:unknown,_res:unknown,next:()=>void)=>{next();},
   reserveEnrollmentCode:(_req:unknown,_res:unknown,next:()=>void)=>{next();},
+  reserveEnrollmentUpload:(_req:unknown,_res:unknown,next:()=>void)=>{next();},
 }));
 import { createHash } from 'node:crypto';
 

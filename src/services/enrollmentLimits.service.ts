@@ -80,7 +80,18 @@ export class EnrollmentLimitsService {
     await this.reserve('fallo_codigo', undefined, correo);
   }
   async reserveUpload(ip: string | undefined, id: string): Promise<void> {
-    await this.reserve('subida', ip ?? '', undefined, id);
+    try {
+      await this.reserve('subida', ip ?? '', undefined, id);
+    } catch (error) {
+      // Un tope de archivos agotado nunca impide inscribirse: la solicitud se envía sin archivo.
+      if (error instanceof AppError && error.code === 'CUPO_DIARIO_AGOTADO')
+        throw new AppError(
+          'Se alcanzó el cupo diario de archivos. Puedes continuar y enviar tu solicitud sin archivo; lo subirás después si te lo piden.',
+          429,
+          { code: 'CUPO_DIARIO_AGOTADO' },
+        );
+      throw error;
+    }
   }
   async createDraft(
     correo: string,

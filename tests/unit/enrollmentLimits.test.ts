@@ -129,3 +129,17 @@ test('alertas en 80% exacto para todos los topes, incluido tope cero', async () 
   });
   expect((await zero.summary()).cupoCodigosHoy.alerta).toBe(true);
 });
+test('tope de subidas agotado explica que se puede continuar sin archivo', async () => {
+  const h = setup({ permitido: false, motivo: 'limite' });
+  await expect(h.service.reserveUpload('192.0.2.1', 'id-ficticio')).rejects.toMatchObject({
+    statusCode: 429,
+    code: 'CUPO_DIARIO_AGOTADO',
+    message: expect.stringContaining('sin archivo') as string,
+  });
+});
+test('el cierre de inscripciones no se disfraza de tope de archivos', async () => {
+  const h = setup({ permitido: false, motivo: 'cerradas' });
+  await expect(h.service.reserveUpload('192.0.2.1', 'id-ficticio')).rejects.toMatchObject({
+    code: 'INSCRIPCIONES_CERRADAS',
+  });
+});
