@@ -48,7 +48,7 @@ describe('contratos HTTP y recordatorios con correo por consola real', () => {
   let output: jest.SpyInstance;
   beforeEach(() => {
     from.mockReset();
-    rpc.mockReset().mockResolvedValue({ data: null, error: null });
+    rpc.mockReset().mockResolvedValue({ data: false, error: null });
     output = jest.spyOn(process.stdout, 'write').mockReturnValue(true);
     jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Red de correo prohibida'));
   });
@@ -85,7 +85,7 @@ describe('contratos HTTP y recordatorios con correo por consola real', () => {
       .mockReturnValueOnce(
         createChain({
           data: {
-            id: solicitudId,
+            id: solicitudId, enviada_at:'2026-10-01T12:00:00Z',
             course_id: courseId,
             estado: 'pendiente_revision',
             reviewed_at: null,
