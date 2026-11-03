@@ -12,6 +12,50 @@ Conservar las variables existentes. Nuevas: SOLICITUD_RETENCION_DIAS (entero pos
 
 Límites por 15 minutos, en memoria y por proceso: envío 60/IP y 5/correo normalizado resumido SHA-256; confirmación 120/IP; datos/documentos/progreso 300/IP. Cinco errores por código independiente del límite IP. Permite redes compartidas sin dejar envíos ilimitados a un correo. Railway debe impedir acceso directo que salte el proxy; revisar saltos reales antes de producción. Si se replican procesos, sustituir el store por uno compartido.
 
+## Probar sin correo
+
+Solo para pruebas locales: `EMAIL_PROVIDER=console` sustituye los envíos por bloques
+`[CORREO SIMULADO]` en la salida estándar del backend. No usa SMTP ni hace llamadas
+de red para enviar correo. El resto del flujo conserva sus respuestas HTTP,
+`correoEnviado: true` y la confirmación de entrega de los recordatorios.
+
+Variables mínimas del backend (valores ficticios; usar un proyecto Supabase de
+pruebas y sus claves locales, sin publicarlas):
+
+```dotenv
+NODE_ENV=development
+EMAIL_PROVIDER=console
+FRONTEND_URL=http://localhost:3001
+SUPABASE_URL=https://proyecto-pruebas.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=clave-ficticia-service-role
+SUPABASE_ANON_KEY=clave-ficticia-anon
+SOLICITUD_TOKEN_SECRET=secreto-ficticio-local-de-al-menos-32-caracteres
+```
+
+No se requieren `EMAIL_USER`, `EMAIL_APP_PASSWORD` ni credenciales de correo de
+ningún otro proveedor. El contacto del aviso usa `privacidad@example.invalid`
+si tampoco se define `EMAIL_USER`; puede configurarse con `PRIVACY_CONTACT_EMAIL`.
+El puerto predeterminado es 3000. Para una prueba manual sin tareas programadas,
+añadir `DISABLE_CRON=true`; omitirlo para probar también los recordatorios.
+Arrancar con `npm run dev` y reiniciar al cambiar las variables. También puede
+usarse `EMAIL_PROVIDER=console DISABLE_CRON=true npm run dev` sin modificar `.env`.
+
+Abrir `/inscripcion`, enviar código y copiar sus seis dígitos desde la terminal.
+Tras aprobar la solicitud, la misma terminal muestra correo y contraseña temporal.
+Los mensajes HTML sin alternativa de texto se convierten a texto conservando los
+enlaces. Los adjuntos locales se listan por nombre y tamaño, sin imprimir su
+contenido; las rutas remotas se rechazan sin descargarlas.
+
+**Este modo es solo para pruebas.** Excepción T39 a la regla de logs sin datos
+personales de T17: únicamente el proveedor console, fuera de producción, imprime
+los destinatarios y cuerpos completos, incluidos códigos y contraseñas temporales.
+No compartir ni almacenar esa salida con datos reales. Los demás logs y el
+proveedor SMTP conservan su tratamiento existente. Al arrancar se muestra:
+`Correo en modo consola: los mensajes NO se envían, se imprimen aquí`.
+El backend rechaza el arranque con console si `NODE_ENV=production` o si existe
+`RAILWAY_ENVIRONMENT`, incluso vacía. Sin `EMAIL_PROVIDER` se mantiene SMTP y se
+exigen `EMAIL_USER` y `EMAIL_APP_PASSWORD`. En esta rama no existe `gmail_api` (T38).
+
 ## Contratos
 
 Sin prefijo /api. Públicos sin Authorization; los pasos de solicitud usan Bearer del JWT temporal, nunca una sesión Supabase. JWT solo en memoria del navegador, una hora. Código de seis dígitos, 15 minutos, hash SHA-256; consumo/contador CAS. Reenviar no cambia created_at ni solicitada_at; curso inmutable desde solicitada_at.

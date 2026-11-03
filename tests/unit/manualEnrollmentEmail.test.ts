@@ -1,4 +1,3 @@
-import type { Transporter } from 'nodemailer';
 import { EmailService, type ManualEnrollmentEmailParams } from '../../src/services/email.service';
 import { env } from '../../src/config/env';
 const base: ManualEnrollmentEmailParams = {
@@ -18,7 +17,7 @@ describe('Correo de matrícula manual', () => {
     'identidad, enlace efectivo, texto y HTML escapado, nueva=%s',
     async (studentCreated) => {
       const sendMail = jest.fn().mockResolvedValue({});
-      await new EmailService({ sendMail } as unknown as Transporter).sendManualEnrollmentEmail({
+      await new EmailService({ sendMail }).sendManualEnrollmentEmail({
         ...base,
         studentCreated,
         ...(studentCreated ? { temporaryPassword: 'temporary-secret' } : {}),
@@ -43,7 +42,7 @@ describe('Correo de matrícula manual', () => {
   );
   it('explica el plan retenido sin franjas para pendiente', async () => {
     const sendMail = jest.fn().mockResolvedValue({});
-    await new EmailService({ sendMail } as unknown as Transporter).sendManualEnrollmentEmail({
+    await new EmailService({ sendMail }).sendManualEnrollmentEmail({
       ...base,
       status: 'pendiente_cohorte',
       cohortName: null,
@@ -55,7 +54,7 @@ describe('Correo de matrícula manual', () => {
   it('propaga fallo de transporte para registrar estado y reenvío', async () => {
     const sendMail = jest.fn().mockRejectedValue(new Error('SMTP local unavailable'));
     await expect(
-      new EmailService({ sendMail } as unknown as Transporter).sendManualEnrollmentEmail(base),
+      new EmailService({ sendMail }).sendManualEnrollmentEmail(base),
     ).rejects.toThrow('SMTP local unavailable');
   });
 });

@@ -1,4 +1,3 @@
-import type { Transporter } from 'nodemailer';
 import { EmailService } from '../../src/services/email.service';
 import { formatEcuadorDateTime } from '../../src/utils/formatEcuadorDateTime';
 
@@ -16,7 +15,7 @@ describe('hora de Ecuador en correos', () => {
   });
   it('usa el helper en el texto y HTML de recordatorio e instructor', async () => {
     const sendMail = jest.fn().mockResolvedValue(undefined);
-    const service = new EmailService({ sendMail } as unknown as Transporter);
+    const service = new EmailService({ sendMail });
     const params = { to: 'fixture@example.invalid', nombreCompleto: 'Alumno', scheduledAt: '2026-10-27T20:00:00Z' };
     await service.sendPracticeConfirmationRequestEmail(params);
     await service.sendNoPracticeEmail(params);

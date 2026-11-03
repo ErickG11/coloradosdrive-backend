@@ -1,6 +1,5 @@
-import type { Transporter } from 'nodemailer';
-
 import { env } from '../config/env';
+import type { MailTransport } from '../config/mailTransport';
 import { formatEcuadorDateTime } from '../utils/formatEcuadorDateTime';
 
 export interface WelcomeEmailParams {
@@ -63,7 +62,7 @@ function escapeHtml(value: string): string {
 // Recibe el transporter por constructor (no usa el singleton de
 // config/mailer.ts directamente) para poder mockearlo en tests.
 export class EmailService {
-  constructor(private readonly transporter: Transporter) {}
+  constructor(private readonly transporter: MailTransport) {}
 
   async sendInstructorCredentials(params: WelcomeEmailParams): Promise<void> {
     const login = new URL('/login', env.FRONTEND_URL).toString();
