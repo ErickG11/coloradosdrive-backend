@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 
@@ -27,7 +27,8 @@ import { AppError } from '../utils/AppError';
 import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
 import { normalizeSolicitudError } from '../utils/solicitudError';
 import { normalizeEmail, normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
-import { detectFileType } from '../utils/fileSignature';
+import { SolicitudDocumentStorage } from './solicitudDocumentStorage.service';
+import { NotificationService } from './notification.service';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
@@ -49,17 +50,12 @@ export const CODE_TTL_MINUTES = 15;
 export const MAX_CODE_ATTEMPTS = 5;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 
-const EXTENSION_BY_DETECTED_TYPE: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'application/pdf': 'pdf',
-};
 // Filtro barato en Multer, ANTES de bufferizar el archivo completo (ver
 // middlewares/upload.ts): usa el Content-Type que declara el cliente,
 // que es falsificable. Es solo para rechazar temprano lo obviamente no
 // permitido; la decisión de seguridad real es detectFileType() sobre el
 // contenido ya bufferizado, más abajo en subirDocumento().
-export const ALLOWED_MIMETYPES = Object.keys(EXTENSION_BY_DETECTED_TYPE);
+export const ALLOWED_MIMETYPES = ['image/jpeg','image/png','application/pdf'];
 
 function hashCode(code: string): string {
   return createHash('sha256').update(code).digest('hex');
@@ -294,80 +290,7 @@ export class SolicitudService {
     // multipart. `file.mimetype` ya no se usa para decidir nada de acá en
     // adelante.
     await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
-    const detectedType = detectFileType(file.buffer);
-    if (!detectedType) {
-      throw new AppError('Tipo de archivo no permitido (solo JPG, PNG o PDF)', 400);
-    }
-    const extension = EXTENSION_BY_DETECTED_TYPE[detectedType];
-
-    const { data: existing, error: existingError } = await this.supabase
-      .from('solicitud_documentos')
-      .select()
-      .eq('solicitud_id', solicitudId)
-      .eq('tipo_documento', tipoDocumento)
-      .maybeSingle();
-    if (existingError) {
-      throw existingError;
-    }
-    if (existing?.estado === 'aprobado') {
-      throw new AppError('Este documento ya fue aprobado y no se puede reemplazar', 409);
-    }
-
-    const storagePath = `${solicitudId}/${tipoDocumento}-${randomUUID()}.${extension}`;
-    const bucket = this.supabase.storage.from(SOLICITUDES_BUCKET);
-
-    const { error: uploadError } = await bucket.upload(storagePath, file.buffer, {
-      contentType: detectedType,
-      upsert: false,
-    });
-    if (uploadError) {
-      throw new AppError('No se pudo guardar el documento. Intenta de nuevo', 502);
-    }
-
-    const now = new Date().toISOString();
-    const { data, error } = existing
-      ? await this.supabase
-          .from('solicitud_documentos')
-          .update({
-            storage_path: storagePath,
-            estado: 'recibido',
-            motivo_rechazo: null,
-            uploaded_at: now,
-            reviewed_at: null,
-            reviewed_by: null,
-          })
-          .eq('id', existing.id)
-          .neq('estado', 'aprobado')
-          .eq('storage_path', existing.storage_path)
-          .select()
-          .maybeSingle()
-      : await this.supabase
-          .from('solicitud_documentos')
-          .insert({
-            solicitud_id: solicitudId,
-            tipo_documento: tipoDocumento,
-            storage_path: storagePath,
-          })
-          .select()
-          .single();
-
-    if (error || !data) {
-      // Compensación: no dejar un objeto huérfano en Storage.
-      await bucket.remove([storagePath]).catch(() => undefined);
-      if (error) throw error;
-      throw solicitudError('El documento cambió durante la subida. Consulta de nuevo tu progreso', 409, 'DOCUMENTO_YA_REVISADO');
-    }
-
-    if (existing) {
-      await bucket.remove([existing.storage_path]).catch(() => undefined);
-    }
-
-    return {
-      id: data.id,
-      tipoDocumento: data.tipo_documento,
-      estado: data.estado,
-      uploadedAt: data.uploaded_at,
-    };
+    return new SolicitudDocumentStorage(this.supabase).upload(solicitudId,tipoDocumento,file);
   }
 
   // ---------------------------------------------------------------------
@@ -475,39 +398,7 @@ export class SolicitudService {
     input: { estado: 'aprobado' | 'rechazado'; motivoRechazo?: string },
   ): Promise<{ id: string; estado: 'aprobado' | 'rechazado' }> {
     if (input.estado === 'rechazado' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
-    const solicitud = await this.getOrThrow(solicitudId);
-    if (solicitud.estado !== 'pendiente_revision' || solicitud.reviewed_at) {
-      throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
-    }
-
-    const { data, error } = await this.supabase
-      .from('solicitud_documentos')
-      .update({
-        estado: input.estado,
-        motivo_rechazo: input.estado === 'rechazado' ? (input.motivoRechazo ?? null) : null,
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: adminId,
-      })
-      .eq('id', documentoId)
-      .eq('solicitud_id', solicitudId)
-      .eq('estado', 'recibido')
-      .select()
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      const current = await this.supabase.from('solicitud_documentos').select('id,estado')
-        .eq('id', documentoId).eq('solicitud_id', solicitudId).maybeSingle();
-      if (current.error) throw current.error;
-      if (current.data) {
-        throw solicitudError('Este documento ya fue revisado. Actualiza la solicitud', 409, 'DOCUMENTO_YA_REVISADO');
-      }
-      throw new AppError('El documento indicado no existe en esta solicitud', 404);
-    }
-
-    await recordSolicitudAudit(this.supabase, solicitudId, adminId, `documento_${input.estado}`, documentoId);
-    return { id: data.id, estado: input.estado };
+    return new NotificationService(this.supabase).reviewDocument(solicitudId,documentoId,adminId,input);
   }
 
   async decidir(

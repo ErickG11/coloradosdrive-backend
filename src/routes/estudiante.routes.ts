@@ -1,3 +1,9 @@
+import { StudentDocumentsService } from '../services/studentDocuments.service';
+import { uploadDocumento } from '../middlewares/upload';
+import { TIPOS_DOCUMENTO } from '../models/solicitud.model';
+import type { SolicitudTipoDocumento } from '../models/solicitud.model';
+import { buildRateLimiter } from '../middlewares/rateLimit';
+import { env } from '../config/env';
 import { StudentPendingDocumentsService } from '../services/studentPendingDocuments.service';
 import { Router } from 'express';
 import { body, query } from 'express-validator';
@@ -23,6 +29,14 @@ import { AppError } from '../utils/AppError';
 export const estudianteRouter = Router();
 
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
+const documents = new StudentDocumentsService(supabaseAdmin);
+const documentLimit=buildRateLimiter(30,env.NODE_ENV==='test',req=>req.user?.id??'anon');
+estudianteRouter.get('/documentos',asyncHandler(async(req,res)=>{if(!req.user)throw new AppError('Inicia sesión',401);res.json(await documents.get(req.user.id));}));
+estudianteRouter.post('/documentos',documentLimit,uploadDocumento,body('tipo_documento').isIn(TIPOS_DOCUMENTO),validateFields,asyncHandler(async(req,res)=>{
+ if(!req.user)throw new AppError('Inicia sesión',401);
+ if(!req.file)throw new AppError('Selecciona un archivo',400,{code:'ARCHIVO_REQUERIDO'});
+ res.status(201).json(await documents.upload(req.user.id,(req.body as {tipo_documento:SolicitudTipoDocumento}).tipo_documento,{buffer:req.file.buffer,mimetype:req.file.mimetype,size:req.file.size}));
+}));
 estudianteRouter.get('/documentos-pendientes', asyncHandler(async (req, res) => {
   if (!req.user) throw new AppError('Authentication required', 401);
   res.json(await new StudentPendingDocumentsService(supabaseAdmin).get(req.user.id));
