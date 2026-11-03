@@ -27,8 +27,8 @@ import { AppError } from '../utils/AppError';
 import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
 import { normalizeSolicitudError } from '../utils/solicitudError';
 import { normalizeEmail, normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
-import { SolicitudDocumentStorage } from './solicitudDocumentStorage.service';
 import { NotificationService } from './notification.service';
+import { SolicitudDocumentStorage } from './solicitudDocumentStorage.service';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
@@ -296,15 +296,18 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   // Panel del admin
   // ---------------------------------------------------------------------
-  async listarParaAdmin(estado?: SolicitudEstado, page = 1, pageSize = 20, q = ''): Promise<{ items: SolicitudAdminView[]; total: number; page: number; pageSize: number }> {
+  async resumen():Promise<{pendientes:number;documentosPorRevisar:number}>{const r=await this.supabase.rpc('resumen_solicitudes');if(r.error)throw r.error;return r.data;}
+
+  async listarParaAdmin(estado?: SolicitudEstado | 'con_documentos_por_revisar', page = 1, pageSize = 20, q = ''): Promise<{ items: SolicitudAdminView[]; total: number; page: number; pageSize: number }> {
     // Las filas que solo verificaron el correo (sin cédula) son solicitudes
     // en progreso: todavía no hay nada que revisar.
     let query = this.supabase
-      .from('solicitudes_inscripcion')
+      .from('solicitudes_admin')
       .select('*', { count: 'exact' })
       .not('enviada_at', 'is', null)
-      .order('created_at', { ascending: false }).order('id');
-    if (estado) {
+      .order('orden_grupo').order('pendiente_desde',{ascending:true,nullsFirst:false}).order('decidida_at',{ascending:false,nullsFirst:false}).order('id');
+    if (estado === 'con_documentos_por_revisar') query=query.gt('documentos_por_revisar',0).in('estado',['pendiente_revision','aprobada']);
+    else if (estado) {
       query = query.eq('estado', estado);
     }
     // q se limita a caracteres literales para no inyectar operadores PostgREST.
@@ -345,6 +348,8 @@ export class SolicitudService {
         (relatedByCedula.get(solicitud.cedula ?? '') ?? []).filter((r) => r.id !== solicitud.id),
       ),
       solicitadaAt: solicitud.solicitada_at,
+      enviadaAt: solicitud.enviada_at,
+      documentosPorRevisar: solicitud.documentos_por_revisar,
       consentimiento: ((): SolicitudAdminView['consentimiento'] => {
         const c = consents.find(c => c.solicitud_id === solicitud.id);
         return c ? { version: c.version_aviso, aceptadoAt: c.aceptado_at, representanteNombre: c.representante_nombre, representanteCedula: c.representante_cedula, representanteAcepta: c.representante_acepta } : null;

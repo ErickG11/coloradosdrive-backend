@@ -88,7 +88,7 @@ export async function listarSolicitudes(
   req: Request,
   res: Response,
 ): Promise<void> {
-  const estado = req.query.estado as SolicitudEstado | undefined;
+  const estado = req.query.estado as SolicitudEstado | 'con_documentos_por_revisar' | undefined;
   res.status(200).json(await solicitudService.listarParaAdmin(estado, Number(req.query.page ?? 1), Number(req.query.pageSize ?? 20), typeof req.query.q === 'string' ? req.query.q : ''));
 }
 
@@ -143,3 +143,5 @@ export async function eliminarSolicitud(req: Request, res: Response): Promise<vo
 }
 
 export async function enviarSolicitud(req: Request,res: Response): Promise<void> {res.json(await solicitudService.enviar(req.params.id));}
+
+export async function resumenSolicitudes(_req:Request,res:Response):Promise<void>{res.json(await solicitudService.resumen());}

@@ -68,7 +68,7 @@ export interface ManualOperation extends Record<string, unknown> {
 
 export interface Database {
   public: {
-    Views: Record<string, never>;
+    Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
       enviar_solicitud: {Args:{p_id:string;p_version:string};Returns:{id:string;estado:string;enviadaAt:string}};
       correo_tiene_cuenta: {Args:{p_correo:string};Returns:boolean};

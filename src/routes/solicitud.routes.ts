@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body, param, query } from 'express-validator';
 
 import {
+  resumenSolicitudes,
   enviarSolicitud,
   aceptarConsentimiento,
   avisoPrivacidad,
@@ -151,7 +152,7 @@ solicitudAdminRouter.get(
     query('q').optional().isString().trim().isLength({ max: 100 }),
     query('estado')
       .optional()
-      .isIn(SOLICITUD_ESTADOS)
+      .isIn([...SOLICITUD_ESTADOS,'con_documentos_por_revisar'])
       .withMessage('estado debe ser uno de: ' + SOLICITUD_ESTADOS.join(', ')),
   ],
   validate,
@@ -198,3 +199,5 @@ solicitudAdminRouter.get('/:id/documentos/:docId/url', [idParamValidator, param(
 solicitudAdminRouter.delete('/:id', idParamValidator, validate, asyncHandler(eliminarSolicitud));
 
 solicitudRouter.post('/:id/enviar',applicationRateLimiter,authenticateSolicitud,idParamValidator,validate,asyncHandler(enviarSolicitud));
+
+solicitudAdminRouter.get('/resumen',asyncHandler(resumenSolicitudes));
