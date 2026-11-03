@@ -26,7 +26,7 @@ import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
 import { normalizeSolicitudError } from '../utils/solicitudError';
-import { normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
+import { normalizeEmail, normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
 import { detectFileType } from '../utils/fileSignature';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
@@ -120,14 +120,16 @@ export class SolicitudService {
   // Verificación de correo
   // ---------------------------------------------------------------------
   async verificarCorreo(correoInput: string, courseId: string): Promise<void> {
-    const correo = correoInput.trim().toLowerCase();
+    const correo = normalizeEmail(correoInput);
     const existing = await this.findByCorreo(correo);
 
-    if (existing?.estado === 'aprobada') {
-      throw new AppError('Ya existe una solicitud aprobada para este correo', 409);
+    if (!existing?.student_id) {
+      const account=await this.supabase.rpc('correo_tiene_cuenta',{p_correo:correo});
+      if(account.error)throw account.error;
+      if(account.data)return;
     }
 
-    const selectedCourse = existing?.solicitada_at ? existing.course_id : courseId;
+    const selectedCourse = existing ? existing.course_id : courseId;
     const { data: course, error: courseError } = await this.supabase.from('courses')
       .select('id').eq('id', selectedCourse).maybeSingle();
     if (courseError) throw courseError;
@@ -138,7 +140,7 @@ export class SolicitudService {
       // El curso se guarda/actualiza aquí también en un reintento: si el
       // postulante vuelve a pedir código para otro curso, esta solicitud
       // en progreso refleja su elección más reciente.
-      course_id: selectedCourse,
+      ...(existing ? {} : {course_id: selectedCourse}),
       codigo_verificacion: hashCode(code),
       codigo_expira_at: new Date(Date.now() + CODE_TTL_MINUTES * 60_000).toISOString(),
       // Un código nuevo reinicia el contador: los intentos fallidos contra
@@ -157,8 +159,9 @@ export class SolicitudService {
     } else {
       const { error } = await this.supabase
         .from('solicitudes_inscripcion')
-        .insert({ correo, ...codeFields });
+        .insert({ correo, course_id:selectedCourse, ...codeFields });
       if (error) {
+        if(isUniqueViolation(error))return;
         throw error;
       }
     }
@@ -171,12 +174,14 @@ export class SolicitudService {
       });
     } catch {
       logSolicitudFailure('verification_email_failed');
-      throw new AppError('No se pudo enviar el código de verificación. Intenta de nuevo', 502);
+      // Misma respuesta pública: tampoco el fallo del proveedor revela existencia.
+      return;
     }
   }
 
   async confirmarCodigo(correoInput: string, codigo: string): Promise<ConfirmarCodigoResult> {
-    const correo = correoInput.trim().toLowerCase();
+    const correo = normalizeEmail(correoInput);
+    if(!/^[0-9]{6}$/.test(codigo))throw solicitudError('El código debe tener exactamente 6 dígitos',400,'CODIGO_INVALIDO_O_VENCIDO');
     const invalid = new AppError('Código inválido o vencido', 400, { code: 'CODIGO_INVALIDO_O_VENCIDO' });
     for (let retry = 0; retry < 5; retry++) {
       const row = await this.findByCorreo(correo);
@@ -414,7 +419,7 @@ export class SolicitudService {
           documentos.filter((d) => d.solicitud_id === solicitud.id),
           urlByPath,
         ),
-        (relatedByCedula.get(solicitud.cedula) ?? []).filter((r) => r.id !== solicitud.id),
+        (relatedByCedula.get(solicitud.cedula ?? '') ?? []).filter((r) => r.id !== solicitud.id),
       ),
       solicitadaAt: solicitud.solicitada_at,
       consentimiento: ((): SolicitudAdminView['consentimiento'] => {
