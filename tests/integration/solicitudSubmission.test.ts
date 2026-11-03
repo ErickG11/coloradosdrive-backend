@@ -1,37 +1,140 @@
 import type * as SolicitudAuthModule from '../../src/middlewares/solicitudAuth.middleware';
 import type * as SupabaseMockModule from '../helpers/supabaseMock';
-// Fixture independiente para la lectura de estado del middleware; conserva firma/scope reales.
-// La matriz completa y el estado persistido se prueban en solicitudScope.test.ts.
-jest.mock('../../src/middlewares/solicitudAuth.middleware',()=>{
-  const actual=jest.requireActual<typeof SolicitudAuthModule>('../../src/middlewares/solicitudAuth.middleware');
-  const {createChain}=jest.requireActual<typeof SupabaseMockModule>('../helpers/supabaseMock');
-  return {...actual,authenticateSolicitud:actual.createSolicitudAuth({from:()=>createChain({data:{estado:'borrador',correo_verificado:true},error:null})} as unknown as Parameters<typeof actual.createSolicitudAuth>[0])};
+// Estado persistido simulado; firma y scope del token siguen siendo los reales.
+const mockState = { estado: 'borrador' };
+jest.mock('../../src/middlewares/solicitudAuth.middleware', () => {
+  const actual = jest.requireActual<typeof SolicitudAuthModule>(
+    '../../src/middlewares/solicitudAuth.middleware',
+  );
+  const { createChain } = jest.requireActual<typeof SupabaseMockModule>('../helpers/supabaseMock');
+  return {
+    ...actual,
+    authenticateSolicitud: actual.createSolicitudAuth({
+      from: () =>
+        createChain({ data: { estado: mockState.estado, correo_verificado: true }, error: null }),
+    } as unknown as Parameters<typeof actual.createSolicitudAuth>[0]),
+  };
 });
 import request from 'supertest';
-jest.mock('../../src/config/supabase',()=>({supabaseAdmin:{from:jest.fn(),rpc:jest.fn(),storage:{from:jest.fn()}},supabaseAnon:{}}));
-jest.mock('../../src/config/mailer',()=>({mailer:{sendMail:jest.fn().mockResolvedValue({})}}));
-jest.mock('../../src/config/jwks',()=>({verifySupabaseJwt:jest.fn()}));
-import {createApp} from '../../src/app';
-import {supabaseAdmin} from '../../src/config/supabase';
-import {signSolicitudToken} from '../../src/utils/solicitudToken';
-import {createChain} from '../helpers/supabaseMock';
-const id='11111111-1111-4111-8111-111111111111',from=supabaseAdmin.from as jest.Mock,rpc=supabaseAdmin.rpc as jest.Mock;
-const row={id,course_id:'55555555-5555-4555-8555-555555555555',estado:'pendiente_revision',correo_verificado:true,cedula:'1710034065',nombre_completo:'Ana Torres',fecha_nacimiento:'1990-01-01',solicitada_at:'2026-10-01',enviada_at:null};
-const app=createApp(),token=`Bearer ${signSolicitudToken(id)}`;
-beforeEach(()=>{from.mockReset();rpc.mockReset().mockResolvedValue({data:{id,estado:'enviada',enviadaAt:'2026-11-03T12:00:00Z'},error:null});});
-it.each([['cedula'],['titulo_bachiller'],['cedula','titulo_bachiller']])('POST enviar devuelve faltantes %j',async(...faltantes)=>{
- from.mockReturnValueOnce(createChain({data:row,error:null})).mockReturnValueOnce(createChain({data:{acepto_tratamiento:true,declara_veracidad:true},error:null})).mockReturnValueOnce(createChain({data:['cedula','titulo_bachiller'].filter(tipo=>!faltantes.includes(tipo)).map(tipo_documento=>({tipo_documento})),error:null}));
- const res=await request(app).post(`/solicitudes/${id}/enviar`).set('Authorization',token).send({});expect(res.status).toBe(400);expect(res.body.code).toBe('SOLICITUD_INCOMPLETA');expect(res.body.faltantes).toEqual(faltantes);expect(rpc).not.toHaveBeenCalled();
+jest.mock('../../src/config/supabase', () => ({
+  supabaseAdmin: { from: jest.fn(), rpc: jest.fn(), storage: { from: jest.fn() } },
+  supabaseAnon: {},
+}));
+jest.mock('../../src/config/mailer', () => ({
+  mailer: { sendMail: jest.fn().mockResolvedValue({}) },
+}));
+jest.mock('../../src/config/jwks', () => ({ verifySupabaseJwt: jest.fn() }));
+import { createApp } from '../../src/app';
+import { mailer } from '../../src/config/mailer';
+import { supabaseAdmin } from '../../src/config/supabase';
+import { signSolicitudToken } from '../../src/utils/solicitudToken';
+import { createChain } from '../helpers/supabaseMock';
+
+const id = '11111111-1111-4111-8111-111111111111';
+const otra = '22222222-2222-4222-8222-222222222222';
+const from = supabaseAdmin.from as jest.Mock;
+const rpc = supabaseAdmin.rpc as jest.Mock;
+const sendMail = mailer.sendMail as jest.Mock;
+const app = createApp();
+const bearer = (solicitud = id, scope: 'edicion' | 'estado' = 'edicion') =>
+  `Bearer ${signSolicitudToken(solicitud, undefined, scope)}`;
+const enviadaAt = '2026-11-03T12:00:00Z';
+const result = (transicion: boolean) => ({
+  data: { id, estado: 'enviada', enviadaAt, transicion },
+  error: null,
 });
-it('rechaza escritura de datos y consentimiento de una enviada',async()=>{
- from.mockImplementation(()=>createChain({data:{...row,enviada_at:'2026-11-03'},error:null}));
- const data=await request(app).put(`/solicitudes/${id}/datos`).set('Authorization',token).send({cedula:row.cedula,nombreCompleto:row.nombre_completo,fechaNacimiento:row.fecha_nacimiento});expect(data.status).toBe(409);expect(data.body.code).toBe('SOLICITUD_ENVIADA');
- const consent=await request(app).put(`/solicitudes/${id}/consentimiento`).set('Authorization',token).send({versionAviso:'2026-10-v1',aceptoTratamiento:true,declaraVeracidad:true});expect(consent.status).toBe(409);expect(consent.body.code).toBe('SOLICITUD_ENVIADA');
+
+beforeEach(() => {
+  mockState.estado = 'borrador';
+  sendMail.mockClear();
+  from
+    .mockReset()
+    .mockReturnValue(createChain({ data: { correo: 'ana@example.com' }, error: null }));
+  rpc.mockReset().mockResolvedValue(result(true));
 });
-it('enviar es idempotente por HTTP y mantiene la fecha original',async()=>{
- from.mockReturnValue(createChain({data:{...row,enviada_at:'2026-11-01T12:00:00Z'},error:null}));for(let i=0;i<2;i++){const res=await request(app).post(`/solicitudes/${id}/enviar`).set('Authorization',token);expect(res.status).toBe(200);expect(res.body.enviadaAt).toBe('2026-11-01T12:00:00Z');}expect(rpc).not.toHaveBeenCalled();
+
+it.each(['enviar', 'reenviar'])(
+  'POST %s responde 200, sin transicion en el cuerpo, y manda un acuse',
+  async (accion) => {
+    const res = await request(app)
+      .post(`/solicitudes/${id}/${accion}`)
+      .set('Authorization', bearer());
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ id, estado: 'enviada', enviadaAt });
+    expect(rpc).toHaveBeenCalledWith(
+      'enviar_solicitud_inscripcion',
+      expect.objectContaining({ p_id: id, p_modo: accion }),
+    );
+    expect(sendMail).toHaveBeenCalledTimes(1);
+  },
+);
+it('doble envío por HTTP: las dos respuestas son iguales y el acuse sale una sola vez', async () => {
+  rpc.mockResolvedValueOnce(result(true)).mockResolvedValueOnce(result(false));
+  const first = await request(app).post(`/solicitudes/${id}/enviar`).set('Authorization', bearer());
+  mockState.estado = 'enviada';
+  const second = await request(app)
+    .post(`/solicitudes/${id}/enviar`)
+    .set('Authorization', bearer());
+  expect([first.status, second.status]).toEqual([200, 200]);
+  expect(second.body).toEqual(first.body);
+  expect(sendMail).toHaveBeenCalledTimes(1);
 });
-it('cédula que pertenece a un usuario devuelve conflicto sin identificarlo',async()=>{
- from.mockReturnValueOnce(createChain({data:row,error:null})).mockReturnValueOnce(createChain({data:{id:'consent',acepto_tratamiento:true,declara_veracidad:true},error:null})).mockReturnValueOnce(createChain({data:[],error:null})).mockReturnValueOnce(createChain({data:{id:'private-user'},error:null}));
- const res=await request(app).put(`/solicitudes/${id}/datos`).set('Authorization',token).send({cedula:row.cedula,nombreCompleto:row.nombre_completo,fechaNacimiento:row.fecha_nacimiento});expect(res.status).toBe(409);expect(res.body.code).toBe('CEDULA_YA_REGISTRADA');expect(JSON.stringify(res.body)).not.toContain('private-user');
+it('envíos simultáneos con Promise.all solo producen un acuse', async () => {
+  rpc.mockReset().mockResolvedValueOnce(result(true)).mockResolvedValue(result(false));
+  const results = await Promise.all(
+    [1, 2, 3].map(() =>
+      request(app).post(`/solicitudes/${id}/enviar`).set('Authorization', bearer()),
+    ),
+  );
+  expect(results.map((r) => r.status)).toEqual([200, 200, 200]);
+  expect(sendMail).toHaveBeenCalledTimes(1);
+});
+it('el certificado faltante llega como SOLICITUD_INCOMPLETA con la lista', async () => {
+  rpc.mockResolvedValue({
+    data: null,
+    error: {
+      code: 'SI424',
+      message: 'x',
+      details: JSON.stringify({ faltantes: ['certificado_estudios'] }),
+    },
+  });
+  const res = await request(app).post(`/solicitudes/${id}/enviar`).set('Authorization', bearer());
+  expect(res.status).toBe(400);
+  expect(res.body.code).toBe('SOLICITUD_INCOMPLETA');
+  expect(res.body.faltantes).toEqual(['certificado_estudios']);
+  expect(sendMail).not.toHaveBeenCalled();
+});
+it('sin token, de otra solicitud o de solo lectura no llega a la RPC', async () => {
+  expect((await request(app).post(`/solicitudes/${id}/enviar`)).status).toBe(401);
+  expect(
+    (await request(app).post(`/solicitudes/${id}/enviar`).set('Authorization', bearer(otra)))
+      .status,
+  ).toBe(403);
+  expect(
+    (
+      await request(app)
+        .post(`/solicitudes/${id}/reenviar`)
+        .set('Authorization', bearer(id, 'estado'))
+    ).status,
+  ).toBe(403);
+  expect(rpc).not.toHaveBeenCalled();
+});
+it.each(['aprobada', 'rechazada'])('estado %s: 409 sin llegar a la RPC', async (estado) => {
+  mockState.estado = estado;
+  const res = await request(app).post(`/solicitudes/${id}/enviar`).set('Authorization', bearer());
+  expect(res.status).toBe(409);
+  expect(rpc).not.toHaveBeenCalled();
+});
+it('una enviada sigue rechazando datos y consentimiento aunque el token sea de edición', async () => {
+  mockState.estado = 'enviada';
+  const data = await request(app)
+    .put(`/solicitudes/${id}/datos`)
+    .set('Authorization', bearer())
+    .send({});
+  const consent = await request(app)
+    .put(`/solicitudes/${id}/consentimiento`)
+    .set('Authorization', bearer())
+    .send({});
+  expect([data.status, consent.status]).toEqual([409, 409]);
+  expect(data.body.code).toBe('SOLICITUD_ENVIADA');
 });

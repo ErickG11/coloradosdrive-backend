@@ -5,6 +5,7 @@ import { body, param, query } from 'express-validator';
 import {
   resumenSolicitudes,
   enviarSolicitud,
+  reenviarSolicitud,
   aceptarConsentimiento,
   avisoPrivacidad,
   progresoSolicitud,
@@ -195,6 +196,15 @@ solicitudRouter.post(
   idParamValidator,
   validate,
   asyncHandler(enviarSolicitud),
+);
+
+solicitudRouter.post(
+  '/:id/reenviar',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  idParamValidator,
+  validate,
+  asyncHandler(reenviarSolicitud),
 );
 
 solicitudAdminRouter.get('/resumen', asyncHandler(resumenSolicitudes));

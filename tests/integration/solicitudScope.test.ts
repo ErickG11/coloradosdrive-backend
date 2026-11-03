@@ -19,6 +19,12 @@ function app(estado: string, correoVerificado = true, error: unknown = null) {
   api.put('/solicitudes/:id/datos', (_req, res) => {
     res.json({ ok: true });
   });
+  api.post('/solicitudes/:id/enviar', (_req, res) => {
+    res.json({ ok: true });
+  });
+  api.post('/solicitudes/:id/reenviar', (_req, res) => {
+    res.json({ ok: true });
+  });
   api.use(errorHandler);
   return { api, chain, from };
 }
@@ -62,6 +68,33 @@ test.each(['enviada', 'aprobada', 'rechazada'])(
     ).toBe(409);
   },
 );
+test.each(['enviar', 'reenviar'])(
+  'repetir %s sobre una enviada es idempotente solo con scope de edición',
+  async (accion) => {
+    const h = app('enviada');
+    const post = (token: string) =>
+      request(h.api).post(`/solicitudes/${id}/${accion}`).set('Authorization', `Bearer ${token}`);
+    expect((await post(signSolicitudToken(id))).status).toBe(200);
+    expect((await post(signSolicitudToken(id, undefined, 'estado'))).status).toBe(403);
+    expect(
+      (
+        await request(h.api)
+          .put(`/solicitudes/${id}/datos`)
+          .set('Authorization', `Bearer ${signSolicitudToken(id)}`)
+      ).status,
+    ).toBe(409);
+  },
+);
+test.each(['aprobada', 'rechazada'])('enviar sobre %s sigue cerrado', async (estado) => {
+  const h = app(estado);
+  expect(
+    (
+      await request(h.api)
+        .post(`/solicitudes/${id}/enviar`)
+        .set('Authorization', `Bearer ${signSolicitudToken(id)}`)
+    ).status,
+  ).toBe(409);
+});
 test('token de otra solicitud y ausencia de sesión no consultan datos', async () => {
   const h = app('borrador');
   expect((await request(h.api).get(`/solicitudes/${id}/progreso`)).status).toBe(401);

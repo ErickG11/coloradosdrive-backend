@@ -1,23 +1,114 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
-import type { AccountService } from '../../src/services/account.service';
-import type { CohortAssignmentService } from '../../src/services/cohortAssignment.service';
-import type { EmailService } from '../../src/services/email.service';
+import { EmailService } from '../../src/services/email.service';
 import { SolicitudService } from '../../src/services/solicitud.service';
-import { createSupabaseFromMock } from '../helpers/supabaseMock';
-const row={id:'s',correo_verificado:true,enviada_at:null,estado:'pendiente_revision',cedula:'1710034065',nombre_completo:'Ana Torres',fecha_nacimiento:'1990-01-01',solicitada_at:'2026-10-01'};
-function harness(overrides={},consent:unknown={acepto_tratamiento:true,declara_veracidad:true},docs:unknown[]=[{tipo_documento:'cedula'},{tipo_documento:'titulo_bachiller'}]){
- const from=createSupabaseFromMock([{data:{...row,...overrides},error:null},{data:consent,error:null},{data:docs,error:null}]);
- const result={id:'s',estado:'enviada',enviadaAt:'2026-11-03T12:00:00Z'};const rpc=jest.fn().mockResolvedValue({data:result,error:null});
- const service=new SolicitudService({from,rpc} as unknown as SupabaseClient<Database>,{} as EmailService,{} as AccountService,{} as CohortAssignmentService);
- return {from,rpc,service,result};
+import { createChain } from '../helpers/supabaseMock';
+
+const id = '11111111-1111-4111-8111-111111111111';
+const enviadaAt = '2026-11-03T12:00:00Z';
+
+function harness(rpcResult: { data: unknown; error: unknown }, mailFails = false) {
+  const rpc = jest.fn().mockResolvedValue(rpcResult);
+  const from = jest
+    .fn()
+    .mockReturnValue(createChain({ data: { correo: 'ana@example.com' }, error: null }));
+  const sendMail = jest
+    .fn()
+    .mockImplementation(() =>
+      mailFails ? Promise.reject(new Error('smtp caído')) : Promise.resolve({}),
+    );
+  const service = new SolicitudService(
+    { rpc, from } as unknown as SupabaseClient<Database>,
+    new EmailService({ sendMail }),
+    {} as never,
+    {} as never,
+  );
+  return { rpc, from, sendMail, service };
 }
-it.each([['cedula'],['titulo_bachiller'],['cedula','titulo_bachiller']])('rechaza faltantes %j antes de persistir envío',async(...faltantes)=>{
- const h=harness({},undefined,['cedula','titulo_bachiller'].filter(tipo=>!faltantes.includes(tipo)).map(tipo_documento=>({tipo_documento})));
- await expect(h.service.enviar('s')).rejects.toMatchObject({statusCode:400,code:'SOLICITUD_INCOMPLETA',detalles:{faltantes}});expect(h.rpc).not.toHaveBeenCalled();
+const ok = (transicion: boolean) => ({
+  data: { id, estado: 'enviada', enviadaAt, transicion },
+  error: null,
 });
-it('envía con ambos documentos, incluso si uno está rechazado',async()=>{const h=harness({},undefined,[{tipo_documento:'cedula',estado:'rechazado'},{tipo_documento:'titulo_bachiller',estado:'recibido'}]);await expect(h.service.enviar('s')).resolves.toEqual(h.result);expect(h.rpc).toHaveBeenCalledTimes(1);});
-it('un reenvío conserva exactamente enviadaAt sin volver a escribir',async()=>{const h=harness({enviada_at:'2026-11-01T12:00:00Z'});await expect(h.service.enviar('s')).resolves.toEqual({id:'s',estado:'enviada',enviadaAt:'2026-11-01T12:00:00Z'});expect(h.rpc).not.toHaveBeenCalled();});
+
+it('envía por la RPC con las versiones vigentes y manda el acuse una sola vez', async () => {
+  const h = harness(ok(true));
+  await expect(h.service.enviar(id)).resolves.toEqual({ id, estado: 'enviada', enviadaAt });
+  expect(h.rpc).toHaveBeenCalledWith(
+    'enviar_solicitud_inscripcion',
+    expect.objectContaining({ p_id: id, p_modo: 'enviar' }),
+  );
+  expect(h.sendMail).toHaveBeenCalledTimes(1);
+});
+it('un envío repetido devuelve la misma fecha y no repite el correo', async () => {
+  const h = harness(ok(false));
+  await expect(h.service.enviar(id)).resolves.toEqual({ id, estado: 'enviada', enviadaAt });
+  expect(h.sendMail).not.toHaveBeenCalled();
+  expect(h.from).not.toHaveBeenCalled();
+});
+it('reenviar usa el modo reenviar y el acuse lo distingue', async () => {
+  const h = harness(ok(true));
+  await h.service.reenviar(id);
+  expect(h.rpc.mock.calls[0][1]).toMatchObject({ p_modo: 'reenviar' });
+  const mail = h.sendMail.mock.calls[0][0] as { text: string };
+  expect(mail.text).toContain('corrección');
+});
+it('el acuse no contiene datos personales ni archivos y apunta al origen configurado', async () => {
+  const h = harness(ok(true));
+  await h.service.enviar(id);
+  const mail = h.sendMail.mock.calls[0][0] as {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  };
+  expect(mail.to).toBe('ana@example.com');
+  expect(mail.subject).not.toMatch(/[\r\n]/);
+  expect(`${mail.text}${mail.html}`).not.toMatch(/ana|cédula|1710034065|certificado/i);
+  expect(mail.text).toMatch(/https?:\/\/[^\s/]+\/inscripcion/);
+});
+it('un fallo del correo no deshace el envío ni se registra con datos', async () => {
+  const log = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+  const h = harness(ok(true), true);
+  await expect(h.service.enviar(id)).resolves.toMatchObject({ estado: 'enviada' });
+  expect(log).toHaveBeenCalledWith(JSON.stringify({ event: 'received_email_failed' }));
+  log.mockRestore();
+});
 it.each([
- [{correo_verificado:false},null,'CORREO_NO_VERIFICADO'],[{},null,'CONSENTIMIENTO_REQUERIDO'],[{cedula:null},undefined,'DATOS_REQUERIDOS'],[{fecha_nacimiento:'2010-11-03'},undefined,'REPRESENTANTE_REQUERIDO'],
-])('valida prerequisitos en orden %j',async(overrides,consent,code)=>{const h=harness(overrides,consent);await expect(h.service.enviar('s')).rejects.toMatchObject({code});expect(h.rpc).not.toHaveBeenCalled();});
+  ['SI424', 400, 'SOLICITUD_INCOMPLETA'],
+  ['SI435', 409, 'ESTADO_INCORRECTO'],
+  ['SI409', 409, 'SOLICITUD_CERRADA'],
+  ['SI403', 409, 'CONSENTIMIENTO_REQUERIDO'],
+  ['SI422', 400, 'DATOS_REQUERIDOS'],
+  ['SI423', 400, 'REPRESENTANTE_REQUERIDO'],
+  ['SI425', 400, 'EDAD_MINIMA'],
+  ['SI429', 409, 'DATOS_NO_REGISTRADOS'],
+  ['SI401', 403, 'CORREO_NO_VERIFICADO'],
+])('traduce %s a %i %s sin enviar correo', async (sql, status, code) => {
+  const h = harness({
+    data: null,
+    error: {
+      code: sql,
+      message: 'x',
+      details: JSON.stringify({ faltantes: ['certificado_estudios', 'otro'] }),
+    },
+  });
+  await expect(h.service.enviar(id)).rejects.toMatchObject({ statusCode: status, code });
+  expect(h.sendMail).not.toHaveBeenCalled();
+});
+it('la falta del certificado informa solo el faltante conocido', async () => {
+  const h = harness({
+    data: null,
+    error: {
+      code: 'SI424',
+      message: 'x',
+      details: JSON.stringify({ faltantes: ['certificado_estudios', 'otro'] }),
+    },
+  });
+  await expect(h.service.enviar(id)).rejects.toMatchObject({
+    detalles: { faltantes: ['certificado_estudios'] },
+  });
+});
+it('sin respuesta de la RPC falla cerrado', async () => {
+  const h = harness({ data: null, error: null });
+  await expect(h.service.enviar(id)).rejects.toMatchObject({ statusCode: 503 });
+});

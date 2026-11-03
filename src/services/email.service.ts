@@ -262,6 +262,29 @@ export class EmailService {
     });
   }
 
+  // Acuse de recepción: sin datos personales ni archivos; solo orienta a consultar el estado.
+  async sendApplicationReceivedEmail(params: { to: string; reenvio: boolean }): Promise<void> {
+    const { to, reenvio } = params;
+    const url = `${env.FRONTEND_URL}/inscripcion`;
+    const intro = reenvio
+      ? 'Recibimos tu corrección. Tu solicitud de inscripción vuelve a estar pendiente de revisión.'
+      : 'Recibimos tu solicitud de inscripción. Está pendiente de revisión.';
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to,
+      subject: 'Recibimos tu solicitud de inscripción',
+      text: [
+        intro,
+        '',
+        `Puedes ver el estado en ${url} con tu correo. Te avisaremos si necesitamos algo más.`,
+      ].join('\n'),
+      html: [
+        `<p>${intro}</p>`,
+        `<p>Puedes ver el estado en <a href="${escapeHtml(url)}">${escapeHtml(url)}</a> con tu correo. Te avisaremos si necesitamos algo más.</p>`,
+      ].join('\n'),
+    });
+  }
+
   // Se envía cuando el admin aprueba una solicitud y se crea la cuenta. La
   // contraseña es temporal: el sistema obliga a cambiarla en el primer uso.
   async sendApplicationApprovedEmail(params: WelcomeEmailParams): Promise<void> {

@@ -108,6 +108,12 @@ export interface DecidirSolicitudResult {
 
 // Recibe el cliente de Supabase y los servicios por constructor para poder
 // mockearlos en tests.
+export interface EnviarResult {
+  id: string;
+  estado: 'enviada';
+  enviadaAt: string;
+}
+
 export class SolicitudService {
   constructor(
     private readonly supabase: SupabaseClient<Database>,
@@ -199,21 +205,44 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   // Documentos
   // ---------------------------------------------------------------------
-  async enviar(id: string): Promise<{id:string;estado:string;enviadaAt:string}> {
-    const row = await this.getOrThrow(id);
-    if (!row.correo_verificado) throw solicitudError('Verifica tu correo',403,'CORREO_NO_VERIFICADO');
-    if (row.enviada_at) return {id,estado:row.estado==='pendiente_revision'?'enviada':row.estado,enviadaAt:row.enviada_at};
-    if (row.estado!=='pendiente_revision' || row.reviewed_at) throw solicitudError('La solicitud está cerrada',409,'SOLICITUD_CERRADA');
-    const c=await new SolicitudPrivacyService(this.supabase).requireConsent(id);
-    if (!row.cedula || !row.nombre_completo || !row.fecha_nacimiento || !row.solicitada_at) throw solicitudError('Completa tus datos personales',400,'DATOS_REQUERIDOS');
-    validateApplicant(row.fecha_nacimiento,{nombre:c.representante_nombre,cedula:c.representante_cedula,acepta:c.representante_acepta},undefined,row.cedula);
-    const docs=await this.supabase.from('solicitud_documentos').select('tipo_documento').eq('solicitud_id',id);
-    if(docs.error)throw docs.error;
-    const faltantes=['cedula','titulo_bachiller'].filter(tipo=>!docs.data.some(d=>d.tipo_documento===tipo));
-    if(faltantes.length)throw new AppError('Faltan documentos obligatorios',400,{code:'SOLICITUD_INCOMPLETA',detalles:{faltantes}});
-    const result=await this.supabase.rpc('enviar_solicitud',{p_id:id,p_version:PRIVACY_NOTICE_VERSION});
-    if(result.error)throw normalizeSolicitudError(result.error);
-    return result.data;
+  // Una sola transición atómica en SQL; repetirla es idempotente y no repite el correo.
+  async enviar(id: string): Promise<EnviarResult> {
+    return this.transicionEnvio(id, 'enviar');
+  }
+
+  async reenviar(id: string): Promise<EnviarResult> {
+    return this.transicionEnvio(id, 'reenviar');
+  }
+
+  private async transicionEnvio(id: string, modo: 'enviar' | 'reenviar'): Promise<EnviarResult> {
+    const { data, error } = await this.supabase.rpc('enviar_solicitud_inscripcion', {
+      p_id: id,
+      p_modo: modo,
+      p_version_aviso: PRIVACY_NOTICE_VERSION,
+      p_version_terminos: TERMS_VERSION,
+    });
+    if (error) throw normalizeSolicitudError(error);
+    if (!data)
+      throw solicitudError('No se pudo enviar. Intenta de nuevo.', 503, 'SERVICIO_NO_DISPONIBLE');
+    if (data.transicion) {
+      // El acuse es de cortesía: un fallo de correo nunca deshace el envío.
+      const { data: row } = await this.supabase
+        .from('solicitudes_inscripcion')
+        .select('correo')
+        .eq('id', id)
+        .maybeSingle();
+      if (row?.correo) {
+        try {
+          await this.emailService.sendApplicationReceivedEmail({
+            to: row.correo,
+            reenvio: modo === 'reenviar',
+          });
+        } catch {
+          logSolicitudFailure('received_email_failed');
+        }
+      }
+    }
+    return { id: data.id, estado: data.estado, enviadaAt: data.enviadaAt };
   }
 
   // Un solo certificado de estudios, solo si el nivel declarado lo admite. Los filtros de
