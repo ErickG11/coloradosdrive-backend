@@ -14,7 +14,6 @@ import {
   type DecidirSolicitudInput,
   type SolicitudAdminView,
   type SolicitudRelacionada,
-  type SolicitudDatosInput,
   type SolicitudDocumentoResult,
   type SolicitudEstado,
   type SolicitudTipoDocumento,
@@ -26,15 +25,14 @@ import { recordSolicitudAudit } from './solicitudAudit.service';
 import { logSolicitudFailure } from '../utils/solicitudLog';
 import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
-import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
+import { PRIVACY_NOTICE_VERSION, TERMS_VERSION } from '../config/privacy';
 import { normalizeSolicitudError } from '../utils/solicitudError';
-import { normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
 import { NotificationService } from './notification.service';
 import { SolicitudDocumentStorage } from './solicitudDocumentStorage.service';
 import { env } from '../config/env';
 import { enrollmentRateKey } from '../utils/enrollmentRateKey';
 import { normalizeEnrollmentEmail } from '../utils/enrollmentSanitization';
-import { validateVerificationCode } from '../utils/enrollmentValidation';
+import { validateEnrollmentData, validateVerificationCode } from '../utils/enrollmentValidation';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
@@ -155,44 +153,47 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   // Datos personales (cédula, nombre, fecha de nacimiento)
   // ---------------------------------------------------------------------
-  async completarDatos(
-    solicitudId: string,
-    input: SolicitudDatosInput,
-  ): Promise<CompletarDatosResult> {
+  async completarDatos(solicitudId: string, input: unknown): Promise<CompletarDatosResult> {
     const current = await this.getOrThrow(solicitudId);
-    if (!current.correo_verificado) throw solicitudError('Debes verificar tu correo antes de continuar', 403, 'ACCESO_DENEGADO');
-    if (current.enviada_at) throw solicitudError('La solicitud ya fue enviada y sus datos no se pueden modificar', 409, 'SOLICITUD_ENVIADA');
-    if (current.estado !== 'pendiente_revision' || current.reviewed_at) {
-      throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
-    }
-    const consent = await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
-    validateCedula(input.cedula);
-    const nombre = normalizeName(input.nombreCompleto);
-    const telefono = normalizePhone(input.telefono);
-    const rep = validateApplicant(input.fechaNacimiento, input.representante, undefined, input.cedula);
-    const { data: conflicts, error: conflictsError } = await this.supabase.from('solicitudes_inscripcion')
-      .select('id').eq('cedula', input.cedula).neq('id', solicitudId).neq('estado', 'rechazada').or('enviada_at.not.is.null,estado.eq.aprobada');
-    if (conflictsError) throw conflictsError;
-    if (conflicts.length) throw solicitudError('La cédula ya está registrada', 409, 'CEDULA_YA_REGISTRADA');
-    const user = await this.supabase.from('users').select('id').eq('cedula', input.cedula).maybeSingle();
-    if (user.error) throw user.error;
-    if (user.data) throw solicitudError('La cédula ya está registrada', 409, 'CEDULA_YA_REGISTRADA');
-    if (rep) {
-      const { error } = await this.supabase.from('solicitud_consentimientos').update({
-        representante_nombre: rep.nombre, representante_cedula: rep.cedula, representante_acepta: true,
-      }).eq('id', consent.id);
-      if (error) throw error;
-    }
-    let update = this.supabase.from('solicitudes_inscripcion').update({
-      cedula: input.cedula, nombre_completo: nombre, telefono: telefono ?? null,
-      fecha_nacimiento: input.fechaNacimiento, solicitada_at: current.solicitada_at ?? new Date().toISOString(),
-
-    }).eq('id', solicitudId).eq('estado', current.estado).is('enviada_at', null);
-    update = update.is('reviewed_at', null);
-    const { data, error } = await update.select('id').maybeSingle();
-    if (error) throw isUniqueViolation(error) ? solicitudError('La cédula ya está registrada', 409, 'CEDULA_YA_REGISTRADA') : error;
-    if (!data) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
-    return { solicitudId, token: signSolicitudToken(solicitudId) };
+    if (!current.correo_verificado)
+      throw solicitudError('Verifica tu correo antes de continuar.', 403, 'CORREO_NO_VERIFICADO');
+    if (!['borrador', 'devuelta'].includes(current.estado))
+      throw solicitudError('La solicitud ya no admite cambios.', 409, 'SOLICITUD_CERRADA');
+    await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
+    const course = await this.supabase
+      .from('courses')
+      .select('edad_minima')
+      .eq('id', current.course_id)
+      .maybeSingle();
+    if (course.error) throw course.error;
+    if (!course.data)
+      throw solicitudError(
+        'El curso no está disponible. Contacta a la escuela.',
+        503,
+        'CURSO_NO_DISPONIBLE',
+      );
+    const validated = validateEnrollmentData(input, course.data.edad_minima);
+    // Lista explícita: nombreCompleto lo deriva el trigger, nunca el cliente.
+    const { data, error } = await this.supabase.rpc('guardar_datos_inscripcion', {
+      p_id: solicitudId,
+      p_version_aviso: PRIVACY_NOTICE_VERSION,
+      p_version_terminos: TERMS_VERSION,
+      p_datos: {
+        nombres: validated.nombres,
+        apellidos: validated.apellidos,
+        cedula: validated.cedula,
+        fechaNacimiento: validated.fechaNacimiento,
+        telefono: validated.telefono ?? null,
+        nacionalidadTipo: validated.nacionalidadTipo,
+        tipoSangre: validated.tipoSangre,
+        ...(validated.nivelEstudios ? { nivelEstudios: validated.nivelEstudios } : {}),
+        ...(validated.representante ? { representante: validated.representante } : {}),
+      },
+    });
+    if (error) throw normalizeSolicitudError(error);
+    if (data?.id !== solicitudId)
+      throw solicitudError('No se pudo guardar. Intenta de nuevo.', 503, 'SERVICIO_NO_DISPONIBLE');
+    return { solicitudId, token: signSolicitudToken(solicitudId, undefined, 'edicion') };
   }
 
   // ---------------------------------------------------------------------

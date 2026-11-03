@@ -31,7 +31,6 @@ import {
 } from '../models/solicitud.model';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireKnownFields } from '../utils/enrollmentSanitization';
-import { isValidCedulaEcuatoriana } from '../utils/cedula';
 import { verifyEnrollmentCaptcha } from '../middlewares/captcha.middleware';
 import {
   reserveEnrollmentCodeIp,
@@ -84,43 +83,11 @@ solicitudRouter.post(
   asyncHandler(confirmarCodigo),
 );
 
-function validateFechaNacimiento(value: unknown): boolean {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error('fechaNacimiento debe tener el formato YYYY-MM-DD');
-  }
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-    throw new Error('fechaNacimiento no es una fecha válida');
-  }
-  if (date.getTime() > Date.now() || date.getUTCFullYear() < 1900) {
-    throw new Error('fechaNacimiento fuera de rango');
-  }
-  return true;
-}
-
 solicitudRouter.put(
   '/:id/datos',
   applicationRateLimiter,
   authenticateSolicitud,
-  [
-    idParamValidator,
-    body('cedula')
-      .custom((value: unknown) => typeof value === 'string' && isValidCedulaEcuatoriana(value))
-      .withMessage('cedula no es una cédula ecuatoriana válida'),
-    body('nombreCompleto')
-      .isString()
-      .trim()
-      .notEmpty()
-      .withMessage('nombreCompleto es obligatorio'),
-    body('telefono')
-      .optional()
-      .isString()
-      .trim()
-      .notEmpty()
-      .isLength({ max: 20 })
-      .withMessage('telefono no puede estar vacío ni superar 20 caracteres si se envía'),
-    body('fechaNacimiento').custom(validateFechaNacimiento),
-  ],
+  idParamValidator,
   validate,
   asyncHandler(completarDatos),
 );

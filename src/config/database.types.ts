@@ -71,6 +71,10 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      guardar_datos_inscripcion: {
+        Args: {p_id:string;p_datos:Record<string,unknown>;p_version_aviso:string;p_version_terminos:string};
+        Returns: {id:string;datosActualizadosAt:string|null}|null;
+      };
       aceptar_consentimiento_inscripcion: {
         Args: {p_id:string;p_version_aviso:string;p_version_terminos:string;p_representante?:boolean};
         Returns: {version:string;versionAviso:string;versionTerminos:string;aceptadoAt:string}|null;
@@ -837,7 +841,7 @@ export interface Database {
       };
       solicitudes_inscripcion: {
         Row: {
-          correo_normalizado:string;nombres:string|null;apellidos:string|null;nacionalidad_tipo:string|null;tipo_sangre:string|null;nivel_estudios:string|null;
+          datos_actualizados_at:string|null;correo_normalizado:string;nombres:string|null;apellidos:string|null;nacionalidad_tipo:string|null;tipo_sangre:string|null;nivel_estudios:string|null;
           devuelta_at:string|null;devolucion_motivo_codigo:string|null;devolucion_mensaje:string|null;
           rechazo_motivo_codigo:string|null;documento_estudios_pendiente_por_cupo:boolean;
           id: string;

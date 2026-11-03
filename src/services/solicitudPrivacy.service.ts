@@ -28,7 +28,7 @@ export class SolicitudPrivacyService {
     const consent = await this.currentConsent(id);
     if (!consent)
       throw solicitudError(
-        'Acepta el aviso de privacidad vigente',
+        'Acepta el aviso y los términos vigentes',
         409,
         'CONSENTIMIENTO_REQUERIDO',
       );
@@ -122,6 +122,7 @@ export class SolicitudPrivacyService {
       telefono: string | null;
       nacionalidadTipo: string | null;
       tipoSangre: string | null;
+      representante: { nombre: string; cedula: string; acepta: boolean } | null;
     };
     pasosCompletos: {
       correo: boolean;
@@ -187,7 +188,8 @@ export class SolicitudPrivacyService {
         row.fecha_nacimiento && calcularEdad(row.fecha_nacimiento) < 18,
       ),
       representanteCompleto: Boolean(
-        consent?.representante_acepta &&
+        consent?.representante_autoriza_tratamiento &&
+        consent.representante_acepta &&
         consent.representante_nombre &&
         consent.representante_cedula,
       ),
@@ -215,6 +217,14 @@ export class SolicitudPrivacyService {
         telefono: row.telefono,
         nacionalidadTipo: row.nacionalidad_tipo ?? null,
         tipoSangre: row.tipo_sangre ?? null,
+        representante:
+          consent?.representante_nombre && consent.representante_cedula
+            ? {
+                nombre: consent.representante_nombre,
+                cedula: consent.representante_cedula,
+                acepta: consent.representante_acepta && consent.representante_autoriza_tratamiento,
+              }
+            : null,
       },
       pasosCompletos: {
         correo: row.correo_verificado,

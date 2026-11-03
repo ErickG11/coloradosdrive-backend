@@ -6,7 +6,6 @@ import type {
   CompletarDatosResult,
   ConfirmarCodigoResult,
   DecidirSolicitudInput,
-  SolicitudDatosInput,
   SolicitudDocumentoResult,
   SolicitudEstado,
   SolicitudTipoDocumento,
@@ -56,7 +55,7 @@ export async function completarDatos(
 ): Promise<void> {
   const result = await solicitudService.completarDatos(
     req.params.id,
-    req.body as SolicitudDatosInput,
+    req.body as unknown,
   );
   res.status(200).json(result);
 }
