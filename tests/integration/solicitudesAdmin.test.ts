@@ -244,6 +244,11 @@ describe('solicitudes de inscripción (admin)', () => {
 
   describe('PATCH /admin/solicitudes/:id (decisión final)', () => {
     const url = `/admin/solicitudes/${solicitudId}`;
+    it.each(['aprobada','rechazada'])('un borrador no admite la decisión %s',async estado=>{
+      mockedFrom.mockReturnValueOnce(createChain({data:buildSolicitud({enviada_at:null}),error:null}));
+      const res=await request(app).patch(url).set('Authorization',adminAuth()).send({estado,motivoRechazo:'Datos incompletos'});
+      expect(res.status).toBe(409);expect(res.body.code).toBe('SOLICITUD_NO_ENVIADA');expect(mockedCreateUser).not.toHaveBeenCalled();
+    });
 
     it('responde 400 con un estado inválido', async () => {
       const res = await request(app)
