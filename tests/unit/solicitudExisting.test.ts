@@ -15,9 +15,9 @@ it.each(['pendiente_revision','aprobada','rechazada'])('verifica una solicitud %
  const code=(email.sendVerificationCodeEmail.mock.calls[0][0] as {code:string}).code;expect(code).toMatch(/^\d{6}$/);
 });
 it('una cuenta sin solicitud obtiene éxito genérico sin crear nada ni enviar código',async()=>{
- const from=jest.fn().mockReturnValue(createChain({data:null,error:null})),rpc=jest.fn().mockResolvedValue({data:true,error:null}),email={sendVerificationCodeEmail:jest.fn()};
+ const from=jest.fn().mockReturnValueOnce(createChain({data:null,error:null})).mockReturnValueOnce(createChain({data:{id:'c'},error:null})),rpc=jest.fn().mockResolvedValue({data:true,error:null}),email={sendVerificationCodeEmail:jest.fn()};
  const service=new SolicitudService({from,rpc} as unknown as SupabaseClient<Database>,email as unknown as EmailService,{} as AccountService,{} as CohortAssignmentService);
- await expect(service.verificarCorreo('ana@example.com','c')).resolves.toBeUndefined();expect(from).toHaveBeenCalledTimes(1);expect(email.sendVerificationCodeEmail).not.toHaveBeenCalled();
+ await expect(service.verificarCorreo('ana@example.com','c')).resolves.toBeUndefined();expect(from).toHaveBeenCalledTimes(2);expect(email.sendVerificationCodeEmail).not.toHaveBeenCalled();
 });
 it.each([['pendiente_revision',null,'borrador'],['pendiente_revision','2026-10-01','enviada'],['aprobada','2026-10-01','aprobada'],['rechazada','2026-10-01','rechazada']])('progreso deriva %s/%s como %s',async(estado,enviada_at,expected)=>{
  const from=createSupabaseFromMock([{data:{id:'s',course_id:'c',estado,enviada_at,motivo_rechazo:'Corregir',correo_verificado:true},error:null},{data:null,error:null},{data:[],error:null}]);

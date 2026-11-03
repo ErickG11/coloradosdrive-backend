@@ -5,6 +5,7 @@ import request from 'supertest';
 jest.mock('../../src/config/supabase', () => ({
   supabaseAdmin: {
     from: jest.fn(),
+    rpc: jest.fn(),
     storage: { from: jest.fn() },
     auth: { admin: { createUser: jest.fn(), deleteUser: jest.fn() } },
   },
@@ -88,6 +89,7 @@ describe('solicitudes de inscripción (público)', () => {
   const app = createApp();
 
   beforeEach(() => {
+    (supabaseAdmin.rpc as jest.Mock).mockReset().mockResolvedValue({data:false,error:null});
     mockedFrom.mockReset();
     mockedStorageFrom.mockReset();
     mockedSendMail.mockReset().mockResolvedValue({});
@@ -149,20 +151,21 @@ describe('solicitudes de inscripción (público)', () => {
       expect(updateChain.update.mock.calls[0][0]).not.toHaveProperty('correo_verificado');
     });
 
-    it('responde 409 si ya hay una solicitud aprobada para ese correo', async () => {
+    it('responde éxito genérico si el correo ya tiene una cuenta', async () => {
       mockedFrom.mockReturnValueOnce(
-        createChain({ data: buildSolicitud({ estado: 'aprobada' }), error: null }),
+        createChain({ data: null, error: null }),
       );
-
+      mockedFrom.mockReturnValueOnce(createChain({data:{id:courseId},error:null}));
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValueOnce({data:true,error:null});
       const res = await request(app)
         .post('/solicitudes/verificar-correo')
         .send({ correo: 'ana@example.com', courseId });
 
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(200);
       expect(mockedSendMail).not.toHaveBeenCalled();
     });
 
-    it('responde 502 si el correo no se pudo enviar', async () => {
+    it('conserva éxito genérico aunque falle el correo', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: null, error: null }))
         .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
@@ -173,7 +176,7 @@ describe('solicitudes de inscripción (público)', () => {
         .post('/solicitudes/verificar-correo')
         .send({ correo: 'ana@example.com', courseId });
 
-      expect(res.status).toBe(502);
+      expect(res.status).toBe(200);
     });
   });
 
@@ -191,7 +194,7 @@ describe('solicitudes de inscripción (público)', () => {
       .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null })).mockReturnValueOnce(update);
     const res = await request(app).post('/solicitudes/verificar-correo').send({ correo: 'ana@example.com', courseId: otraSolicitudId });
     expect(res.status).toBe(200);
-    expect(update.update.mock.calls[0][0]).toMatchObject({ course_id: courseId });
+    expect(update.update.mock.calls[0][0]).not.toHaveProperty('course_id');
     expect(update.update.mock.calls[0][0]).not.toHaveProperty('solicitada_at');
     expect(update.update.mock.calls[0][0]).not.toHaveProperty('created_at');
   });
@@ -362,7 +365,7 @@ describe('solicitudes de inscripción (público)', () => {
       const update = createChain({ data: { id: solicitudId }, error: null });
       mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ solicitada_at: saved }), error: null }))
         .mockReturnValueOnce(createChain({ data: { id: 'consent', acepto_tratamiento: true, declara_veracidad: true }, error: null }))
-        .mockReturnValueOnce(createChain({ data: [], error: null })).mockReturnValueOnce(update);
+        .mockReturnValueOnce(createChain({ data: [], error: null })).mockReturnValueOnce(createChain({data:null,error:null})).mockReturnValueOnce(update);
       const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(validDatos);
       expect(res.status).toBe(200);
       expect(update.update.mock.calls[0][0]).toMatchObject({ solicitada_at: saved, cedula: VALID_CEDULA });

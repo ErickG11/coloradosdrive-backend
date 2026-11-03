@@ -119,17 +119,18 @@ export class SolicitudService {
     const correo = normalizeEmail(correoInput);
     const existing = await this.findByCorreo(correo);
 
+
+    const selectedCourse = existing ? existing.course_id : courseId;
+    const { data: course, error: courseError } = await this.supabase.from('courses')
+      .select('id').eq('id', courseId).maybeSingle();
+    if (courseError) throw courseError;
+    if (!course) throw solicitudError('El curso no existe', 404, 'CURSO_NO_ENCONTRADO');
     if (!existing?.student_id) {
       const account=await this.supabase.rpc('correo_tiene_cuenta',{p_correo:correo});
       if(account.error)throw account.error;
       if(account.data)return;
     }
 
-    const selectedCourse = existing ? existing.course_id : courseId;
-    const { data: course, error: courseError } = await this.supabase.from('courses')
-      .select('id').eq('id', selectedCourse).maybeSingle();
-    if (courseError) throw courseError;
-    if (!course) throw solicitudError('El curso no existe', 404, 'CURSO_NO_ENCONTRADO');
 
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const codeFields = {
