@@ -146,6 +146,12 @@ export async function eliminarSolicitud(req: Request, res: Response): Promise<vo
   res.status(204).send();
 }
 
-export async function enviarSolicitud(req: Request,res: Response): Promise<void> {res.json(await solicitudService.enviar(req.params.id));}
+export async function enviarSolicitud(req: Request, res: Response): Promise<void> {
+  res.json(await solicitudService.enviar(req.params.id));
+}
+
+export async function reenviarSolicitud(req: Request, res: Response): Promise<void> {
+  res.json(await solicitudService.reenviar(req.params.id));
+}
 
 export async function resumenSolicitudes(_req:Request,res:Response):Promise<void>{res.json(await solicitudService.resumen());}

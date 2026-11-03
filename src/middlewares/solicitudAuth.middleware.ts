@@ -42,7 +42,9 @@ export function createSolicitudAuth(db: SupabaseClient<Database>): RequestHandle
         throw new AppError('Verifica de nuevo tu correo para editar.', 403, {
           code: 'SCOPE_INSUFICIENTE',
         });
-      if (!['borrador', 'devuelta'].includes(row.estado))
+      // Enviar/reenviar repetidos sobre una enviada devuelven el mismo resultado (idempotencia).
+      const repeatSubmit = row.estado === 'enviada' && /\/(?:enviar|reenviar)$/.test(req.path);
+      if (!['borrador', 'devuelta'].includes(row.estado) && !repeatSubmit)
         throw new AppError('La solicitud ya no admite cambios.', 409, {
           code: row.estado === 'enviada' ? 'SOLICITUD_ENVIADA' : 'SOLICITUD_CERRADA',
         });

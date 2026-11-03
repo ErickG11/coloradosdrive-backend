@@ -49,6 +49,7 @@ export function normalizeSolicitudError(error: Error): Error {
     SI427: [400, 'FECHA_INVALIDA', 'Ingresa una fecha de nacimiento real y no futura.'],
     SI428: [503, 'CURSO_NO_DISPONIBLE', 'El curso no está disponible. Contacta a la escuela.'],
     SI429: [409, 'DATOS_NO_REGISTRADOS', MENSAJE_DATOS_DUPLICADOS],
+    SI435: [409, 'ESTADO_INCORRECTO', 'Esta acción no corresponde al estado actual de tu solicitud.'],
     SI433: [
       409,
       'DATOS_CAMBIARON',
@@ -80,7 +81,8 @@ export function normalizeSolicitudError(error: Error): Error {
         if (Array.isArray(value.faltantes))
           detalles = {
             faltantes: value.faltantes.filter(
-              (v: unknown) => v === 'cedula' || v === 'titulo_bachiller',
+              (v: unknown) =>
+                v === 'cedula' || v === 'titulo_bachiller' || v === 'certificado_estudios',
             ),
           };
       } catch {

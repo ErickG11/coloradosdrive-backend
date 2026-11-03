@@ -71,6 +71,10 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      enviar_solicitud_inscripcion: {
+        Args: {p_id:string;p_modo:'enviar'|'reenviar';p_version_aviso:string;p_version_terminos:string};
+        Returns: {id:string;estado:'enviada';enviadaAt:string;transicion:boolean}|null;
+      };
       guardar_certificado_inscripcion: {
         Args: {p_id:string;p_nivel:string;p_marca:string;p_subtipo:string;p_ruta:string;p_mime:string;p_tamano:number;p_sha256:string;p_version_aviso:string;p_version_terminos:string};
         Returns: {id:string;subtipo:string;mimeType:string;tamano:number;subidoAt:string;rutaAnterior:string|null}|null;
