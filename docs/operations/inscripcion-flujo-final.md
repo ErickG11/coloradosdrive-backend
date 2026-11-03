@@ -1,5 +1,23 @@
 # Inscripción final · implementación por fases
 
+## Continuación F07–F08
+
+F07: configuración pública/admin, límites persistentes HMAC y alertas de cupos.
+Ver `inscripcion-044.md` para contratos, proxy, runbook y secuencia manual de SQL044.
+El resumen elimina documentosPorRevisar; la creación presupuestada y los fallos
+diarios se integrarán en F09, y las subidas antes de leer multipart en F12.
+
+F08: verificar-correo conserva HTTP200 y mensaje de éxito uniforme para trabajo
+normal y errores de cuenta/duplicado/curso/proveedor. Un piso de 300ms medido con
+reloj monotónico cubre el trabajo del controller, incluido el manejo de errores;
+si ya tardó más, no se añade otra espera. No se reflejan causas de BD ni datos del
+proveedor: solo el evento técnico verification_request_failed. Captcha, cierre,
+cupos e indisponibilidad de la comprobación de seguridad conservan sus errores
+controlados. La validación sintáctica previa no consulta existencia de cuentas.
+El bloqueo de correo y los scopes de estado/edición quedan para F09; F08 no
+presume que esas reglas ya estén conectadas. Pruebas HTTP usan servicio real con
+BD/correo simulados y comprueban las ramas nueva, existente, cuenta y error de BD.
+
 Estado de continuidad en `inscripcion-progreso.md`; reconciliación en
 `inscripcion-reconciliacion.md`. Este documento sustituirá los contratos antiguos
 cuando termine la implementación. **No desplegar las fases incompletas ni aplicar

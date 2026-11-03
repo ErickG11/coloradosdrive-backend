@@ -185,12 +185,12 @@ describe('solicitudes de inscripción (público)', () => {
     });
   });
 
-  it('rechaza un curso inexistente antes de emitir el correo', async () => {
+  it('curso inexistente conserva respuesta uniforme sin emitir el correo', async () => {
     mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null }))
       .mockReturnValueOnce(createChain({ data: null, error: null }));
     const res = await request(app).post('/solicitudes/verificar-correo').send({ correo: 'ana@example.com', courseId });
-    expect(res.status).toBe(404);
-    expect(res.body.code).toBe('CURSO_NO_ENCONTRADO');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({message:'Te enviamos un código de verificación a tu correo'});
     expect(mockedSendMail).not.toHaveBeenCalled();
   });
   it('conserva curso y fechas después del primer guardado', async () => {
