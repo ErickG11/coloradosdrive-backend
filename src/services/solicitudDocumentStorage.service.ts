@@ -1,19 +1,40 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
-import type { SolicitudDocumentoResult, SolicitudTipoDocumento, UploadedFile } from '../models/solicitud.model';
+import type {
+  SolicitudDocumentoResult,
+  SolicitudTipoDocumento,
+  UploadedFile,
+} from '../models/solicitud.model';
 import { AppError } from '../utils/AppError';
 import { solicitudError } from '../utils/solicitudError';
 import { detectFileType } from '../utils/fileSignature';
-const SOLICITUDES_BUCKET='solicitudes-documentos';
-const EXTENSION_BY_DETECTED_TYPE:Record<string,string>={'image/jpeg':'jpg','image/png':'png','application/pdf':'pdf'};
+const SOLICITUDES_BUCKET = 'solicitudes-documentos';
+const EXTENSION_BY_DETECTED_TYPE: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'application/pdf': 'pdf',
+};
 export class SolicitudDocumentStorage {
- constructor(private readonly supabase:SupabaseClient<Database>){}
- async upload(solicitudId:string,tipoDocumento:SolicitudTipoDocumento,file:UploadedFile):Promise<SolicitudDocumentoResult>{
-  if (!file.buffer.length || file.size>5*1024*1024 || file.buffer.length>5*1024*1024) throw solicitudError('Selecciona un archivo no vacío de hasta 5 MiB',400,'ARCHIVO_INVALIDO');
+  constructor(private readonly supabase: SupabaseClient<Database>) {}
+  async upload(
+    solicitudId: string,
+    tipoDocumento: SolicitudTipoDocumento,
+    file: UploadedFile,
+  ): Promise<SolicitudDocumentoResult> {
+    if (!file.buffer.length || file.size > 5 * 1024 * 1024 || file.buffer.length > 5 * 1024 * 1024)
+      throw solicitudError(
+        'Selecciona un archivo no vacío de hasta 5 MiB',
+        400,
+        'ARCHIVO_INVALIDO',
+      );
     const detectedType = detectFileType(file.buffer);
     if (!detectedType) {
-      throw new AppError('Tipo de archivo no permitido (solo JPG, PNG o PDF)', 400);
+      throw solicitudError(
+        'Tipo de archivo no permitido (solo JPG, PNG o PDF)',
+        400,
+        'ARCHIVO_INVALIDO',
+      );
     }
     const extension = EXTENSION_BY_DETECTED_TYPE[detectedType];
 
@@ -27,7 +48,11 @@ export class SolicitudDocumentStorage {
       throw existingError;
     }
     if (existing?.estado === 'aprobado') {
-      throw solicitudError('Este documento ya fue aprobado y no se puede reemplazar',409,'DOCUMENTO_YA_APROBADO');
+      throw solicitudError(
+        'Este documento ya fue aprobado y no se puede reemplazar',
+        409,
+        'DOCUMENTO_YA_APROBADO',
+      );
     }
 
     const storagePath = `${solicitudId}/${tipoDocumento}-${randomUUID()}.${extension}`;
@@ -72,7 +97,11 @@ export class SolicitudDocumentStorage {
       // Compensación: no dejar un objeto huérfano en Storage.
       await bucket.remove([storagePath]).catch(() => undefined);
       if (error) throw error;
-      throw solicitudError('El documento cambió durante la subida. Consulta de nuevo tu progreso', 409, 'DOCUMENTO_YA_REVISADO');
+      throw solicitudError(
+        'El documento cambió durante la subida. Consulta de nuevo tu progreso',
+        409,
+        'DOCUMENTO_YA_REVISADO',
+      );
     }
 
     if (existing) {
@@ -86,5 +115,4 @@ export class SolicitudDocumentStorage {
       uploadedAt: data.uploaded_at,
     };
   }
-
 }
