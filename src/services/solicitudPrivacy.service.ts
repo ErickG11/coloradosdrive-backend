@@ -38,7 +38,7 @@ export class SolicitudPrivacyService {
     return { version: PRIVACY_NOTICE_VERSION };
   }
   async progress(id: string): Promise<{
-    courseId: string; estado: string; correoVerificado: boolean; consentimientoVigente: boolean;
+    courseId: string; estado: string; enviadaAt:string|null; motivoRechazo?:string|null; correoVerificado: boolean; consentimientoVigente: boolean;
     datosGuardados: boolean; solicitadaAt: string | null; requiereRepresentante: boolean;
     representanteCompleto: boolean; documentos: { tipo: string; estado: string; motivoRechazo: string | null }[];
   }> {
@@ -50,7 +50,7 @@ export class SolicitudPrivacyService {
       .select('tipo_documento,estado,motivo_rechazo').eq('solicitud_id', id);
     if (docsError) throw docsError;
     return {
-      courseId: row.course_id, estado: row.estado, correoVerificado: row.correo_verificado,
+      courseId: row.course_id, estado: row.estado==='pendiente_revision'?(row.enviada_at?'enviada':'borrador'):row.estado, enviadaAt:row.enviada_at??null, ...(row.estado==='rechazada'?{motivoRechazo:row.motivo_rechazo}:{}), correoVerificado: row.correo_verificado,
       consentimientoVigente: Boolean(consent), datosGuardados: Boolean(row.cedula && row.solicitada_at),
       solicitadaAt: row.solicitada_at,
       requiereRepresentante: Boolean(row.fecha_nacimiento && calcularEdad(row.fecha_nacimiento) < 18),
