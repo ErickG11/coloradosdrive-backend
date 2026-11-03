@@ -173,6 +173,7 @@ describe('solicitudes de inscripción (admin)', () => {
       );
       // Solo puede tocar documentos de ESTA solicitud.
       expect(updateChain.eq).toHaveBeenCalledWith('solicitud_id', solicitudId);
+      expect(updateChain.eq).toHaveBeenCalledWith('estado', 'recibido');
     });
 
     it('aprobar limpia el motivo de rechazo', async () => {
@@ -196,6 +197,7 @@ describe('solicitudes de inscripción (admin)', () => {
     it('responde 404 si el documento no pertenece a la solicitud', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
+        .mockReturnValueOnce(createChain({ data: null, error: null }))
         .mockReturnValueOnce(createChain({ data: null, error: null }));
 
       const res = await request(app)
@@ -206,9 +208,9 @@ describe('solicitudes de inscripción (admin)', () => {
       expect(res.status).toBe(404);
     });
 
-    it('responde 409 si la solicitud ya fue resuelta', async () => {
+    it.each(['aprobada', 'rechazada'])('responde SOLICITUD_CERRADA si la solicitud está %s', async (estado) => {
       mockedFrom.mockReturnValueOnce(
-        createChain({ data: buildSolicitud({ estado: 'aprobada' }), error: null }),
+        createChain({ data: buildSolicitud({ estado }), error: null }),
       );
 
       const res = await request(app)
@@ -217,6 +219,32 @@ describe('solicitudes de inscripción (admin)', () => {
         .send({ estado: 'aprobado' });
 
       expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SOLICITUD_CERRADA');
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
+    });
+
+    it('bloquea documentos durante el reclamo de una decisión de solicitud', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ reviewed_at: new Date().toISOString() }), error: null }));
+      const res = await request(app).patch(url).set('Authorization', adminAuth()).send({ estado: 'aprobado' });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SOLICITUD_CERRADA');
+      expect(mockedFrom).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['aprobado', 'aprobado'], ['aprobado', 'rechazado'],
+      ['rechazado', 'aprobado'], ['rechazado', 'rechazado'],
+    ])('no cambia un documento %s a %s (incluida otra pestaña)', async (previous, estado) => {
+      const update = createChain({ data: null, error: null });
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
+        .mockReturnValueOnce(update)
+        .mockReturnValueOnce(createChain({ data: { id: docId, estado: previous }, error: null }));
+      const res = await request(app).patch(url).set('Authorization', adminAuth())
+        .send({ estado, motivoRechazo: 'Documento ilegible' });
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('DOCUMENTO_YA_REVISADO');
+      expect(update.eq).toHaveBeenCalledWith('estado', 'recibido');
+      expect(mockedFrom).toHaveBeenCalledTimes(3); // Sin auditoría de una decisión perdida.
     });
   });
 

@@ -39,14 +39,14 @@ export class SolicitudPrivacyService {
   async progress(id: string): Promise<{
     courseId: string; estado: string; correoVerificado: boolean; consentimientoVigente: boolean;
     datosGuardados: boolean; solicitadaAt: string | null; requiereRepresentante: boolean;
-    representanteCompleto: boolean; documentos: { tipo: string; estado: string }[];
+    representanteCompleto: boolean; documentos: { tipo: string; estado: string; motivoRechazo: string | null }[];
   }> {
     const { data: row, error } = await this.db.from('solicitudes_inscripcion').select().eq('id', id).maybeSingle();
     if (error) throw error;
     if (!row) throw solicitudError('La solicitud no existe', 404, 'NO_ENCONTRADO');
     const consent = await this.currentConsent(id);
     const { data: docs, error: docsError } = await this.db.from('solicitud_documentos')
-      .select('tipo_documento,estado').eq('solicitud_id', id);
+      .select('tipo_documento,estado,motivo_rechazo').eq('solicitud_id', id);
     if (docsError) throw docsError;
     return {
       courseId: row.course_id, estado: row.estado, correoVerificado: row.correo_verificado,
@@ -54,7 +54,7 @@ export class SolicitudPrivacyService {
       solicitadaAt: row.solicitada_at,
       requiereRepresentante: Boolean(row.fecha_nacimiento && calcularEdad(row.fecha_nacimiento) < 18),
       representanteCompleto: Boolean(consent?.representante_acepta && consent.representante_nombre && consent.representante_cedula),
-      documentos: docs.map(d => ({ tipo: d.tipo_documento, estado: d.estado })),
+      documentos: docs.map(d => ({ tipo: d.tipo_documento, estado: d.estado, motivoRechazo: d.motivo_rechazo ?? null })),
     };
   }
 }
