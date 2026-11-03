@@ -52,3 +52,23 @@ manuales: no se construye integración externa.
 Los documentos físicos conservan los nombres de `enrollment_documents`, incluido
 `titulo_bachiller` para original del certificado. Ninguno bloquea pago por defecto.
 La obligación del certificado físico dependerá del nivel; votación exenta desde 65.
+
+## Saneamiento (F04)
+
+`enrollmentSanitization.ts` centraliza NFC, recorte y espacios, elimina controles
+y caracteres de formato (incluidos ancho cero y anulación bidi). Las validaciones
+posteriores rechazan HTML en nombres; limpiar controles no convierte HTML en una
+entrada válida. `requireKnownFields` admite solo objetos planos y claves propias
+permitidas, incluidas comprobaciones contra constructor y **proto**.
+
+El correo para entrega conserva puntos y etiquetas, en minúsculas; la clave de
+comparación Gmail/googlemail quita puntos y +etiqueta y usa gmail.com. Otros
+proveedores conservan puntos/etiquetas. Los dominios IDNA pasan a ASCII sin red.
+La función SQL de 042 compara el correo ya normalizado con la misma regla Gmail.
+El servicio usará esa clave al adoptar el contrato final en F09.
+
+Lista mantenible de desechables: `src/config/disposableEmailDomains.ts`. Bloquea
+dominio exacto y subdominios, no proveedores con nombres parecidos ni coincidencias
+de sufijos arbitrarios. Se puede ampliar tras revisar falsos positivos con soporte.
+No consulta servicios externos. El normalizador de correo existente ya delega en
+esta utilidad, sin revelar direcciones en errores ni logs.
