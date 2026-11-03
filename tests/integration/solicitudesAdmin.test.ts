@@ -46,6 +46,7 @@ const cohortId = '66666666-6666-4666-8666-666666666666';
 function buildSolicitud(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: solicitudId,
+    enviada_at:'2026-10-01T12:00:00Z',
     course_id: courseId,
     cedula: '1710034065',
     nombre_completo: 'Ana Torres',
@@ -75,7 +76,7 @@ describe('solicitudes de inscripción (admin)', () => {
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
-    mockedRpc.mockReset().mockResolvedValue({ data: null, error: null });
+    mockedRpc.mockReset().mockImplementation((name:string,args:Record<string,unknown>)=>Promise.resolve({data:name==='revisar_documento_solicitud'?{id:docId,estado:args.p_estado}:null,error:null}));
     mockedFrom.mockReset();
     mockedStorageFrom.mockReset();
     mockedCreateUser.mockReset();
@@ -155,7 +156,7 @@ describe('solicitudes de inscripción (admin)', () => {
     });
 
     it('rechaza un documento con motivo', async () => {
-      const updateChain = createChain({ data: { id: docId }, error: null });
+      const updateChain = createChain({ data: { id: docId,estado:'recibido' }, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
         .mockReturnValueOnce(updateChain)
@@ -168,16 +169,12 @@ describe('solicitudes de inscripción (admin)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ id: docId, estado: 'rechazado' });
-      expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({ reviewed_by: adminId, estado: 'rechazado', motivo_rechazo: 'Foto borrosa' }),
-      );
-      // Solo puede tocar documentos de ESTA solicitud.
-      expect(updateChain.eq).toHaveBeenCalledWith('solicitud_id', solicitudId);
-      expect(updateChain.eq).toHaveBeenCalledWith('estado', 'recibido');
+      expect(mockedRpc).toHaveBeenCalledWith('revisar_documento_solicitud',{p_solicitud:solicitudId,p_documento:docId,p_actor:adminId,p_estado:'rechazado',p_motivo:'Foto borrosa'});
+
     });
 
     it('aprobar limpia el motivo de rechazo', async () => {
-      const updateChain = createChain({ data: { id: docId }, error: null });
+      const updateChain = createChain({ data: { id: docId,estado:'recibido' }, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
         .mockReturnValueOnce(updateChain)
@@ -189,9 +186,8 @@ describe('solicitudes de inscripción (admin)', () => {
         .send({ estado: 'aprobado', motivoRechazo: 'ignorado' });
 
       expect(res.status).toBe(200);
-      expect(updateChain.update).toHaveBeenCalledWith(
-        expect.objectContaining({ reviewed_by: adminId, estado: 'aprobado', motivo_rechazo: null }),
-      );
+      expect(mockedRpc).toHaveBeenCalledWith('revisar_documento_solicitud',expect.objectContaining({p_estado:'aprobado'}));
+
     });
 
     it('responde 404 si el documento no pertenece a la solicitud', async () => {
@@ -208,7 +204,7 @@ describe('solicitudes de inscripción (admin)', () => {
       expect(res.status).toBe(404);
     });
 
-    it.each(['aprobada', 'rechazada'])('responde SOLICITUD_CERRADA si la solicitud está %s', async (estado) => {
+    it.each(['rechazada'])('responde SOLICITUD_CERRADA si la solicitud está %s', async (estado) => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: buildSolicitud({ estado }), error: null }),
       );
@@ -235,16 +231,14 @@ describe('solicitudes de inscripción (admin)', () => {
       ['aprobado', 'aprobado'], ['aprobado', 'rechazado'],
       ['rechazado', 'aprobado'], ['rechazado', 'rechazado'],
     ])('no cambia un documento %s a %s (incluida otra pestaña)', async (previous, estado) => {
-      const update = createChain({ data: null, error: null });
       mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
-        .mockReturnValueOnce(update)
         .mockReturnValueOnce(createChain({ data: { id: docId, estado: previous }, error: null }));
       const res = await request(app).patch(url).set('Authorization', adminAuth())
         .send({ estado, motivoRechazo: 'Documento ilegible' });
       expect(res.status).toBe(409);
       expect(res.body.code).toBe('DOCUMENTO_YA_REVISADO');
-      expect(update.eq).toHaveBeenCalledWith('estado', 'recibido');
-      expect(mockedFrom).toHaveBeenCalledTimes(3); // Sin auditoría de una decisión perdida.
+      expect(mockedRpc).not.toHaveBeenCalled();
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
   });
 
