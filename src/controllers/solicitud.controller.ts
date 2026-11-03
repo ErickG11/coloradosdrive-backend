@@ -127,7 +127,8 @@ export function avisoPrivacidad(_req: Request, res: Response): void {
   res.json(privacyNotice());
 }
 export async function progresoSolicitud(req: Request, res: Response): Promise<void> {
-  res.json(await privacyService.progress(req.params.id));
+  const progress=await privacyService.progress(req.params.id);
+  res.json({...progress,puedeEditar:req.solicitudScope==='edicion'&&['borrador','devuelta'].includes(progress.estado)});
 }
 
 export async function aceptarConsentimiento(req: Request, res: Response): Promise<void> {

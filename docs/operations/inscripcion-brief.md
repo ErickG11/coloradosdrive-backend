@@ -79,7 +79,7 @@ FASE 1 BACKEND BASE: F01 migración A y docs operativas (H4). F02 migración B d
 FASE 2 BACKEND SEGURIDAD: F06 captcha Turnstile y modo off protegido (H4). F07 contadores diarios, límites por correo/IP/global, trust proxy, interruptor y endpoints de config/resumen (H4). F08 respuestas uniformes y piso de tiempo (H4).
 FASE 3 BACKEND FLUJO: F09 verificar-correo/confirmar-codigo con las reglas de cuentas, bloqueo spam y scope del token, y progreso ampliado (H1). F10 consentimiento y términos versionados (H4). F11 datos personales con las reglas de curso, edad, nacionalidad, nivel y unicidad (H1). F12 pipeline seguro del certificado, topes y fallback por cupo (H1). F13 enviar/reenviar con estados idempotentes y correo de recibida (H1). F14 verificaciones del admin y URL firmada auditada (H3). F15 decisión aprobar/devolver/rechazar con motivos, correos y bloqueo de spam (H3). F16 aprobación: cuenta sin contraseña, enlace de un solo uso, perfil, cohorte, origen y requisitos_verificados (H3). F17 reenvío de enlace de acceso (H3). F18 estado del alumno, guard y checklist físico (H5). F19 identidad presencial del instructor (H6). F20 trabajos de vencimiento y retención (H4). F21 MFA del admin y script de configuración de Auth (H4). F22 revisión de cabeceras, CORS, logs, timeouts, escape de filtros de búsqueda e inventario de rutas (H4).
 FASE 4 BACKEND PRUEBAS Y CI: F23 suite tests/security (ver abajo) (H4). F24 CI (gitleaks, dependabot, audit), ADRs y documentación operativa (H4).
-FASE 5 FRONTEND PÚBLICO: F25 cliente API, tipos y mapeo de códigos de error (H1). F26 configuración pública, cerrado y pre-chequeo (H1). F27 correo + Turnstile + código (H1). F28 consentimiento y términos (H4). F29 datos (H1). F30 nivel de estudios y subida (H1). F31 revisar y enviar y pantallas de estado (H1). F32 /crear-contrasena (H3). F33 verificación de la landing (H1).
+FASE 5 FRONTEND PÚBLICO: F25 cliente API, tipos y mapeo de códigos de error (H1). F26 configuración pública, cerrado y pre-chequeo (H1). F27 correo + código y CaptchaSlot vacío documentado (H1); widget aplazado a F43. F28 consentimiento y términos (H4). F29 datos (H1). F30 nivel de estudios y subida (H1). F31 revisar y enviar y pantallas de estado (H1). F32 /crear-contrasena (H3). F33 verificación de la landing (H1).
 FASE 6 FRONTEND ADMIN/ALUMNO/INSTRUCTOR: F34 lista, orden, contador, alertas, interruptor y medidores (H3). F35 detalle y verificaciones (H3). F36 decisiones y resultados (H3). F37 alumno: estado y documentos para llevar (H5). F38 instructor: identidad en primera clase (H6). F39 MFA en el panel de seguridad del admin (H4). F40 cabeceras de seguridad, noindex, CSP report-only y CI del frontend (H4).
 FASE 7: F41 documentación final, guion de prueba manual, ADRs, tabla Tarea→commits→Jira (transversal). F42 SOLO si no existe aún: proveedor de correo EMAIL_PROVIDER=gmail_api (HTTPS, sin SMTP, para Railway): token por refresh_token (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, caché y un reintento ante 401), mensaje MIME con nodemailer/lib/mail-composer, POST a gmail.googleapis.com/gmail/v1/users/me/messages/send, alcance gmail.send, error claro ante invalid_grant, sin secretos en logs, tests con fetch simulado; los modos smtp y console siguen intactos.
 
@@ -99,3 +99,16 @@ ACLARACIONES AUTORIZADAS F02 (prevalecen sobre funciones/permisos del texto ante
 - Revocar ALL en tablas public y defaults postgres/public para tablas, funciones y secuencias. No tocar realtime ni storage salvo bucket.
 - Preflight lista permisos y falla ante objetos ausentes; verificación ROLLBACK con SET LOCAL ROLE authenticated/anon prueba DML denegado, helpers autorizados y ACL de extensiones intactos.
 - Prueba manual de canal privado: alumno/instructor autorizados, tercero rechazado.
+
+
+CAMBIO DE ALCANCE AUTORIZADO: TURNSTILE AL FINAL (prevalece sobre F27/F40 anteriores)
+F06 backend y sus pruebas se conservan; off solo en desarrollo/test, guarda production intacta.
+En off captchaToken es opcional/no se valida. Frontend no carga script ni exige/envía token.
+F27: correo y código con CaptchaSlot vacío/documentado en el lugar del widget.
+Pruebas del widget se trasladan a F43.
+F43 · Historia H4 (al final del catálogo): widget Turnstile frontend, carga del script solo en
+el paso correo, caducidad/reintento/fallo, CSP del widget, variables NEXT_PUBLIC_TURNSTILE_SITE_KEY
+y TURNSTILE_SECRET_KEY, claves de prueba, tests y documentación/pasos manuales.
+NO ejecutar F43 hasta petición explícita del usuario. Es requisito antes de producción.
+ADR defensa contra abuso: riesgo residual exacto «hasta F43, los límites por correo e IP y
+los topes diarios son la única barrera contra bots».

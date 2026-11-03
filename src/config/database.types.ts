@@ -41,9 +41,9 @@ export type StudentStatus =
   | 'activo'
   | 'rechazado'
   | 'expirado';
-export type SolicitudEstado = 'pendiente_revision' | 'aprobada' | 'rechazada';
+export type SolicitudEstado = 'pendiente_revision' | 'borrador' | 'enviada' | 'devuelta' | 'aprobada' | 'rechazada';
 export type SolicitudTipoDocumento =
-  'cedula' | 'papeleta_votacion' | 'tipo_sangre' | 'titulo_bachiller';
+  'cedula' | 'papeleta_votacion' | 'tipo_sangre' | 'titulo_bachiller' | 'certificado_estudios';
 export type SolicitudDocumentoEstado = 'recibido' | 'aprobado' | 'rechazado';
 export type CourseType = 'A' | 'B';
 export type EnrollmentStatus = 'activo' | 'finalizado' | 'retirado' | 'pendiente_cohorte';
@@ -71,6 +71,8 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      emitir_codigo_inscripcion:{Args:{p_correo:string;p_curso:string;p_codigo_hash:string;p_expira:string;p_correo_hash:string;p_topes:Record<string,number>};Returns:{emitir?:boolean;correo?:string;id?:string;motivo?:'cerradas'|'limite'}|null};
+      confirmar_codigo_inscripcion:{Args:{p_correo:string;p_codigo_hash:string;p_correo_hash:string;p_topes:Record<string,number>};Returns:{resultado:'valido'|'invalido'|'limite';id?:string;scope?:'edicion'|'estado'}|null};
       enviar_solicitud: {Args:{p_id:string;p_version:string};Returns:{id:string;estado:string;enviadaAt:string}};
       correo_tiene_cuenta: {Args:{p_correo:string};Returns:boolean};
       resumen_solicitudes: {Args:Record<string,never>;Returns:EnrollmentSummaryRow|null};
@@ -830,6 +832,9 @@ export interface Database {
       };
       solicitudes_inscripcion: {
         Row: {
+          correo_normalizado:string;nombres:string|null;apellidos:string|null;nacionalidad_tipo:string|null;tipo_sangre:string|null;nivel_estudios:string|null;
+          devuelta_at:string|null;devolucion_motivo_codigo:string|null;devolucion_mensaje:string|null;
+          rechazo_motivo_codigo:string|null;documento_estudios_pendiente_por_cupo:boolean;
           id: string;
           course_id: string;
           cedula: string | null;

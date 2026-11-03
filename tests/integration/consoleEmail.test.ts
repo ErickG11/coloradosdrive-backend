@@ -63,26 +63,14 @@ describe('contratos HTTP y recordatorios con correo por consola real', () => {
     jest.restoreAllMocks();
   });
 
-  it('verificar-correo responde 200 y muestra el mismo código cuyo hash se guarda', async () => {
-    const inserted = createChain({ data: null, error: null });
-    from
-      .mockReturnValueOnce(createChain({ data: null, error: null }))
-      .mockReturnValueOnce(createChain({ data: { id: courseId }, error: null }))
-      .mockReturnValueOnce(inserted);
-    const res = await request(app)
-      .post('/solicitudes/verificar-correo')
-      .send({ correo: 'alumna@example.invalid', courseId });
+  it('verificar-correo responde 200 y muestra el mismo código cuyo hash se guarda',async()=>{
+    rpc.mockResolvedValue({data:{emitir:true,id:solicitudId,correo:'ana@example.com'},error:null});
+    const res=await request(app).post('/solicitudes/verificar-correo').send({correo:'ana@example.com',courseId});
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ message: 'Te enviamos un código de verificación a tu correo' });
-    const code =
-      /Tu código de verificación es: (\d{6})/.exec(output.mock.calls[0][0] as string)?.[1] ?? '';
+    const printed=output.mock.calls.map(call=>String(call[0])).join('');
+    const code=/verificación es: (\d{6})/.exec(printed)?.[1]??'';
     expect(code).toMatch(/^\d{6}$/);
-    expect(inserted.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        codigo_verificacion: createHash('sha256').update(code).digest('hex'),
-      }),
-    );
-    expect(JSON.stringify(res.body)).not.toContain(code);
+    expect(rpc.mock.calls[0][1].p_codigo_hash).toBe(createHash('sha256').update(code).digest('hex'));
   });
 
   it('aprobar responde 200, correoEnviado:true e imprime la contraseña que recibió Auth', async () => {

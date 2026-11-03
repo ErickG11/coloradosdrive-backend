@@ -1,3 +1,12 @@
+import type * as SolicitudAuthModule from '../../src/middlewares/solicitudAuth.middleware';
+import type * as SupabaseMockModule from '../helpers/supabaseMock';
+// Fixture independiente para la lectura de estado del middleware; conserva firma/scope reales.
+// La matriz completa y el estado persistido se prueban en solicitudScope.test.ts.
+jest.mock('../../src/middlewares/solicitudAuth.middleware',()=>{
+  const actual=jest.requireActual<typeof SolicitudAuthModule>('../../src/middlewares/solicitudAuth.middleware');
+  const {createChain}=jest.requireActual<typeof SupabaseMockModule>('../helpers/supabaseMock');
+  return {...actual,authenticateSolicitud:actual.createSolicitudAuth({from:()=>createChain({data:{estado:'borrador',correo_verificado:true},error:null})} as unknown as Parameters<typeof actual.createSolicitudAuth>[0])};
+});
 import request from 'supertest';
 jest.mock('../../src/config/supabase',()=>({supabaseAdmin:{from:jest.fn(),rpc:jest.fn(),storage:{from:jest.fn()}},supabaseAnon:{}}));
 jest.mock('../../src/config/mailer',()=>({mailer:{sendMail:jest.fn().mockResolvedValue({})}}));

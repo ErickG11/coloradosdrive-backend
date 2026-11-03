@@ -17,7 +17,7 @@ export class EnrollmentLimitsService {
     private readonly db: SupabaseClient<Database>,
     private readonly config = env,
   ) {}
-  private topes(): Record<string, number> {
+  topes(): Record<string, number> {
     return {
       codigos: this.config.ENROLLMENT_CODES_DAILY_CAP,
       solicitudes: this.config.ENROLLMENT_NEW_REQUESTS_DAILY_CAP,

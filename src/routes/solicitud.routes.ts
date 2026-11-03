@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { RequestHandler } from 'express';
 import { body, param, query } from 'express-validator';
 
 import {
@@ -29,6 +30,7 @@ import {
   TIPOS_DOCUMENTO,
 } from '../models/solicitud.model';
 import { asyncHandler } from '../utils/asyncHandler';
+import { requireKnownFields } from '../utils/enrollmentSanitization';
 import { isValidCedulaEcuatoriana } from '../utils/cedula';
 import { verifyEnrollmentCaptcha } from '../middlewares/captcha.middleware';
 import {
@@ -50,11 +52,18 @@ const correoValidator = body('correo')
   .isEmail()
   .withMessage('correo debe ser un correo electrónico válido');
 const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID válido');
+function knownFields(allowed: readonly string[]): RequestHandler {
+  return (req, _res, next) => {
+    requireKnownFields(req.body, allowed);
+    next();
+  };
+}
 
 solicitudRouter.post(
   '/verificar-correo',
   reserveEnrollmentCodeIp,
   verifyEnrollmentCaptcha,
+  knownFields(['correo', 'courseId', 'captchaToken']),
   [correoValidator, body('courseId').isUUID().withMessage('courseId debe ser un UUID válido')],
   validate,
   reserveEnrollmentCode,
@@ -64,6 +73,7 @@ solicitudRouter.post(
 solicitudRouter.post(
   '/confirmar-codigo',
   verificationRateLimiter,
+  knownFields(['correo', 'codigo']),
   [
     correoValidator,
     body('codigo')
