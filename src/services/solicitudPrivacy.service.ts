@@ -25,11 +25,12 @@ export class SolicitudPrivacyService {
   async accept(id: string, input: { versionAviso: unknown; aceptoTratamiento: unknown; declaraVeracidad: unknown }): Promise<{ version: string }> {
     if (input.versionAviso !== PRIVACY_NOTICE_VERSION) throw solicitudError('El aviso cambió. Revisa la versión vigente', 409, 'AVISO_DESACTUALIZADO');
     if (input.aceptoTratamiento !== true || input.declaraVeracidad !== true) throw solicitudError('Debes aceptar ambas declaraciones', 400, 'CONSENTIMIENTO_REQUERIDO');
-    const { data: row, error: rowError } = await this.db.from('solicitudes_inscripcion').select('correo_verificado,estado,reviewed_at').eq('id', id).maybeSingle();
+    const { data: row, error: rowError } = await this.db.from('solicitudes_inscripcion').select('correo_verificado,estado,reviewed_at,enviada_at').eq('id', id).maybeSingle();
     if (rowError) throw rowError;
     if (!row) throw solicitudError('La solicitud no existe', 404, 'NO_ENCONTRADO');
     if (!row.correo_verificado) throw solicitudError('Verifica tu correo', 403, 'ACCESO_DENEGADO');
-    if (row.estado === 'aprobada' || (row.estado === 'pendiente_revision' && row.reviewed_at)) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
+    if (row.enviada_at) throw solicitudError('La solicitud ya fue enviada',409,'SOLICITUD_ENVIADA');
+    if (row.estado === 'rechazada' || row.estado === 'aprobada' || (row.estado === 'pendiente_revision' && row.reviewed_at)) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
     const { error } = await this.db.from('solicitud_consentimientos').upsert({
       solicitud_id: id, version_aviso: PRIVACY_NOTICE_VERSION, acepto_tratamiento: true, declara_veracidad: true,
     }, { onConflict: 'solicitud_id,version_aviso', ignoreDuplicates: true });

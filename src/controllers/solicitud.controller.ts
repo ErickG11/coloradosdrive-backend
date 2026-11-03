@@ -141,3 +141,5 @@ export async function eliminarSolicitud(req: Request, res: Response): Promise<vo
   await new SolicitudDeletionService(supabaseAdmin).remove(req.params.id, requireAdminId(req));
   res.status(204).send();
 }
+
+export async function enviarSolicitud(req: Request,res: Response): Promise<void> {res.json(await solicitudService.enviar(req.params.id));}

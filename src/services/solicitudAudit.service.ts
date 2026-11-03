@@ -9,6 +9,9 @@ export async function recordSolicitudAudit(db: SupabaseClient<Database>, id: str
 export class SolicitudDocumentAccessService {
   constructor(private readonly db: SupabaseClient<Database>) {}
   async url(id: string, docId: string, actor: string): Promise<{ url: string; expiresIn: number }> {
+    const solicitud=await this.db.from('solicitudes_inscripcion').select('id').eq('id',id).not('enviada_at','is',null).maybeSingle();
+    if(solicitud.error)throw solicitud.error;
+    if(!solicitud.data)throw solicitudError('La solicitud no existe',404,'NO_ENCONTRADO');
     const { data: doc, error } = await this.db.from('solicitud_documentos').select('storage_path')
       .eq('id', docId).eq('solicitud_id', id).maybeSingle();
     if (error) throw error;
