@@ -71,6 +71,10 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      aceptar_consentimiento_inscripcion: {
+        Args: {p_id:string;p_version_aviso:string;p_version_terminos:string;p_representante?:boolean};
+        Returns: {version:string;versionAviso:string;versionTerminos:string;aceptadoAt:string}|null;
+      };
       emitir_codigo_inscripcion:{Args:{p_correo:string;p_curso:string;p_codigo_hash:string;p_expira:string;p_correo_hash:string;p_topes:Record<string,number>};Returns:{emitir?:boolean;correo?:string;id?:string;motivo?:'cerradas'|'limite'}|null};
       confirmar_codigo_inscripcion:{Args:{p_correo:string;p_codigo_hash:string;p_correo_hash:string;p_topes:Record<string,number>};Returns:{resultado:'valido'|'invalido'|'limite';id?:string;scope?:'edicion'|'estado'}|null};
       enviar_solicitud: {Args:{p_id:string;p_version:string};Returns:{id:string;estado:string;enviadaAt:string}};
@@ -813,12 +817,13 @@ export interface Database {
       };
       solicitud_consentimientos: {
         Row: {
-          id: string; solicitud_id: string; version_aviso: string;
+          id: string; solicitud_id: string; version_aviso: string; version_terminos: string|null; acepto_terminos: boolean; representante_autoriza_tratamiento: boolean;
           acepto_tratamiento: boolean; declara_veracidad: boolean; aceptado_at: string;
           representante_nombre: string | null; representante_cedula: string | null; representante_acepta: boolean;
         };
         Insert: {
           solicitud_id: string; version_aviso: string; acepto_tratamiento: boolean; declara_veracidad: boolean;
+          version_terminos?:string|null;acepto_terminos?:boolean;representante_autoriza_tratamiento?:boolean;
           representante_nombre?: string | null; representante_cedula?: string | null; representante_acepta?: boolean;
         };
         Update: Partial<Database['public']['Tables']['solicitud_consentimientos']['Insert']>;

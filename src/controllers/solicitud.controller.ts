@@ -124,7 +124,7 @@ export async function decidirSolicitud(
 
 const privacyService = new SolicitudPrivacyService(supabaseAdmin);
 export function avisoPrivacidad(_req: Request, res: Response): void {
-  res.json(privacyNotice());
+  res.set('Cache-Control', 'no-store').json(privacyNotice());
 }
 export async function progresoSolicitud(req: Request, res: Response): Promise<void> {
   const progress=await privacyService.progress(req.params.id);
@@ -132,7 +132,7 @@ export async function progresoSolicitud(req: Request, res: Response): Promise<vo
 }
 
 export async function aceptarConsentimiento(req: Request, res: Response): Promise<void> {
-  res.json(await privacyService.accept(req.params.id, req.body as { versionAviso: string; aceptoTratamiento: boolean; declaraVeracidad: boolean }));
+  res.json(await privacyService.accept(req.params.id, req.body as unknown));
 }
 
 

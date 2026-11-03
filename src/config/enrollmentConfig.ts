@@ -33,6 +33,14 @@ export function loadEnrollmentConfig(source: NodeJS.ProcessEnv): {
       throw new Error(`${name} debe ser un entero entre ${String(min)} y ${String(max)}`);
     return Number(raw);
   }
+  function version(name: string, fallback: string): string {
+    const value = text(name, fallback);
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(value))
+      throw new Error(
+        `${name} debe tener de 1 a 100 letras, dígitos, puntos, guiones o guiones bajos`,
+      );
+    return value;
+  }
   const captcha = text('CAPTCHA_PROVIDER', source.NODE_ENV === 'production' ? 'turnstile' : 'off');
   if (captcha !== 'turnstile' && captcha !== 'off')
     throw new Error('CAPTCHA_PROVIDER debe ser turnstile u off');
@@ -50,9 +58,13 @@ export function loadEnrollmentConfig(source: NodeJS.ProcessEnv): {
   );
   if (refund.length > 2000) throw new Error('TERMS_REFUND_TEXT no puede superar 2000 caracteres');
   return {
-    PRIVACY_NOTICE_VERSION: text('PRIVACY_NOTICE_VERSION', '2026-10-v1'),
-    TERMS_VERSION: text('TERMS_VERSION', '2026-11-borrador-v1'),
-    TERMS_REFUND_TEXT: refund,
+    PRIVACY_NOTICE_VERSION: version('PRIVACY_NOTICE_VERSION', '2026-11-borrador-v1'),
+    TERMS_VERSION: version('TERMS_VERSION', '2026-11-borrador-v1'),
+    TERMS_REFUND_TEXT: refund
+      .normalize('NFC')
+      .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim(),
     RECENT_GRAD_MONTHS: integer('RECENT_GRAD_MONTHS', 12, 1, 120),
     ENROLLMENT_CODES_DAILY_CAP: integer('ENROLLMENT_CODES_DAILY_CAP', 250),
     ENROLLMENT_NEW_REQUESTS_DAILY_CAP: integer('ENROLLMENT_NEW_REQUESTS_DAILY_CAP', 150),
