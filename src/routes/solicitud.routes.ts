@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { body, param, query } from 'express-validator';
 
 import {
+  enviarSolicitud,
   aceptarConsentimiento,
   avisoPrivacidad,
   progresoSolicitud,
@@ -20,7 +21,7 @@ import { applicationRateLimiter, verificationRateLimiter, sendCodeIpLimiter, sen
 import { requireRole } from '../middlewares/rbac.middleware';
 import { authenticateSolicitud } from '../middlewares/solicitudAuth.middleware';
 import { uploadDocumento } from '../middlewares/upload';
-import { validate } from '../middlewares/validate';
+import { validateFields as validate } from '../middlewares/validate';
 import {
   DOCUMENTO_ESTADOS_REVISION,
   SOLICITUD_ESTADOS,
@@ -38,6 +39,8 @@ export const solicitudRouter = Router();
 
 const correoValidator = body('correo')
   .trim()
+  .toLowerCase()
+  .isLength({ max: 254 })
   .isEmail()
   .withMessage('correo debe ser un correo electrónico válido');
 const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID válido');
@@ -193,3 +196,5 @@ solicitudRouter.put('/:id/consentimiento', applicationRateLimiter, authenticateS
 solicitudAdminRouter.get('/:id/documentos/:docId/url', [idParamValidator, param('docId').isUUID()], validate, asyncHandler(documentoUrl));
 
 solicitudAdminRouter.delete('/:id', idParamValidator, validate, asyncHandler(eliminarSolicitud));
+
+solicitudRouter.post('/:id/enviar',applicationRateLimiter,authenticateSolicitud,idParamValidator,validate,asyncHandler(enviarSolicitud));

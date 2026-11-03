@@ -70,6 +70,10 @@ export interface Database {
   public: {
     Views: Record<string, never>;
     Functions: {
+      enviar_solicitud: {Args:{p_id:string;p_version:string};Returns:{id:string;estado:string;enviadaAt:string}};
+      correo_tiene_cuenta: {Args:{p_correo:string};Returns:boolean};
+      resumen_solicitudes: {Args:Record<string,never>;Returns:{pendientes:number;documentosPorRevisar:number}};
+      revisar_documento_solicitud: {Args:{p_solicitud:string;p_documento:string;p_actor:string;p_estado:string;p_motivo:string|null};Returns:{id:string;estado:'aprobado'|'rechazado'}};
       eliminar_solicitud_reclamada: {
         Args: { p_solicitud: string; p_claim: string; p_actor: string | null; p_accion: string };
         Returns: undefined;
@@ -835,9 +839,11 @@ export interface Database {
           reviewed_at: string | null;
           student_id: string | null;
           solicitada_at: string | null;
+          enviada_at: string | null;
           created_at: string;
         };
         Insert: {
+          enviada_at?: string | null;
           solicitada_at?: string | null;
           id?: string;
           course_id: string;
@@ -869,6 +875,7 @@ export interface Database {
           reviewed_at: string | null;
           student_id: string | null;
           solicitada_at: string | null;
+          enviada_at: string | null;
           created_at: string;
         }>;
         Relationships: [];

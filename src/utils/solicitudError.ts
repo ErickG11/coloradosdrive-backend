@@ -23,6 +23,17 @@ export function solicitudError(message: string, status: number, code: string): A
 }
 
 export function normalizeSolicitudError(error: Error): Error {
+  const sql = 'code' in error ? error.code : undefined;
+  const map: Record<string,[number,string,string]> = {SI404:[404,'NO_ENCONTRADO','La solicitud o el documento no existe'],SI401:[403,'CORREO_NO_VERIFICADO','Verifica tu correo'],SI410:[409,'SOLICITUD_ENVIADA','La solicitud ya fue enviada'],SI411:[409,'DOCUMENTO_YA_REVISADO','Este documento ya fue revisado'],SI412:[409,'DOCUMENTO_YA_APROBADO','Este documento ya fue aprobado'],SI413:[409,'SOLICITUD_NO_ENVIADA','La solicitud no ha sido enviada'],SI422:[400,'DATOS_REQUERIDOS','Completa tus datos personales'],SI423:[400,'REPRESENTANTE_REQUERIDO','Completa los datos y la autorización del representante'],SI424:[400,'SOLICITUD_INCOMPLETA','Faltan documentos obligatorios']};
+  if (typeof sql === 'string' && map[sql]) {
+    const [status,code,message]=map[sql];
+    let detalles: Record<string,unknown> | undefined;
+    if(sql==='SI424' && 'details' in error && typeof error.details==='string') {
+      try { const value=JSON.parse(error.details) as {faltantes?:unknown}; if(Array.isArray(value.faltantes))detalles={faltantes:value.faltantes.filter((v:unknown)=>v==='cedula'||v==='titulo_bachiller')}; }catch { /* Nunca exponer detalles SQL. */ }
+    }
+    return new AppError(message,status,{code,detalles});
+  }
+  if (sql === '23505') return solicitudError('La cédula ya está registrada',409,'CEDULA_YA_REGISTRADA');
   const code = 'code' in error ? error.code : undefined;
   if (code === 'SI409') return solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
   if (code === 'SI403') return solicitudError('Acepta el aviso de privacidad vigente', 409, 'CONSENTIMIENTO_REQUERIDO');

@@ -24,6 +24,9 @@ import { recordSolicitudAudit } from './solicitudAudit.service';
 import { logSolicitudFailure } from '../utils/solicitudLog';
 import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
+import { PRIVACY_NOTICE_VERSION } from '../config/privacy';
+import { normalizeSolicitudError } from '../utils/solicitudError';
+import { normalizeName, normalizePhone, validateCedula } from '../utils/solicitudFields';
 import { detectFileType } from '../utils/fileSignature';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
@@ -212,15 +215,22 @@ export class SolicitudService {
   ): Promise<CompletarDatosResult> {
     const current = await this.getOrThrow(solicitudId);
     if (!current.correo_verificado) throw solicitudError('Debes verificar tu correo antes de continuar', 403, 'ACCESO_DENEGADO');
-    if (current.estado === 'aprobada' || (current.estado === 'pendiente_revision' && current.reviewed_at)) {
+    if (current.enviada_at) throw solicitudError('La solicitud ya fue enviada y sus datos no se pueden modificar', 409, 'SOLICITUD_ENVIADA');
+    if (current.estado !== 'pendiente_revision' || current.reviewed_at) {
       throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
     }
     const consent = await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
-    const rep = validateApplicant(input.fechaNacimiento, input.representante);
+    validateCedula(input.cedula);
+    const nombre = normalizeName(input.nombreCompleto);
+    const telefono = normalizePhone(input.telefono);
+    const rep = validateApplicant(input.fechaNacimiento, input.representante, undefined, input.cedula);
     const { data: conflicts, error: conflictsError } = await this.supabase.from('solicitudes_inscripcion')
-      .select('id').eq('cedula', input.cedula).neq('id', solicitudId).in('estado', ['pendiente_revision', 'aprobada']);
+      .select('id').eq('cedula', input.cedula).neq('id', solicitudId).neq('estado', 'rechazada').or('enviada_at.not.is.null,estado.eq.aprobada');
     if (conflictsError) throw conflictsError;
-    if (conflicts.length) throw solicitudError('Ya existe una solicitud activa para esta cédula', 409, 'CEDULA_ACTIVA');
+    if (conflicts.length) throw solicitudError('La cédula ya está registrada', 409, 'CEDULA_YA_REGISTRADA');
+    const user = await this.supabase.from('users').select('id').eq('cedula', input.cedula).maybeSingle();
+    if (user.error) throw user.error;
+    if (user.data) throw solicitudError('La cédula ya está registrada', 409, 'CEDULA_YA_REGISTRADA');
     if (rep) {
       const { error } = await this.supabase.from('solicitud_consentimientos').update({
         representante_nombre: rep.nombre, representante_cedula: rep.cedula, representante_acepta: true,
@@ -228,13 +238,13 @@ export class SolicitudService {
       if (error) throw error;
     }
     let update = this.supabase.from('solicitudes_inscripcion').update({
-      cedula: input.cedula, nombre_completo: input.nombreCompleto, telefono: input.telefono ?? null,
+      cedula: input.cedula, nombre_completo: nombre, telefono: telefono ?? null,
       fecha_nacimiento: input.fechaNacimiento, solicitada_at: current.solicitada_at ?? new Date().toISOString(),
-      ...(current.estado === 'rechazada' ? { estado: 'pendiente_revision' as const, motivo_rechazo: null, reviewed_by: null, reviewed_at: null } : {}),
-    }).eq('id', solicitudId).eq('estado', current.estado);
+
+    }).eq('id', solicitudId).eq('estado', current.estado).is('enviada_at', null);
     if (current.estado === 'pendiente_revision') update = update.is('reviewed_at', null);
     const { data, error } = await update.select('id').maybeSingle();
-    if (error) throw isUniqueViolation(error) ? solicitudError('Ya existe una solicitud activa para esta cédula', 409, 'CEDULA_ACTIVA') : error;
+    if (error) throw isUniqueViolation(error) ? solicitudError('La cédula ya está registrada', 409, 'CEDULA_YA_REGISTRADA') : error;
     if (!data) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
     return { solicitudId, token: signSolicitudToken(solicitudId) };
   }
@@ -242,6 +252,23 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   // Documentos
   // ---------------------------------------------------------------------
+  async enviar(id: string): Promise<{id:string;estado:string;enviadaAt:string}> {
+    const row = await this.getOrThrow(id);
+    if (!row.correo_verificado) throw solicitudError('Verifica tu correo',403,'CORREO_NO_VERIFICADO');
+    if (row.enviada_at) return {id,estado:row.estado==='pendiente_revision'?'enviada':row.estado,enviadaAt:row.enviada_at};
+    if (row.estado!=='pendiente_revision' || row.reviewed_at) throw solicitudError('La solicitud está cerrada',409,'SOLICITUD_CERRADA');
+    const c=await new SolicitudPrivacyService(this.supabase).requireConsent(id);
+    if (!row.cedula || !row.nombre_completo || !row.fecha_nacimiento || !row.solicitada_at) throw solicitudError('Completa tus datos personales',400,'DATOS_REQUERIDOS');
+    validateApplicant(row.fecha_nacimiento,{nombre:c.representante_nombre,cedula:c.representante_cedula,acepta:c.representante_acepta},undefined,row.cedula);
+    const docs=await this.supabase.from('solicitud_documentos').select('tipo_documento').eq('solicitud_id',id);
+    if(docs.error)throw docs.error;
+    const faltantes=['cedula','titulo_bachiller'].filter(tipo=>!docs.data.some(d=>d.tipo_documento===tipo));
+    if(faltantes.length)throw new AppError('Faltan documentos obligatorios',400,{code:'SOLICITUD_INCOMPLETA',detalles:{faltantes}});
+    const result=await this.supabase.rpc('enviar_solicitud',{p_id:id,p_version:PRIVACY_NOTICE_VERSION});
+    if(result.error)throw normalizeSolicitudError(result.error);
+    return result.data;
+  }
+
   async subirDocumento(
     solicitudId: string,
     tipoDocumento: SolicitudTipoDocumento,
@@ -347,7 +374,7 @@ export class SolicitudService {
     let query = this.supabase
       .from('solicitudes_inscripcion')
       .select('*', { count: 'exact' })
-      .not('cedula', 'is', null)
+      .not('enviada_at', 'is', null)
       .order('created_at', { ascending: false }).order('id');
     if (estado) {
       query = query.eq('estado', estado);
@@ -415,7 +442,7 @@ export class SolicitudService {
     const { data, error } = await this.supabase
       .from('solicitudes_inscripcion')
       .select('id, cedula, correo, estado, created_at')
-      .in('cedula', cedulas);
+      .in('cedula', cedulas).not('enviada_at', 'is', null);
     if (error) {
       throw error;
     }
@@ -485,6 +512,7 @@ export class SolicitudService {
   ): Promise<DecidirSolicitudResult> {
     if (input.estado === 'rechazada' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
     const solicitud = await this.getOrThrow(solicitudId);
+    if (!solicitud.enviada_at) throw solicitudError('La solicitud no ha sido enviada',409,'SOLICITUD_NO_ENVIADA');
     if (solicitud.estado !== 'pendiente_revision' || solicitud.reviewed_at) {
       throw new AppError('La solicitud ya fue resuelta', 409);
     }
