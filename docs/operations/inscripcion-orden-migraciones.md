@@ -116,5 +116,10 @@ sin error; N/D no se presenta como una prueba pasada. No se inventaron scripts
 faltantes de migraciones históricas aplicadas. Los bloqueos de rollback ante datos
 reales y la compatibilidad de cada flujo requieren la fase final de pruebas/F23.
 
-055/056 siguen libres y no se han creado todavía en esta tanda. Si se implementan
-F44-c/d, deberán añadirse a este recorrido y volver a ensayarse antes del cierre.
+### Extensión F44-c (055)
+
+055: aplicación, preflight, verificación y rollback OK en arnés F45
+(`MIGRATIONS_THROUGH=055`, reporte `/tmp/inscripcion-f45-055.json`). El recorrido
+001–055 completo terminó sin errores. Verifica lease exclusivo, token de cierre,
+auditoría y ACL/RLS del ledger. No simula Auth real ni carreras multiconexión.
+056 queda reservada para F44-d.

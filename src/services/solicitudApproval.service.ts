@@ -8,6 +8,7 @@ import {
   type VerificationContext,
 } from '../utils/enrollmentVerification';
 import { normalizeSolicitudError, solicitudError } from '../utils/solicitudError';
+import { SolicitudApprovalRecoveryService } from './solicitudApprovalRecovery.service';
 import { logSolicitudFailure } from '../utils/solicitudLog';
 import type { AccountService } from './account.service';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
@@ -58,33 +59,52 @@ export class SolicitudApprovalService {
       p_version_terminos: TERMS_VERSION,
     });
     if (claimed.error) throw normalizeSolicitudError(claimed.error);
-    if (!claimed.data)
-      throw solicitudError('No se pudo aprobar.', 503, 'SERVICIO_NO_DISPONIBLE');
-    const { claim, correo, courseId, solicitadaAt } = claimed.data;
+    if (!claimed.data) throw solicitudError('No se pudo aprobar.', 503, 'SERVICIO_NO_DISPONIBLE');
+    const { claim, correo, courseId, solicitadaAt, authUserId } = claimed.data;
+    if (!authUserId)
+      throw solicitudError(
+        'Se requiere la migración055 para aprobar.',
+        503,
+        'SERVICIO_NO_DISPONIBLE',
+      );
 
     let studentId: string | null = null;
     let cohorte: ApprovalResult['cohorte'] = null;
     try {
-      studentId = await this.accounts.crearCuentaSinContrasena(correo);
-      const finalized = await this.finalizar(id, actor, claim, studentId, courseId, new Date(solicitadaAt));
+      studentId = await this.accounts.crearCuentaSinContrasena(correo, {
+        id: authUserId,
+        solicitudId: id,
+      });
+      const finalized = await this.finalizar(
+        id,
+        actor,
+        claim,
+        studentId,
+        courseId,
+        new Date(solicitadaAt),
+      );
       cohorte = finalized.cohorte;
     } catch (err) {
       if (err instanceof UncertainApproval) throw err.inner;
-      if (studentId) await this.accounts.eliminarCuenta(studentId);
-      const released = await this.db
-        .from('solicitudes_inscripcion')
-        .update({ reviewed_by: null, reviewed_at: null })
-        .eq('id', id)
-        .eq('estado', 'enviada')
-        .eq('reviewed_at', claim);
-      if (released.error) logSolicitudFailure('approval_claim_release_failed');
+      try {
+        await new SolicitudApprovalRecoveryService(this.db, this.accounts).compensar(
+          authUserId,
+          true,
+        );
+      } catch {
+        logSolicitudFailure('approval_claim_release_failed');
+      }
       throw err;
     }
 
     // La cuenta ya existe y la solicitud está aprobada: el correo es de cortesía y se puede reenviar.
     let correoEnviado = false;
     try {
-      const user = await this.db.from('users').select('nombre_completo').eq('id', studentId).maybeSingle();
+      const user = await this.db
+        .from('users')
+        .select('nombre_completo')
+        .eq('id', studentId)
+        .maybeSingle();
       const link = await this.accounts.generarEnlaceAcceso(correo);
       await this.email.sendAccessLinkEmail({
         to: correo,
@@ -145,7 +165,11 @@ export class SolicitudApprovalService {
         .maybeSingle();
       if (confirmed.error)
         throw new UncertainApproval(
-          solicitudError('No se pudo confirmar la aprobación. Recarga antes de reintentar.', 503, 'APROBACION_NO_CONFIRMADA'),
+          solicitudError(
+            'No se pudo confirmar la aprobación. Recarga antes de reintentar.',
+            503,
+            'APROBACION_NO_CONFIRMADA',
+          ),
         );
       if (confirmed.data?.estado === 'aprobada' && confirmed.data.student_id === studentId)
         return {
@@ -153,7 +177,9 @@ export class SolicitudApprovalService {
             ? { id: chosen.cohortId, nombre: chosen.cohortNombre ?? '' }
             : null,
         };
-      throw error ? normalizeSolicitudError(error) : solicitudError('No se pudo aprobar.', 503, 'SERVICIO_NO_DISPONIBLE');
+      throw error
+        ? normalizeSolicitudError(error)
+        : solicitudError('No se pudo aprobar.', 503, 'SERVICIO_NO_DISPONIBLE');
     }
     throw solicitudError('No se pudo aprobar.', 503, 'SERVICIO_NO_DISPONIBLE');
   }
@@ -168,7 +194,11 @@ export class SolicitudApprovalService {
     if (!s || s.estado === 'borrador')
       throw solicitudError('La solicitud no existe', 404, 'NO_ENCONTRADO');
     if (s.estado !== 'enviada')
-      throw solicitudError('Esta acción no corresponde al estado de la solicitud.', 409, 'ESTADO_INCORRECTO');
+      throw solicitudError(
+        'Esta acción no corresponde al estado de la solicitud.',
+        409,
+        'ESTADO_INCORRECTO',
+      );
     const [cert, verifs] = await Promise.all([
       this.db
         .from('solicitud_documentos')
@@ -215,4 +245,3 @@ export class SolicitudApprovalService {
     return { identidad: identidad.id, estudios: estudios.id };
   }
 }
-

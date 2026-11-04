@@ -57,8 +57,10 @@ Al 80 % de un tope el resumen del admin muestra alerta. Con el tope agotado: (1)
 inscripciones con el interruptor del admin, (2) subir el tope por variable de entorno y reiniciar,
 (3) derivar por WhatsApp y usar la matrícula manual. Un tope de subidas agotado nunca impide
 inscribirse: se envía sin archivo y el admin usa «Devolver» con REQUIERE_DOCUMENTO_ESTUDIOS.
-Si una aprobación queda «en curso» porque el proceso murió, liberar a mano `reviewed_by` y
-`reviewed_at` de esa solicitud (ver `inscripcion-052.md`).
+F44-c recupera reclamos cada5 minutos (America/Guayaquil), con
+`APPROVAL_CLAIM_TTL_MINUTES=10`: compensa solo cuentas con intención durable y
+propiedad verificada. No liberar a mano un resultado incierto; los reclamos legacy
+con Auth sin correlación requieren reconciliación. Runbook: `inscripcion-055.md`.
 
 ## Matriz amenaza, control y prueba
 | Amenaza | Control | Prueba (estado) |

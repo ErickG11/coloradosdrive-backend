@@ -71,6 +71,9 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      tomar_recuperacion_aprobacion: {Args:{p_intento:string;p_ttl:number;p_forzar?:boolean};Returns:{intentoId:string;solicitudId:string;token:string}|null};
+      cerrar_recuperacion_aprobacion: {Args:{p_intento:string;p_token:string};Returns:boolean};
+      liberar_reclamo_aprobacion_legacy: {Args:{p_id:string;p_claim:string;p_ttl:number};Returns:boolean};
       // F14 (SQL050): verificaciones del admin y listado con búsqueda escapada.
       registrar_verificacion_inscripcion: {
         Args: {p_id:string;p_actor:string;p_tipo:string;p_metodo:string;p_resultado:string;p_nota:string|null;p_habilita:boolean};
@@ -92,7 +95,7 @@ export interface Database {
       // F16 (SQL052): aprobación en dos pasos.
       reclamar_aprobacion_inscripcion: {
         Args: {p_id:string;p_actor:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
-        Returns: {claim:string;correo:string;courseId:string;solicitadaAt:string}|null;
+        Returns: {claim:string;correo:string;courseId:string;solicitadaAt:string;authUserId:string}|null;
       };
       finalizar_aprobacion_inscripcion: {
         Args: {p_id:string;p_actor:string;p_claim:string;p_student:string;p_cohort:string|null;p_estado:string;p_monto:number|null};
@@ -359,6 +362,10 @@ export interface Database {
       };
     };
     Tables: {
+      solicitud_aprobacion_intentos: {
+        Row:{id:string;solicitud_id:string;actor_id:string;claim:string;estado:'pendiente'|'recuperando'|'completado'|'compensado'|'revision_manual';updated_at:string;resuelto_at:string|null;recovery_token:string|null};
+        Insert:never;Update:never;Relationships:[];
+      };
       app_settings:{Row:{id:boolean;inscripciones_abiertas:boolean;updated_by:string|null;updated_at:string};Insert:{id?:boolean;inscripciones_abiertas?:boolean;updated_by?:string|null};Update:{inscripciones_abiertas?:boolean;updated_by?:string|null;updated_at?:string};Relationships:[]};
       practice_attendance_events: {
         Row: AttendanceEventRow & { transaction_id: number };

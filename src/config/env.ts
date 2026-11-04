@@ -56,6 +56,7 @@ const gmailRefreshToken = requireGmailApiEnv('GMAIL_REFRESH_TOKEN');
 export const env = {
   NODE_ENV: nodeEnv,
   EMAIL_PROVIDER: emailProvider,
+  APPROVAL_CLAIM_TTL_MINUTES: Number(optionalEnv('APPROVAL_CLAIM_TTL_MINUTES', '10')),
   SOLICITUD_RETENCION_DIAS: Number(optionalEnv('SOLICITUD_RETENCION_DIAS', '30')),
   PRIVACY_CONTACT_EMAIL: optionalEnv(
     'PRIVACY_CONTACT_EMAIL',
@@ -101,4 +102,8 @@ if (!Number.isInteger(env.SOLICITUD_RETENCION_DIAS) || env.SOLICITUD_RETENCION_D
 
 if (env.EMAIL_PROVIDER === 'console') {
   console.warn('Correo en modo consola: los mensajes NO se envían, se imprimen aquí');
+}
+
+if (!Number.isInteger(env.APPROVAL_CLAIM_TTL_MINUTES) || env.APPROVAL_CLAIM_TTL_MINUTES < 1 || env.APPROVAL_CLAIM_TTL_MINUTES > 1440) {
+  throw new Error('APPROVAL_CLAIM_TTL_MINUTES debe ser un entero entre1 y1440');
 }
