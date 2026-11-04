@@ -12,6 +12,7 @@ import { attendancePagination } from './practiceAttendance.validators';
 import { ratingPagination, ratingSubmissionValidators } from './practiceRating.validators';
 
 import { changePassword } from '../controllers/estudiante.controller';
+import { inscripcionIncompleta } from '../services/studentEnrollmentAccess';
 import { StudentEnrollmentStatusService } from '../services/studentEnrollmentStatus.service';
 import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
@@ -71,7 +72,10 @@ estudianteRouter.get(
       .eq('id', req.user.id)
       .single();
     if (error) throw error;
-    res.json({ mustChangePassword: data.debe_cambiar_password });
+    res.json({
+      mustChangePassword: data.debe_cambiar_password,
+      inscripcionIncompleta: await inscripcionIncompleta(supabaseAdmin, req.user.id),
+    });
   }),
 );
 
