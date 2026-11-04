@@ -331,7 +331,6 @@ export class SolicitudService {
       ),
       solicitadaAt: solicitud.solicitada_at,
       enviadaAt: solicitud.enviada_at,
-      documentosPorRevisar: solicitud.documentos_por_revisar,
       consentimiento: ((): SolicitudAdminView['consentimiento'] => {
         const c = consents.find(c => c.solicitud_id === solicitud.id);
         return c ? { version: c.version_aviso, aceptadoAt: c.aceptado_at, representanteNombre: c.representante_nombre, representanteCedula: c.representante_cedula, representanteAcepta: c.representante_acepta } : null;

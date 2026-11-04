@@ -598,6 +598,11 @@ export interface Database {
           reprogramaciones_usadas: number;
           horas_practica_objetivo: number | null;
           fecha_inscripcion: string;
+          origen: 'manual' | 'solicitud';
+          requisitos_verificados_at: string | null;
+          identidad_presencial_at: string | null;
+          identidad_presencial_por: string | null;
+          certificado_original_visto: boolean;
           created_at: string;
           updated_at: string;
         };

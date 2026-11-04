@@ -55,7 +55,6 @@ export interface VerificarCorreoInput {
 
 export interface SolicitudAdminView {
   enviadaAt?: string | null;
-  documentosPorRevisar?: number;
   solicitadaAt?: string | null;
   consentimiento?: {
     version: string;
