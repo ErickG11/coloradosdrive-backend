@@ -42,6 +42,39 @@ export class AccountService {
     return { userId: data.user.id, temporaryPassword };
   }
 
+  // Cuenta de inscripción en línea: correo confirmado, sin contraseña. La persona crea la suya
+  // con un enlace de un solo uso (generarEnlaceAcceso).
+  async crearCuentaSinContrasena(correo: string): Promise<string> {
+    const { data, error } = await this.supabase.auth.admin.createUser({
+      email: correo,
+      email_confirm: true,
+      app_metadata: { role: 'estudiante' },
+    });
+    if (error) {
+      if (error.code === AUTH_EMAIL_EXISTS) {
+        throw new AppError('Ya existe un usuario registrado con este correo electrónico', 409, {
+          code: 'CUENTA_YA_EXISTE',
+        });
+      }
+      throw error;
+    }
+    return data.user.id;
+  }
+
+  // Solo se devuelve el hash del token: el action_link nunca se usa ni se registra.
+  async generarEnlaceAcceso(correo: string): Promise<{ tokenHash: string; type: 'recovery' }> {
+    const { data, error } = await this.supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email: correo,
+    });
+    if (error || !data.properties.hashed_token) {
+      throw new AppError('No se pudo generar el enlace de acceso', 502, {
+        code: 'SERVICIO_NO_DISPONIBLE',
+      });
+    }
+    return { tokenHash: data.properties.hashed_token, type: 'recovery' };
+  }
+
   async eliminarCuenta(userId: string): Promise<void> {
     await this.supabase.auth.admin.deleteUser(userId).catch(() => undefined);
   }

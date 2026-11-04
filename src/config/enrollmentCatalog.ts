@@ -178,3 +178,5 @@ export const LIMITES_CERTIFICADO = {
 export const MENSAJE_DATOS_DUPLICADOS =
   'No pudimos registrar estos datos. Si ya te inscribiste, usa tu correo para ver el estado o contacta a la escuela.';
 export const MENSAJE_VERIFICACION_CORREO = 'Te enviamos un código de verificación a tu correo';
+// B1 (F15): días de bloqueo del correo tras rechazar por SPAM (solo se guarda su hash).
+export const BLOQUEO_SPAM_DIAS = 30;

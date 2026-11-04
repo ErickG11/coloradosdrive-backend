@@ -71,6 +71,46 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      // F14 (SQL050): verificaciones del admin y listado con búsqueda escapada.
+      registrar_verificacion_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_tipo:string;p_metodo:string;p_resultado:string;p_nota:string|null;p_habilita:boolean};
+        Returns: {id:string;tipo:'identidad'|'estudios';metodo:string;resultado:'verificado'|'no_coincide'|'no_encontrado';nota:string|null;createdAt:string}|null;
+      };
+      // F15 (SQL051): decisiones del admin.
+      devolver_solicitud_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_motivo:string;p_mensaje:string;p_nota:string|null};
+        Returns: {id:string;estado:'devuelta';correo:string}|null;
+      };
+      rechazar_solicitud_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_motivo:string;p_mensaje:string;p_nota:string|null;p_bloqueo_hash:string|null;p_bloqueo_dias:number|null};
+        Returns: {id:string;estado:'rechazada';correo:string}|null;
+      };
+      validar_aprobacion_inscripcion: {
+        Args: {p_id:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
+        Returns: undefined;
+      };
+      // F16 (SQL052): aprobación en dos pasos.
+      reclamar_aprobacion_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
+        Returns: {claim:string;correo:string;courseId:string;solicitadaAt:string}|null;
+      };
+      finalizar_aprobacion_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_claim:string;p_student:string;p_cohort:string|null;p_estado:string;p_monto:number|null};
+        Returns: {studentId:string;enrollmentId:string}|null;
+      };
+      // F20 (SQL053): vencimientos y huérfanos.
+      vencer_solicitudes_devueltas: {
+        Args: {p_dias:number;p_mensaje:string};
+        Returns: number | null;
+      };
+      listar_objetos_huerfanos_solicitudes: {
+        Args: {p_antes:string;p_limite:number};
+        Returns: string[] | null;
+      };
+      listar_solicitudes_admin: {
+        Args: {p_estado:string|null;p_q:string|null;p_page:number;p_size:number};
+        Returns: {items:Record<string,unknown>[];total:number;page:number;pageSize:number}|null;
+      };
       enviar_solicitud_inscripcion: {
         Args: {p_id:string;p_modo:'enviar'|'reenviar';p_version_aviso:string;p_version_terminos:string};
         Returns: {id:string;estado:'enviada';enviadaAt:string;transicion:boolean}|null;
@@ -851,6 +891,7 @@ export interface Database {
         Row: {
           datos_actualizados_at:string|null;correo_normalizado:string;nombres:string|null;apellidos:string|null;nacionalidad_tipo:string|null;tipo_sangre:string|null;nivel_estudios:string|null;
           devuelta_at:string|null;devolucion_motivo_codigo:string|null;devolucion_mensaje:string|null;
+          devuelta_por:string|null;devolucion_nota_interna:string|null;rechazo_nota_interna:string|null;
           rechazo_motivo_codigo:string|null;documento_estudios_pendiente_por_cupo:boolean;
           id: string;
           course_id: string;
@@ -910,17 +951,41 @@ export interface Database {
         }>;
         Relationships: [];
       };
+      solicitud_verificaciones: {
+        Row: {
+          id: string;
+          solicitud_id: string;
+          tipo: 'identidad' | 'estudios';
+          metodo: string;
+          resultado: 'verificado' | 'no_coincide' | 'no_encontrado';
+          nota: string | null;
+          actor_id: string;
+          creado_at: string;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       solicitud_documentos: {
         Row: {
           id: string;
           solicitud_id: string;
           tipo_documento: SolicitudTipoDocumento;
+          // Las filas con archivo eliminado (retención) tienen storage_path NULL; los tipos
+          // históricos lo declaran string: quien lo lea debe comprobarlo como string | null.
           storage_path: string;
           estado: SolicitudDocumentoEstado;
           motivo_rechazo: string | null;
           uploaded_at: string;
           reviewed_at: string | null;
           reviewed_by: string | null;
+          // F14: campos del certificado de estudios (042).
+          subtipo: string | null;
+          mime_type: string | null;
+          size_bytes: number | null;
+          sha256: string | null;
+          archivo_verificado_at: string | null;
+          archivo_eliminado_at: string | null;
         };
         Insert: {
           id?: string;
@@ -930,7 +995,8 @@ export interface Database {
           estado?: SolicitudDocumentoEstado;
         };
         Update: Partial<{
-          storage_path: string;
+          storage_path: string | null;
+          archivo_eliminado_at: string | null;
           estado: SolicitudDocumentoEstado;
           motivo_rechazo: string | null;
           uploaded_at: string;
