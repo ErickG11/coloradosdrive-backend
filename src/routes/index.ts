@@ -24,7 +24,11 @@ import { studentAdminRouter } from './studentAdmin.routes';
 import { notificationRouter } from './notification.routes';
 import { instructorRatingRouter } from './instructorRating.routes';
 
+import { adminMfaGuard } from '../middlewares/adminMfa.middleware';
+
 export const apiRouter = Router();
+// B2 · F21: debe ir antes de cualquier router /admin/*; no hace nada con ADMIN_MFA_REQUIRED=false.
+apiRouter.use('/admin', adminMfaGuard());
 apiRouter.use('/public/inscripcion', publicEnrollmentConfigRouter);
 apiRouter.use('/admin/inscripciones', adminEnrollmentConfigRouter);
 apiRouter.use('/notifications', notificationRouter);

@@ -348,6 +348,15 @@ export interface Database {
         };
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
       };
+      // B2 · F19
+      confirmar_identidad_presencial: {
+        Args: { p_slot: string; p_instructor: string; p_certificado_visto: boolean };
+        Returns: { transicion: boolean; confirmadaAt: string; certificadoOriginalVisto: boolean };
+      };
+      franjas_identidad_pendiente: {
+        Args: { p_instructor: string; p_slots: string[] };
+        Returns: { slot_id: string; certificado_requerido: boolean }[];
+      };
     };
     Tables: {
       app_settings:{Row:{id:boolean;inscripciones_abiertas:boolean;updated_by:string|null;updated_at:string};Insert:{id?:boolean;inscripciones_abiertas?:boolean;updated_by?:string|null};Update:{inscripciones_abiertas?:boolean;updated_by?:string|null;updated_at?:string};Relationships:[]};
@@ -638,6 +647,11 @@ export interface Database {
           reprogramaciones_usadas: number;
           horas_practica_objetivo: number | null;
           fecha_inscripcion: string;
+          origen: 'manual' | 'solicitud';
+          requisitos_verificados_at: string | null;
+          identidad_presencial_at: string | null;
+          identidad_presencial_por: string | null;
+          certificado_original_visto: boolean;
           created_at: string;
           updated_at: string;
         };

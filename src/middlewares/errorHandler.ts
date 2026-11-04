@@ -25,24 +25,21 @@ export function errorHandler(
   _next: NextFunction,
 ): void {
   if (
-    /^\/(?:(?:admin\/)?solicitudes|admin\/inscripciones|public\/inscripcion|estudiantes\/documentos)(?:\/|$|\?)/.test(
+    /^\/(?:(?:admin\/)?solicitudes|admin\/inscripciones|public\/inscripcion)(?:\/|$|\?)/.test(
       req.originalUrl,
     )
   ) {
     const normalized = normalizeSolicitudError(err);
     const operational = normalized instanceof AppError;
-    const studentDocuments = /^\/estudiantes\/documentos(?:\/|$|\?)/.test(req.originalUrl);
     const authRequired = operational && normalized.statusCode === 401;
     res.status(operational ? normalized.statusCode : 500).json({
       status: 'error',
       message: authRequired
-        ? studentDocuments
-          ? 'Inicia sesión para consultar tus documentos'
-          : 'Verifica tu correo para continuar'
+        ? 'Verifica tu correo para continuar'
         : operational
           ? normalized.message
           : 'No se pudo completar la operación',
-      code: authRequired && studentDocuments ? 'SESION_REQUERIDA' : solicitudErrorCode(normalized),
+      code: solicitudErrorCode(normalized),
       ...(operational && normalized.field ? { field: normalized.field } : {}),
       ...(operational && normalized.detalles
         ? {
