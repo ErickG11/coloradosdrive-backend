@@ -14,6 +14,7 @@ import { CohortAssignmentService } from '../services/cohortAssignment.service';
 import { EmailService } from '../services/email.service';
 import { SolicitudService, type DecidirSolicitudResult } from '../services/solicitud.service';
 import { SolicitudAdminService, type AdminEstadoLista } from '../services/solicitudAdmin.service';
+import { SolicitudDecisionService } from '../services/solicitudDecision.service';
 import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPrivacy.service';
 import { SolicitudDocumentAccessService } from '../services/solicitudAudit.service';
 import { SolicitudDeletionService } from '../services/solicitudDeletion.service';
@@ -112,6 +113,17 @@ export async function registrarVerificacion(req: Request, res: Response): Promis
     req.body as unknown,
   );
   res.set('Cache-Control', 'no-store').status(201).json(result);
+}
+
+const decisionService = new SolicitudDecisionService(supabaseAdmin, new EmailService(mailer));
+
+export async function decisionSolicitud(req: Request, res: Response): Promise<void> {
+  const result = await decisionService.decidir(
+    req.params.id,
+    requireAdminId(req),
+    req.body as unknown,
+  );
+  res.set('Cache-Control', 'no-store').status(200).json(result);
 }
 
 export async function certificadoUrl(req: Request, res: Response): Promise<void> {
