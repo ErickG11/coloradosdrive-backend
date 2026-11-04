@@ -5,18 +5,18 @@ import { supabaseAdmin } from '../config/supabase';
 import type {
   CompletarDatosResult,
   ConfirmarCodigoResult,
-  DecidirSolicitudInput,
   SolicitudDocumentoResult,
-  SolicitudEstado,
   VerificarCorreoInput,
 } from '../models/solicitud.model';
 import { AccountService } from '../services/account.service';
 import { CohortAssignmentService } from '../services/cohortAssignment.service';
 import { EmailService } from '../services/email.service';
-import { SolicitudService, type DecidirSolicitudResult } from '../services/solicitud.service';
+import { SolicitudService } from '../services/solicitud.service';
+import { SolicitudAdminService, type AdminEstadoLista } from '../services/solicitudAdmin.service';
+import { SolicitudDecisionService } from '../services/solicitudDecision.service';
 import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPrivacy.service';
 import { SolicitudDocumentAccessService } from '../services/solicitudAudit.service';
-import { SolicitudDeletionService } from '../services/solicitudDeletion.service';
+import { SolicitudPurgeService } from '../services/solicitudPurge.service';
 import { AppError } from '../utils/AppError';
 import { uniformVerification } from '../utils/uniformVerification';
 import { MENSAJE_VERIFICACION_CORREO } from '../config/enrollmentCatalog';
@@ -87,40 +87,47 @@ function requireAdminId(req: Request): string {
   return req.user.id;
 }
 
-export async function listarSolicitudes(
-  req: Request,
-  res: Response,
-): Promise<void> {
-  const estado = req.query.estado as SolicitudEstado | 'con_documentos_por_revisar' | undefined;
-  res.status(200).json(await solicitudService.listarParaAdmin(estado, Number(req.query.page ?? 1), Number(req.query.pageSize ?? 20), typeof req.query.q === 'string' ? req.query.q : ''));
-}
+const adminService = new SolicitudAdminService(supabaseAdmin);
 
-export async function revisarDocumento(
-  req: Request,
-  res: Response<{ id: string; estado: 'aprobado' | 'rechazado' }>,
-): Promise<void> {
-  const { estado, motivoRechazo } = req.body as {
-    estado: 'aprobado' | 'rechazado';
-    motivoRechazo?: string;
-  };
-  const result = await solicitudService.revisarDocumento(req.params.id, req.params.docId, requireAdminId(req), {
+export async function listarSolicitudes(req: Request, res: Response): Promise<void> {
+  const estado = req.query.estado as AdminEstadoLista | undefined;
+  const q = typeof req.query.q === 'string' ? req.query.q : '';
+  const result = await adminService.listar(
     estado,
-    motivoRechazo,
-  });
-  res.status(200).json(result);
+    q,
+    Number(req.query.page ?? 1),
+    Number(req.query.pageSize ?? 20),
+  );
+  res.set('Cache-Control', 'no-store').status(200).json(result);
 }
 
-export async function decidirSolicitud(
-  req: Request,
-  res: Response<DecidirSolicitudResult>,
-): Promise<void> {
-  const adminId = requireAdminId(req);
-  const result = await solicitudService.decidir(
+export async function detalleSolicitud(req: Request, res: Response): Promise<void> {
+  res.set('Cache-Control', 'no-store').json(await adminService.detalle(req.params.id));
+}
+
+export async function registrarVerificacion(req: Request, res: Response): Promise<void> {
+  const result = await adminService.registrarVerificacion(
     req.params.id,
-    adminId,
-    req.body as DecidirSolicitudInput,
+    requireAdminId(req),
+    req.body as unknown,
   );
-  res.status(200).json(result);
+  res.set('Cache-Control', 'no-store').status(201).json(result);
+}
+
+const decisionService = new SolicitudDecisionService(supabaseAdmin, new EmailService(mailer));
+
+export async function decisionSolicitud(req: Request, res: Response): Promise<void> {
+  const result = await decisionService.decidir(
+    req.params.id,
+    requireAdminId(req),
+    req.body as unknown,
+  );
+  res.set('Cache-Control', 'no-store').status(200).json(result);
+}
+
+export async function certificadoUrl(req: Request, res: Response): Promise<void> {
+  const result = await adminService.urlCertificado(req.params.id, requireAdminId(req));
+  res.set('Cache-Control', 'no-store').json(result);
 }
 
 const privacyService = new SolicitudPrivacyService(supabaseAdmin);
@@ -142,7 +149,11 @@ export async function documentoUrl(req: Request, res: Response): Promise<void> {
 }
 
 export async function eliminarSolicitud(req: Request, res: Response): Promise<void> {
-  await new SolicitudDeletionService(supabaseAdmin).remove(req.params.id, requireAdminId(req));
+  await new SolicitudPurgeService(supabaseAdmin).purge(
+    req.params.id,
+    requireAdminId(req),
+    'solicitud_eliminada',
+  );
   res.status(204).send();
 }
 
