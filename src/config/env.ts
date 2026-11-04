@@ -19,8 +19,8 @@ function optionalEnv(name: string, fallback: string): string {
 
 const nodeEnv = optionalEnv('NODE_ENV', 'development');
 const emailProvider = optionalEnv('EMAIL_PROVIDER', 'smtp');
-if (emailProvider !== 'smtp' && emailProvider !== 'console') {
-  throw new Error('EMAIL_PROVIDER debe ser smtp o console');
+if (emailProvider !== 'smtp' && emailProvider !== 'console' && emailProvider !== 'gmail_api') {
+  throw new Error('EMAIL_PROVIDER debe ser smtp o console, o gmail_api (HTTPS)');
 }
 if (
   emailProvider === 'console' &&
@@ -37,8 +37,21 @@ function requireSmtpEnv(name: string): string {
   }
   return requireEnv(name);
 }
-const emailUser = requireSmtpEnv('EMAIL_USER');
-const emailPassword = requireSmtpEnv('EMAIL_APP_PASSWORD');
+// gmail_api (HTTPS): el remitente sigue siendo EMAIL_USER; no usa contraseña SMTP.
+function requireGmailApiEnv(name: string): string {
+  if (emailProvider !== 'gmail_api') return optionalEnv(name, '');
+  if (!process.env[name]?.trim()) {
+    throw new Error(`EMAIL_PROVIDER=gmail_api requiere ${name}`);
+  }
+  return requireEnv(name);
+}
+const emailUser =
+  emailProvider === 'gmail_api' ? requireGmailApiEnv('EMAIL_USER') : requireSmtpEnv('EMAIL_USER');
+const emailPassword =
+  emailProvider === 'gmail_api' ? optionalEnv('EMAIL_APP_PASSWORD', '') : requireSmtpEnv('EMAIL_APP_PASSWORD');
+const gmailClientId = requireGmailApiEnv('GMAIL_CLIENT_ID');
+const gmailClientSecret = requireGmailApiEnv('GMAIL_CLIENT_SECRET');
+const gmailRefreshToken = requireGmailApiEnv('GMAIL_REFRESH_TOKEN');
 
 export const env = {
   NODE_ENV: nodeEnv,
@@ -61,6 +74,10 @@ export const env = {
   EMAIL_FROM: emailUser || 'pruebas@example.invalid',
   SOLICITUD_TOKEN_SECRET: requireEnv('SOLICITUD_TOKEN_SECRET'),
   ...loadEnrollmentConfig(process.env),
+  // B3 (F42): credenciales OAuth de la API de Gmail; vacías salvo EMAIL_PROVIDER=gmail_api.
+  GMAIL_CLIENT_ID: gmailClientId,
+  GMAIL_CLIENT_SECRET: gmailClientSecret,
+  GMAIL_REFRESH_TOKEN: gmailRefreshToken,
 };
 
 if (env.SOLICITUD_TOKEN_SECRET.length < 32) {

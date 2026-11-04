@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
 import { AppError } from '../utils/AppError';
+import { buildIlikeOr } from '../utils/postgrestSearch';
 import { PracticeSlotService } from './practiceSlot.service';
 import type { EmailService } from './email.service';
 
@@ -130,7 +131,8 @@ export class InstructorService {
     let query = this.db.from('users')
       .select('id,cedula,nombre_completo,telefono,activo,created_at', { count: 'exact' })
       .eq('rol', 'instructor');
-    if (q) query = query.or(`nombre_completo.ilike.%${q}%,cedula.ilike.%${q}%`);
+    const searchFilter = buildIlikeOr(['nombre_completo', 'cedula'], q);
+    if (searchFilter) query = query.or(searchFilter);
     if (activo !== undefined) query = query.eq('activo', activo);
     const { data, error, count } = await query
       .order('nombre_completo')

@@ -1,4 +1,5 @@
 import type { RealtimeService } from './realtime.service';
+import { logSafeError } from '../utils/safeLog';
 
 // SQL ya guardó la bandeja y el correo pendiente. Realtime solo invalida la UI.
 export class PracticeSlotNotificationService {
@@ -16,7 +17,7 @@ export class PracticeSlotNotificationService {
     try {
       await this.realtime.broadcast(`user-${userId}-practice-slots`, event, { scheduledAt });
     } catch (err) {
-      console.error(`No se pudo notificar (Realtime) el evento "${event}":`, err);
+      logSafeError('practice_slot_realtime_failed', err);
     }
   }
 }

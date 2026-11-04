@@ -4,6 +4,7 @@ import type { Database } from '../config/database.types';
 import { supabaseAdmin } from '../config/supabase';
 import { ESTADOS_INSCRIPCION } from '../config/enrollmentCatalog';
 import { AppError } from '../utils/AppError';
+import { markGuard } from '../utils/routeGuards';
 import { asyncHandler } from '../utils/asyncHandler';
 import { verifySolicitudClaims } from '../utils/solicitudToken';
 
@@ -55,3 +56,5 @@ export function createSolicitudAuth(db: SupabaseClient<Database>): RequestHandle
   });
 }
 export const authenticateSolicitud = createSolicitudAuth(supabaseAdmin);
+
+markGuard(authenticateSolicitud, 'authenticateSolicitud');

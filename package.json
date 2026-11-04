@@ -31,7 +31,8 @@
     "test:cohort-deletion-db": "node tests/database/cohortDeletion.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "security:check-auth": "node scripts/check-auth-settings.js"
+    "security:check-auth": "node scripts/check-auth-settings.js",
+    "security:routes": "ts-node --transpile-only src/scripts/securityRoutes.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
