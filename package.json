@@ -46,7 +46,7 @@
     "luxon": "^3.7.2",
     "multer": "^2.4.0",
     "node-cron": "^3.0.3",
-    "nodemailer": "^9.1.1",
+    "nodemailer": "10.3.1",
     "sharp": "^0.35.5",
     "ws": "^8.21.3"
   },
