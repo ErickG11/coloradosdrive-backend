@@ -21,6 +21,7 @@ import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { requireRequisitosVerificados } from '../middlewares/requireRequisitosVerificados';
 import { validate, validateFields } from '../middlewares/validate';
+import { confirmPracticeIdentity } from '../controllers/practiceIdentity.controller';
 import { attendanceEvents } from '../controllers/practiceAttendance.controller';
 import { attendancePagination, attendanceReason, attendanceValue } from './practiceAttendance.validators';
 import { CANCELLATION_CATEGORIES, PRACTICE_SLOT_STATUSES } from '../models/practiceSlot.model';
@@ -195,3 +196,24 @@ practiceSlotRouter.patch('/:id/attendance/correction', requireRole('admin'),
   asyncHandler(markPracticeSlotAttendance));
 practiceSlotRouter.get('/:id/attendance/events', requireRole('admin'),
   [idParamValidator, ...attendancePagination()], validateFields, asyncHandler(attendanceEvents));
+
+// F19: el instructor de la franja confirma la cédula original del alumno que viene de solicitud.
+practiceSlotRouter.patch(
+  '/:id/identidad-presencial',
+  requireRole('instructor'),
+  [
+    idParamValidator,
+    body().custom((value: unknown) => {
+      const keys = typeof value === 'object' && value !== null ? Object.keys(value) : ['?'];
+      if (keys.some((k) => k !== 'cedulaOriginalVista' && k !== 'certificadoOriginalVisto'))
+        throw new Error('El cuerpo contiene campos no permitidos');
+      return true;
+    }),
+    body('cedulaOriginalVista').custom((value: unknown) => value === true)
+      .withMessage('cedulaOriginalVista debe ser true'),
+    body('certificadoOriginalVisto').optional().isBoolean({ strict: true })
+      .withMessage('certificadoOriginalVisto debe ser booleano'),
+  ],
+  validateFields,
+  asyncHandler(confirmPracticeIdentity),
+);
