@@ -122,4 +122,11 @@ reales y la compatibilidad de cada flujo requieren la fase final de pruebas/F23.
 (`MIGRATIONS_THROUGH=055`, reporte `/tmp/inscripcion-f45-055.json`). El recorrido
 001–055 completo terminó sin errores. Verifica lease exclusivo, token de cierre,
 auditoría y ACL/RLS del ledger. No simula Auth real ni carreras multiconexión.
-056 queda reservada para F44-d.
+### Extensión F44-d (056)
+
+056: aplicación, preflight, verificación y rollback OK en arnés F45.
+Recorrido001–056:56 aplicaciones,34 preflights,27 verificaciones y37 rollbacks OK;
+reporte `/tmp/inscripcion-f45-056.json`. Los scripts056 comprueban ACL/RLS, actor,
+matrícula manual, ventana no vencida, override exitoso, idempotencia y certificado
+original intacto usando fixtures que terminan en ROLLBACK. Ningún cambio a042–054.
+055/056 no se aplicaron en Supabase; siguen pendientes de ejecución manual.

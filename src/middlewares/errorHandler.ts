@@ -46,6 +46,22 @@ export function errorHandler(
     return;
   }
   if (
+    req.method === 'POST' &&
+    /^\/admin\/estudiantes\/[^/?]+\/identidad-presencial\/?(?:\?|$)/i.test(req.originalUrl) &&
+    !(err instanceof AppError)
+  ) {
+    const invalidJson = 'type' in err && err.type === 'entity.parse.failed';
+    logSafeError('student_identity_request_failed', err);
+    res.status(invalidJson ? 400 : 503).json({
+      status: 'error',
+      message: invalidJson
+        ? 'Cuerpo JSON inválido'
+        : 'No se pudo confirmar la identidad. Recarga la ficha.',
+      code: invalidJson ? 'INVALID_JSON' : 'IDENTIDAD_NO_CONFIRMADA',
+    });
+    return;
+  }
+  if (
     /^\/(?:(?:admin\/)?solicitudes|admin\/inscripciones|public\/inscripcion)(?:\/|$|\?)/.test(
       req.originalUrl,
     )

@@ -253,3 +253,28 @@ Nunca usarlas en producción. El widget todavía se construirá en F27; local pu
 seguir con off. Fuentes:
 [Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/),
 [claves de prueba](https://developers.cloudflare.com/turnstile/troubleshooting/testing/).
+
+### F44-d — override de identidad presencial
+
+`POST /admin/estudiantes/:id/identidad-presencial` (UUID de alumno, sesión admin
+activo y guarda MFA vigente). Body exclusivamente `{ "motivo": "Razón operativa de la confirmación" }`.
+Se normalizan espacios/controles y NFC; motivo obligatorio de10–300 caracteres
+Unicode después de normalizar. No incluir datos personales. Requiere migración056.
+
+Opera sobre la matrícula más reciente por fecha_inscripcion DESC e id ASC; debe
+ser de origen solicitud. Si no estaba confirmada, exige al menos una franja
+confirmado/completado del alumno y cohorte cuyo fin +48h ya venció. No permite
+adelantar ni sustituir la ventana del instructor (30min antes a48h después del fin).
+HTTP200: `{transicion, confirmadaAt, confirmadaPor, enrollmentId}`. Repetir devuelve
+transicion:false conservando primera fecha/actor y sin otra auditoría. No cambia
+certificado_original_visto. Motivo queda en identidad_presencial_overrides,
+append-only/RLS sin políticas, y acción técnica en solicitud_auditoria si existe.
+
+Errores:400 MOTIVO_INVALIDO / CAMPO_NO_PERMITIDO / CUERPO_INVALIDO / INVALID_FIELD / INVALID_JSON;
+401 sin sesión;403 ACCESO_DENEGADO (o guarda MFA);404 ALUMNO_NO_ENCONTRADO;
+409 ALUMNO_SIN_SOLICITUD o VENTANA_IDENTIDAD_NO_VENCIDA;
+503 IDENTIDAD_NO_CONFIRMADA (resultado incierto: recargar ficha antes de reintentar).
+GET /admin/estudiantes/:id añade `identidadPresencial`:
+`{origenSolicitud:boolean,confirmada:boolean,confirmadaAt:string|null,confirmadaPor:string|null}`
+para esa misma matrícula (sin matrícula: false/false/null/null).
+Operación y rollback: inscripcion-056.md y sus tres scripts.
