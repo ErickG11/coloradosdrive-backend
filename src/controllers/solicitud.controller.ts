@@ -16,7 +16,7 @@ import { SolicitudAdminService, type AdminEstadoLista } from '../services/solici
 import { SolicitudDecisionService } from '../services/solicitudDecision.service';
 import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPrivacy.service';
 import { SolicitudDocumentAccessService } from '../services/solicitudAudit.service';
-import { SolicitudDeletionService } from '../services/solicitudDeletion.service';
+import { SolicitudPurgeService } from '../services/solicitudPurge.service';
 import { AppError } from '../utils/AppError';
 import { uniformVerification } from '../utils/uniformVerification';
 import { MENSAJE_VERIFICACION_CORREO } from '../config/enrollmentCatalog';
@@ -149,7 +149,11 @@ export async function documentoUrl(req: Request, res: Response): Promise<void> {
 }
 
 export async function eliminarSolicitud(req: Request, res: Response): Promise<void> {
-  await new SolicitudDeletionService(supabaseAdmin).remove(req.params.id, requireAdminId(req));
+  await new SolicitudPurgeService(supabaseAdmin).purge(
+    req.params.id,
+    requireAdminId(req),
+    'solicitud_eliminada',
+  );
   res.status(204).send();
 }
 

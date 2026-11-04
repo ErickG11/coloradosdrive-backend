@@ -98,6 +98,15 @@ export interface Database {
         Args: {p_id:string;p_actor:string;p_claim:string;p_student:string;p_cohort:string|null;p_estado:string;p_monto:number|null};
         Returns: {studentId:string;enrollmentId:string}|null;
       };
+      // F20 (SQL053): vencimientos y huérfanos.
+      vencer_solicitudes_devueltas: {
+        Args: {p_dias:number;p_mensaje:string};
+        Returns: number | null;
+      };
+      listar_objetos_huerfanos_solicitudes: {
+        Args: {p_antes:string;p_limite:number};
+        Returns: string[] | null;
+      };
       listar_solicitudes_admin: {
         Args: {p_estado:string|null;p_q:string|null;p_page:number;p_size:number};
         Returns: {items:Record<string,unknown>[];total:number;page:number;pageSize:number}|null;
