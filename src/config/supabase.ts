@@ -27,6 +27,14 @@ export const supabaseAdmin = createClient<Database>(
       autoRefreshToken: false,
       persistSession: false,
     },
+    global: {
+      fetch: (input, init) => fetch(input, {
+        ...init,
+        signal: init?.signal
+          ? AbortSignal.any([init.signal, AbortSignal.timeout(30_000)])
+          : AbortSignal.timeout(30_000),
+      }),
+    },
     realtime: realtimeOptions,
   },
 );

@@ -10,7 +10,9 @@ export function logSolicitudFailure(
     | 'return_email_failed'
     | 'rejection_email_failed'
     | 'approval_account_rollback_failed'
-    | 'approval_claim_release_failed',
+    | 'approval_recovery_failed'
+  | 'approval_legacy_recovery_failed'
+  | 'approval_claim_release_failed',
 ): void {
   console.error(JSON.stringify({ event }));
 }

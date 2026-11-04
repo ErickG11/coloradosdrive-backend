@@ -44,11 +44,19 @@ export class AccountService {
 
   // Cuenta de inscripción en línea: correo confirmado, sin contraseña. La persona crea la suya
   // con un enlace de un solo uso (generarEnlaceAcceso).
-  async crearCuentaSinContrasena(correo: string): Promise<string> {
+  async crearCuentaSinContrasena(
+    correo: string,
+    intento: { id: string; solicitudId: string },
+  ): Promise<string> {
     const { data, error } = await this.supabase.auth.admin.createUser({
+      id: intento.id,
       email: correo,
       email_confirm: true,
-      app_metadata: { role: 'estudiante' },
+      app_metadata: {
+        role: 'estudiante',
+        inscripcion_solicitud_id: intento.solicitudId,
+        inscripcion_intento_id: intento.id,
+      },
     });
     if (error) {
       if (error.code === AUTH_EMAIL_EXISTS) {
@@ -59,6 +67,37 @@ export class AccountService {
       throw error;
     }
     return data.user.id;
+  }
+
+  // No inferir propiedad por correo. Un 404 es la única ausencia confirmada.
+  async compensarCuentaInscripcion(userId: string, solicitudId: string): Promise<void> {
+    const lookup = await this.supabase.auth.admin.getUserById(userId);
+    if (lookup.error?.status === 404 || lookup.error?.code === 'user_not_found') return;
+    if (lookup.error)
+      throw new AppError('No se pudo comprobar Auth', 503, { code: 'APROBACION_NO_CONFIRMADA' });
+    const user = lookup.data.user;
+    if (
+      user.id !== userId ||
+      user.app_metadata.role !== 'estudiante' ||
+      user.app_metadata.inscripcion_solicitud_id !== solicitudId ||
+      user.app_metadata.inscripcion_intento_id !== userId
+    )
+      throw new AppError('La cuenta requiere reconciliación manual', 409, {
+        code: 'APROBACION_REVISION_MANUAL',
+      });
+    const profile = await this.supabase.from('users').select('id').eq('id', userId).maybeSingle();
+    if (profile.error || profile.data)
+      throw new AppError('No se puede compensar una cuenta con perfil', 409, {
+        code: 'APROBACION_NO_CONFIRMADA',
+      });
+    const removed = await this.supabase.auth.admin.deleteUser(userId);
+    if (removed.error && removed.error.status !== 404 && removed.error.code !== 'user_not_found')
+      throw removed.error;
+    const check = await this.supabase.auth.admin.getUserById(userId);
+    if (check.error?.status !== 404 && check.error?.code !== 'user_not_found')
+      throw new AppError('No se confirmó la compensación de Auth', 503, {
+        code: 'APROBACION_NO_CONFIRMADA',
+      });
   }
 
   // Solo se devuelve el hash del token: el action_link nunca se usa ni se registra.
