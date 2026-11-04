@@ -19,6 +19,7 @@ import {
 } from '../controllers/practiceSlotAction.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
+import { requireRequisitosVerificados } from '../middlewares/requireRequisitosVerificados';
 import { validate, validateFields } from '../middlewares/validate';
 import { attendanceEvents } from '../controllers/practiceAttendance.controller';
 import { attendancePagination, attendanceReason, attendanceValue } from './practiceAttendance.validators';
@@ -123,7 +124,7 @@ practiceSlotRouter.get(
 practiceSlotRouter.get('/released-for-me', requireRole('estudiante'), asyncHandler(releasedPracticeSlotsForMe));
 practiceSlotRouter.get('/my-pending', requireRole('estudiante'), asyncHandler(myPendingPracticeSlots));
 practiceSlotRouter.post(
-  '/:id/swap', requireRole('estudiante'),
+  '/:id/swap', requireRole('estudiante'), requireRequisitosVerificados,
   [idParamValidator, body('practicaASoltarId').optional().isString()
     .withMessage('practicaASoltarId debe ser un UUID válido').bail().isUUID()
     .withMessage('practicaASoltarId debe ser un UUID válido')],
@@ -149,6 +150,7 @@ practiceSlotRouter.delete(
 practiceSlotRouter.post(
   '/:id/claim',
   requireRole('estudiante'),
+  requireRequisitosVerificados,
   idParamValidator,
   validate,
   asyncHandler(claimPracticeSlot),
@@ -156,6 +158,7 @@ practiceSlotRouter.post(
 practiceSlotRouter.post(
   '/:id/confirm',
   requireRole('estudiante'),
+  requireRequisitosVerificados,
   idParamValidator,
   validate,
   asyncHandler(confirmPracticeSlot),
@@ -163,6 +166,7 @@ practiceSlotRouter.post(
 practiceSlotRouter.post(
   '/:id/cancel',
   requireRole('estudiante'),
+  requireRequisitosVerificados,
   [idParamValidator,
     body('motivoCategoria').isString().bail().isIn(CANCELLATION_CATEGORIES)
       .withMessage('Indica una categoría de cancelación válida'),
