@@ -89,6 +89,15 @@ export interface Database {
         Args: {p_id:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
         Returns: undefined;
       };
+      // F16 (SQL052): aprobación en dos pasos.
+      reclamar_aprobacion_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
+        Returns: {claim:string;correo:string;courseId:string;solicitadaAt:string}|null;
+      };
+      finalizar_aprobacion_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_claim:string;p_student:string;p_cohort:string|null;p_estado:string;p_monto:number|null};
+        Returns: {studentId:string;enrollmentId:string}|null;
+      };
       listar_solicitudes_admin: {
         Args: {p_estado:string|null;p_q:string|null;p_page:number;p_size:number};
         Returns: {items:Record<string,unknown>[];total:number;page:number;pageSize:number}|null;

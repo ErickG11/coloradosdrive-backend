@@ -8,7 +8,9 @@ export function logSolicitudFailure(
     | 'enrollment_rollback_failed'
     // B1 (F15)
     | 'return_email_failed'
-    | 'rejection_email_failed',
+    | 'rejection_email_failed'
+    | 'approval_account_rollback_failed'
+    | 'approval_claim_release_failed',
 ): void {
   console.error(JSON.stringify({ event }));
 }

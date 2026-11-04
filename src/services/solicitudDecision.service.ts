@@ -12,6 +12,8 @@ import { validateEnrollmentDecision } from '../utils/enrollmentValidation';
 import { logSolicitudFailure } from '../utils/solicitudLog';
 import { normalizeSolicitudError, solicitudError } from '../utils/solicitudError';
 import type { EmailService } from './email.service';
+import { AccountService } from './account.service';
+import { CohortAssignmentService } from './cohortAssignment.service';
 import { SolicitudApprovalService } from './solicitudApproval.service';
 
 export interface DecisionResult {
@@ -32,12 +34,17 @@ export class SolicitudDecisionService {
     private readonly db: SupabaseClient<Database>,
     private readonly email: EmailService,
   ) {
-    this.approval = new SolicitudApprovalService(db);
+    this.approval = new SolicitudApprovalService(
+      db,
+      email,
+      new AccountService(db),
+      new CohortAssignmentService(db),
+    );
   }
 
   async decidir(id: string, actor: string, input: unknown): Promise<DecisionResult> {
     const decision = validateEnrollmentDecision(input);
-    if (decision.accion === 'aprobar') return this.aprobar(id);
+    if (decision.accion === 'aprobar') return this.aprobar(id, actor);
     if (decision.motivoCodigo === null || decision.mensaje === null)
       throw solicitudError('Selecciona un motivo válido.', 400, 'MOTIVO_INVALIDO');
     return decision.accion === 'devolver'
@@ -121,12 +128,15 @@ export class SolicitudDecisionService {
     return result;
   }
 
-  private async aprobar(id: string): Promise<DecisionResult> {
-    await this.approval.validarRequisitos(id);
-    throw solicitudError(
-      'La creación de la cuenta del alumno se habilita en la siguiente entrega.',
-      503,
-      'APROBACION_NO_DISPONIBLE',
-    );
+  private async aprobar(id: string, actor: string): Promise<DecisionResult> {
+    const r = await this.approval.aprobar(id, actor);
+    return {
+      id,
+      estado: 'aprobada',
+      studentId: r.studentId,
+      cohorte: r.cohorte,
+      pendienteCohorte: r.pendienteCohorte,
+      correoEnviado: r.correoEnviado,
+    };
   }
 }
