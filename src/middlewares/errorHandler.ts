@@ -68,6 +68,7 @@ export function errorHandler(
   ) {
     const normalized = normalizeSolicitudError(err);
     const operational = normalized instanceof AppError;
+    if (!operational) logSafeError('enrollment_request_failed', err);
     const authRequired = operational && normalized.statusCode === 401;
     res.status(operational ? normalized.statusCode : 500).json({
       status: 'error',
