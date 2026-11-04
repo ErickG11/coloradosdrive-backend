@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { isProduction } from '../config/env';
 import { normalizeSolicitudError, solicitudErrorCode } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
+import { logSafeError } from '../utils/safeLog';
 
 interface ErrorResponseBody {
   status: 'error';
@@ -97,7 +98,7 @@ export function errorHandler(
     err instanceof AppError && err.isOperational ? err.message : 'Internal server error';
 
   if (!(err instanceof AppError) || !err.isOperational) {
-    console.error(err);
+    logSafeError('unhandled_request_error', err);
   }
 
   const body: ErrorResponseBody = { status: 'error', message };

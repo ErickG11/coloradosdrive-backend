@@ -37,6 +37,7 @@ import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
 import type { EmailService } from './email.service';
+import { buildIlikeOr } from '../utils/postgrestSearch';
 
 type SolicitudRow = Database['public']['Tables']['solicitudes_inscripcion']['Row'];
 type DocumentoRow = Database['public']['Tables']['solicitud_documentos']['Row'];
@@ -292,9 +293,9 @@ export class SolicitudService {
     else if (estado) {
       query = query.eq('estado', estado);
     }
-    // q se limita a caracteres literales para no inyectar operadores PostgREST.
-    const search = q.replace(/[^\p{L}\p{N}@. _-]/gu, '').trim();
-    if (search) query = query.or(`cedula.ilike.%${search}%,nombre_completo.ilike.%${search}%,correo.ilike.%${search}%`);
+    // q se sanea y entrecomilla (F22): %, _, comas, paréntesis y puntos son literales.
+    const searchFilter = buildIlikeOr(['cedula', 'nombre_completo', 'correo'], q);
+    if (searchFilter) query = query.or(searchFilter);
     const { data: solicitudes, error, count } = await query.range((page - 1) * pageSize, page * pageSize - 1);
     if (error) {
       throw error;
