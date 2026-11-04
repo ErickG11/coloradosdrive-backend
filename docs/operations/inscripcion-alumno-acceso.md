@@ -45,3 +45,15 @@ Este contrato no revela instructor antes de pago ni campos de otro alumno.
 La protección de Realtime del alumno sigue sin privilegios sobre tablas public;
 con cohorte tentativa status pendiente_cohorte no pasa el helper de canal que
 requiere statusactivo (legacy/manual permanece igual).
+
+## Frontend I04
+
+Ruta /student/inscripcion con stepper de3 pasos y documentos completos. I09 integra
+selector/reservas y I12 el checkout; mientras tanto muestran indisponibilidad real,
+sin crear reservas ficticias. Datos siempre del backend autenticado.
+Proxy usa account-status y restringe rutas, layout consulta también el backend y
+pasa únicamente un booleano al Sidebar. El JWT nunca pasa como prop ni a logs.
+Únicos cambios compartidos: prop opcional en DashboardShell/Sidebar para el menú
+pedido. Rootlayout/globals/tokens intactos. Las notificaciones/logout siguen propios.
+El cliente global de API mantiene401/403/MFA; errores de capacidad del admin se
+mapean explícitamente junto al campo de cupo, conservando recarga ante conflictos.
