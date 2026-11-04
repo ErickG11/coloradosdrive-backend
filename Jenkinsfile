@@ -89,9 +89,9 @@ pipeline {
                 }
                 stage('Auditoría') {
                     steps {
-                        // No bloqueante: una vulnerabilidad alta se reporta como advertencia.
+                        // Bloqueante: no entregar dependencias con avisos altos o críticos.
                         script {
-                            lib.runNonBlocking('Auditoría', 'auditoría', 8, warnings) {
+                            lib.withStageTimeout('Auditoría', 8) {
                                 sh 'npm audit --omit=dev --audit-level=high'
                             }
                         }

@@ -107,10 +107,27 @@ function htmlToText(html: string): string {
 }
 
 function recipients(value: SendMailOptions['to']): string {
-  return (Array.isArray(value) ? value : [value])
-    .map((address) => (typeof address === 'string' ? address : (address?.address ?? '')))
-    .filter(Boolean)
-    .join(', ');
+  // Nodemailer10 admite listas anidadas; recorrido acotado sin recursión.
+  const pending: unknown[] = [value];
+  const addresses: string[] = [];
+  let visited = 0;
+  while (pending.length) {
+    if (++visited > 1000) throw new Error('Lista de destinatarios demasiado grande');
+    const entry = pending.pop();
+    if (Array.isArray(entry)) {
+      if (entry.length > 1000) throw new Error('Lista de destinatarios demasiado grande');
+      for (let i = entry.length - 1; i >= 0; i--) pending.push(entry[i]);
+    } else if (typeof entry === 'string' && entry) addresses.push(entry);
+    else if (
+      entry &&
+      typeof entry === 'object' &&
+      'address' in entry &&
+      typeof entry.address === 'string' &&
+      entry.address
+    )
+      addresses.push(entry.address);
+  }
+  return addresses.join(', ');
 }
 
 export const consoleMailer: MailTransport = {

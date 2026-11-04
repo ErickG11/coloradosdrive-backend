@@ -81,7 +81,7 @@ Si una aprobación queda «en curso» porque el proceso murió, liberar a mano `
 4. Enrolar TOTP de cada admin y solo después poner `ADMIN_MFA_REQUIRED=true`.
 5. Confirmar la URL del Registro Civil en `lib/content/verificacion-links.ts` del frontend.
 6. Revisión legal del aviso de privacidad y de los términos (hoy son borrador).
-7. `npm audit` marca nodemailer (alta) con salto de versión mayor: decidir y quitar `continue-on-error` del CI.
+7. F44-b actualiza Nodemailer a10.3.1 y hace bloqueante la auditoría de producción del CI; ver `inscripcion-correo-seguridad.md`.
 
 ## Guion de prueba manual (correo en modo console)
 Con `EMAIL_PROVIDER=console`, `CAPTCHA_PROVIDER=off` y datos ficticios (cédula válida de prueba, correo
