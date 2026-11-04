@@ -4,6 +4,14 @@ import { isProduction } from '../config/env';
 import { normalizeSolicitudError, solicitudErrorCode } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { logSafeError } from '../utils/safeLog';
+import { MENSAJE_DATOS_DUPLICADOS } from '../config/enrollmentCatalog';
+
+const ADMIN_IDENTITY_CODES = new Set([
+  'CEDULA_DUPLICADA',
+  'IDENTIDAD_NO_VERIFICADA',
+  'ESTUDIOS_NO_VERIFICADOS',
+  'CUENTA_YA_EXISTE',
+]);
 
 interface ErrorResponseBody {
   status: 'error';
@@ -25,6 +33,18 @@ export function errorHandler(
   res: Response<ErrorResponseBody>,
   _next: NextFunction,
 ): void {
+  // Frontera de salida S1: tampoco revelar detalles/campos/stack por rutas hermanas.
+  const identityError = normalizeSolicitudError(err);
+  const authenticatedAdmin =
+    req.user?.role === 'admin' && /^\/admin(?:\/|$|\?)/.test(req.originalUrl);
+  if (!authenticatedAdmin && ADMIN_IDENTITY_CODES.has(solicitudErrorCode(identityError))) {
+    res.status(409).json({
+      status: 'error',
+      message: MENSAJE_DATOS_DUPLICADOS,
+      code: 'DATOS_NO_REGISTRADOS',
+    });
+    return;
+  }
   if (
     /^\/(?:(?:admin\/)?solicitudes|admin\/inscripciones|public\/inscripcion)(?:\/|$|\?)/.test(
       req.originalUrl,
