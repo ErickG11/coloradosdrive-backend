@@ -76,6 +76,19 @@ export interface Database {
         Args: {p_id:string;p_actor:string;p_tipo:string;p_metodo:string;p_resultado:string;p_nota:string|null;p_habilita:boolean};
         Returns: {id:string;tipo:'identidad'|'estudios';metodo:string;resultado:'verificado'|'no_coincide'|'no_encontrado';nota:string|null;createdAt:string}|null;
       };
+      // F15 (SQL051): decisiones del admin.
+      devolver_solicitud_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_motivo:string;p_mensaje:string;p_nota:string|null};
+        Returns: {id:string;estado:'devuelta';correo:string}|null;
+      };
+      rechazar_solicitud_inscripcion: {
+        Args: {p_id:string;p_actor:string;p_motivo:string;p_mensaje:string;p_nota:string|null;p_bloqueo_hash:string|null;p_bloqueo_dias:number|null};
+        Returns: {id:string;estado:'rechazada';correo:string}|null;
+      };
+      validar_aprobacion_inscripcion: {
+        Args: {p_id:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
+        Returns: undefined;
+      };
       listar_solicitudes_admin: {
         Args: {p_estado:string|null;p_q:string|null;p_page:number;p_size:number};
         Returns: {items:Record<string,unknown>[];total:number;page:number;pageSize:number}|null;

@@ -13,6 +13,7 @@ import {
   confirmarCodigo,
   certificadoUrl,
   decidirSolicitud,
+  decisionSolicitud,
   detalleSolicitud,
   documentoUrl,
   eliminarSolicitud,
@@ -228,4 +229,11 @@ solicitudAdminRouter.get(
   idParamValidator,
   validate,
   asyncHandler(certificadoUrl),
+);
+
+solicitudAdminRouter.post(
+  '/:id/decision',
+  idParamValidator,
+  validate,
+  asyncHandler(decisionSolicitud),
 );

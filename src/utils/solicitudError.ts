@@ -70,6 +70,18 @@ export function normalizeSolicitudError(error: Error): Error {
       'REPRESENTANTE_NO_APLICA',
       'No se requieren datos del representante para una persona adulta.',
     ],
+    // B1 (F15): requisitos de aprobación.
+    SI460: [409, 'CEDULA_DUPLICADA', 'Ya existe un usuario o una solicitud activa con esta cédula.'],
+    SI461: [
+      409,
+      'IDENTIDAD_NO_VERIFICADA',
+      'Falta una verificación de identidad vigente con un método válido.',
+    ],
+    SI462: [
+      409,
+      'ESTUDIOS_NO_VERIFICADOS',
+      'Falta una verificación de estudios vigente con un método válido.',
+    ],
   };
   const entry = typeof sql === 'string' ? map[sql] : undefined;
   if (entry) {

@@ -5,7 +5,10 @@ export function logSolicitudFailure(
     | 'verification_email_failed'
     | 'received_email_failed'
     | 'approval_email_failed'
-    | 'enrollment_rollback_failed',
+    | 'enrollment_rollback_failed'
+    // B1 (F15)
+    | 'return_email_failed'
+    | 'rejection_email_failed',
 ): void {
   console.error(JSON.stringify({ event }));
 }

@@ -313,6 +313,19 @@ export class EmailService {
       ].join('\n'),
     });
   }
+  // Devolución: texto fijo sin datos del postulante, del motivo ni de archivos.
+  async sendApplicationReturnedEmail(params: { to: string }): Promise<void> {
+    const url = `${env.FRONTEND_URL}/inscripcion`;
+    const intro = 'Tu solicitud necesita una corrección.';
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      subject: 'Tu solicitud necesita una corrección',
+      text: `${intro} Ingresa a ${url} con tu correo para verla.`,
+      html: `<p>${intro} Ingresa a <a href="${escapeHtml(url)}">${escapeHtml(url)}</a> con tu correo para verla.</p>`,
+    });
+  }
+
   async sendApplicationRejectedEmail(params: { to: string; motivo: string }): Promise<void> {
     await this.transporter.sendMail({ from: env.EMAIL_FROM, to: params.to,
       subject: 'Revisión de tu solicitud de ColoradosDrive',
