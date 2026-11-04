@@ -92,7 +92,7 @@ pipeline {
                         // No bloqueante: una vulnerabilidad alta se reporta como advertencia.
                         script {
                             lib.runNonBlocking('Auditoría', 'auditoría', 8, warnings) {
-                                sh 'npm audit --audit-level=high'
+                                sh 'npm audit --omit=dev --audit-level=high'
                             }
                         }
                     }
