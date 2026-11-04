@@ -5,6 +5,7 @@ import { verifySupabaseJwt } from '../config/jwks';
 import { supabaseAdmin } from '../config/supabase';
 import { isRole, type AuthenticatedUser } from '../models/user.model';
 import { AppError } from '../utils/AppError';
+import { markGuard } from '../utils/routeGuards';
 
 // Las excepciones de contraseña NO eximen de comprobar perfil y activo.
 // Se compara baseUrl+path para cubrir los routers montados.
@@ -109,3 +110,5 @@ export async function authenticate(
     next(new AppError('Invalid or expired token', 401));
   }
 }
+
+markGuard(authenticate, 'authenticate');
