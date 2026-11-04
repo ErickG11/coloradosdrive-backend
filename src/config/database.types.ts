@@ -308,6 +308,15 @@ export interface Database {
         };
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
       };
+      // B2 · F19
+      confirmar_identidad_presencial: {
+        Args: { p_slot: string; p_instructor: string; p_certificado_visto: boolean };
+        Returns: { transicion: boolean; confirmadaAt: string; certificadoOriginalVisto: boolean };
+      };
+      franjas_identidad_pendiente: {
+        Args: { p_instructor: string; p_slots: string[] };
+        Returns: { slot_id: string; certificado_requerido: boolean }[];
+      };
     };
     Tables: {
       app_settings:{Row:{id:boolean;inscripciones_abiertas:boolean;updated_by:string|null;updated_at:string};Insert:{id?:boolean;inscripciones_abiertas?:boolean;updated_by?:string|null};Update:{inscripciones_abiertas?:boolean;updated_by?:string|null;updated_at?:string};Relationships:[]};
