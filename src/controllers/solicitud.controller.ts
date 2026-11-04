@@ -7,13 +7,13 @@ import type {
   ConfirmarCodigoResult,
   DecidirSolicitudInput,
   SolicitudDocumentoResult,
-  SolicitudEstado,
   VerificarCorreoInput,
 } from '../models/solicitud.model';
 import { AccountService } from '../services/account.service';
 import { CohortAssignmentService } from '../services/cohortAssignment.service';
 import { EmailService } from '../services/email.service';
 import { SolicitudService, type DecidirSolicitudResult } from '../services/solicitud.service';
+import { SolicitudAdminService, type AdminEstadoLista } from '../services/solicitudAdmin.service';
 import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPrivacy.service';
 import { SolicitudDocumentAccessService } from '../services/solicitudAudit.service';
 import { SolicitudDeletionService } from '../services/solicitudDeletion.service';
@@ -87,12 +87,36 @@ function requireAdminId(req: Request): string {
   return req.user.id;
 }
 
-export async function listarSolicitudes(
-  req: Request,
-  res: Response,
-): Promise<void> {
-  const estado = req.query.estado as SolicitudEstado | 'con_documentos_por_revisar' | undefined;
-  res.status(200).json(await solicitudService.listarParaAdmin(estado, Number(req.query.page ?? 1), Number(req.query.pageSize ?? 20), typeof req.query.q === 'string' ? req.query.q : ''));
+const adminService = new SolicitudAdminService(supabaseAdmin);
+
+export async function listarSolicitudes(req: Request, res: Response): Promise<void> {
+  const estado = req.query.estado as AdminEstadoLista | undefined;
+  const q = typeof req.query.q === 'string' ? req.query.q : '';
+  const result = await adminService.listar(
+    estado,
+    q,
+    Number(req.query.page ?? 1),
+    Number(req.query.pageSize ?? 20),
+  );
+  res.set('Cache-Control', 'no-store').status(200).json(result);
+}
+
+export async function detalleSolicitud(req: Request, res: Response): Promise<void> {
+  res.set('Cache-Control', 'no-store').json(await adminService.detalle(req.params.id));
+}
+
+export async function registrarVerificacion(req: Request, res: Response): Promise<void> {
+  const result = await adminService.registrarVerificacion(
+    req.params.id,
+    requireAdminId(req),
+    req.body as unknown,
+  );
+  res.set('Cache-Control', 'no-store').status(201).json(result);
+}
+
+export async function certificadoUrl(req: Request, res: Response): Promise<void> {
+  const result = await adminService.urlCertificado(req.params.id, requireAdminId(req));
+  res.set('Cache-Control', 'no-store').json(result);
 }
 
 export async function revisarDocumento(

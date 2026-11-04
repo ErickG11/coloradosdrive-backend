@@ -6,18 +6,13 @@ import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
 import {
-  EDAD_EXENCION_PAPELETA,
-  TIPOS_DOCUMENTO,
-  type ChecklistItem,
   type CompletarDatosResult,
   type ConfirmarCodigoResult,
   type DecidirSolicitudInput,
-  type SolicitudAdminView,
-  type SolicitudRelacionada,
   type SolicitudDocumentoResult,
   type SolicitudEstado,
 } from '../models/solicitud.model';
-import { calcularEdad, validateApplicant } from '../utils/solicitudAge';
+import { validateApplicant } from '../utils/solicitudAge';
 import { SolicitudPrivacyService } from './solicitudPrivacy.service';
 import { recordSolicitudAudit } from './solicitudAudit.service';
 import { logSolicitudFailure } from '../utils/solicitudLog';
@@ -39,7 +34,6 @@ import { isCupoExceededError, type CohortAssignmentService } from './cohortAssig
 import type { EmailService } from './email.service';
 
 type SolicitudRow = Database['public']['Tables']['solicitudes_inscripcion']['Row'];
-type DocumentoRow = Database['public']['Tables']['solicitud_documentos']['Row'];
 
 // Tope de reintentos ante una condición de carrera real por el último
 // cupo de una cohorte (ver enforce_cohort_cupo, migración 014): cada
@@ -70,31 +64,6 @@ function isUniqueViolation(error: PostgrestError | null): boolean {
 }
 
 export { calcularEdad } from '../utils/solicitudAge';
-
-function toAdminView(
-  row: SolicitudRow,
-  documentos: ChecklistItem[],
-  solicitudesRelacionadas: SolicitudRelacionada[],
-): SolicitudAdminView {
-  return {
-    id: row.id,
-    courseId: row.course_id,
-    cedula: row.cedula,
-    nombreCompleto: row.nombre_completo,
-    telefono: row.telefono,
-    correo: row.correo,
-    fechaNacimiento: row.fecha_nacimiento,
-    correoVerificado: row.correo_verificado,
-    estado: row.estado,
-    motivoRechazo: row.motivo_rechazo,
-    reviewedBy: row.reviewed_by,
-    reviewedAt: row.reviewed_at,
-    studentId: row.student_id,
-    createdAt: row.created_at,
-    documentos,
-    solicitudesRelacionadas,
-  };
-}
 
 export interface DecidirSolicitudResult {
   id: string;
@@ -280,104 +249,6 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   async resumen():Promise<EnrollmentSummary>{return new EnrollmentLimitsService(this.supabase).summary();}
 
-  async listarParaAdmin(estado?: SolicitudEstado | 'con_documentos_por_revisar', page = 1, pageSize = 20, q = ''): Promise<{ items: SolicitudAdminView[]; total: number; page: number; pageSize: number }> {
-    // Las filas que solo verificaron el correo (sin cédula) son solicitudes
-    // en progreso: todavía no hay nada que revisar.
-    let query = this.supabase
-      .from('solicitudes_admin')
-      .select('*', { count: 'exact' })
-      .not('enviada_at', 'is', null)
-      .order('orden_grupo').order('pendiente_desde',{ascending:true,nullsFirst:false}).order('decidida_at',{ascending:false,nullsFirst:false}).order('id');
-    if (estado === 'con_documentos_por_revisar') query=query.gt('documentos_por_revisar',0).in('estado',['pendiente_revision','aprobada']);
-    else if (estado) {
-      query = query.eq('estado', estado);
-    }
-    // q se limita a caracteres literales para no inyectar operadores PostgREST.
-    const search = q.replace(/[^\p{L}\p{N}@. _-]/gu, '').trim();
-    if (search) query = query.or(`cedula.ilike.%${search}%,nombre_completo.ilike.%${search}%,correo.ilike.%${search}%`);
-    const { data: solicitudes, error, count } = await query.range((page - 1) * pageSize, page * pageSize - 1);
-    if (error) {
-      throw error;
-    }
-    if (solicitudes.length === 0) {
-      return { items: [], total: count ?? 0, page, pageSize };
-    }
-
-    const { data: documentos, error: docsError } = await this.supabase
-      .from('solicitud_documentos')
-      .select()
-      .in(
-        'solicitud_id',
-        solicitudes.map((s) => s.id),
-      );
-    if (docsError) {
-      throw docsError;
-    }
-
-    const urlByPath = new Map<string, string>();
-    const { data: consents, error: consentError } = await this.supabase.from('solicitud_consentimientos').select().in('solicitud_id', solicitudes.map(s => s.id)).order('aceptado_at', { ascending: false });
-    if (consentError) throw consentError;
-    const relatedByCedula = await this.findRelatedByCedula(solicitudes);
-
-    const items = solicitudes.map((solicitud) => ({
-      ...toAdminView(
-        solicitud,
-        this.buildChecklist(
-          solicitud,
-          documentos.filter((d) => d.solicitud_id === solicitud.id),
-          urlByPath,
-        ),
-        (relatedByCedula.get(solicitud.cedula ?? '') ?? []).filter((r) => r.id !== solicitud.id),
-      ),
-      solicitadaAt: solicitud.solicitada_at,
-      enviadaAt: solicitud.enviada_at,
-      documentosPorRevisar: solicitud.documentos_por_revisar,
-      consentimiento: ((): SolicitudAdminView['consentimiento'] => {
-        const c = consents.find(c => c.solicitud_id === solicitud.id);
-        return c ? { version: c.version_aviso, aceptadoAt: c.aceptado_at, representanteNombre: c.representante_nombre, representanteCedula: c.representante_cedula, representanteAcepta: c.representante_acepta } : null;
-      })(),
-    }));
-    return { items, total: count ?? 0, page, pageSize };
-  }
-
-  // Cualquier OTRA solicitud (de cualquier estado) que comparta cédula con
-  // alguna de las que se están mostrando — solo contexto de lectura para el
-  // admin (ver hallazgo de suplantación en completarDatos), el sistema
-  // nunca decide nada a partir de esto.
-  private async findRelatedByCedula(
-    solicitudes: Pick<SolicitudRow, 'cedula'>[],
-  ): Promise<Map<string, SolicitudRelacionada[]>> {
-    const cedulas = [
-      ...new Set(solicitudes.map((s) => s.cedula).filter((c): c is string => c !== null)),
-    ];
-    if (cedulas.length === 0) {
-      return new Map();
-    }
-
-    const { data, error } = await this.supabase
-      .from('solicitudes_inscripcion')
-      .select('id, cedula, correo, estado, created_at')
-      .in('cedula', cedulas).not('enviada_at', 'is', null);
-    if (error) {
-      throw error;
-    }
-
-    const byCedula = new Map<string, SolicitudRelacionada[]>();
-    for (const row of data) {
-      // La query solo puede devolver filas cuya cédula está en `cedulas`
-      // (todas ya filtradas como no-null), así que esta rama es inalcanzable
-      // en la práctica — se descarta explícitamente en vez de forzar el
-      // tipo, para que TS siga verificando el resto sin asertar nada.
-      if (row.cedula === null) {
-        continue;
-      }
-      const list = byCedula.get(row.cedula) ?? [];
-      list.push({ id: row.id, correo: row.correo, estado: row.estado, createdAt: row.created_at });
-      byCedula.set(row.cedula, list);
-    }
-    return byCedula;
-  }
-
   async revisarDocumento(
     solicitudId: string,
     documentoId: string,
@@ -551,39 +422,5 @@ export class SolicitudService {
       throw new AppError('La solicitud no existe', 404);
     }
     return data;
-  }
-
-  private buildChecklist(
-    solicitud: SolicitudRow,
-    documentos: DocumentoRow[],
-    urlByPath: Map<string, string>,
-  ): ChecklistItem[] {
-    const exentaDePapeleta =
-      solicitud.fecha_nacimiento !== null &&
-      calcularEdad(solicitud.fecha_nacimiento) >= EDAD_EXENCION_PAPELETA;
-
-    return TIPOS_DOCUMENTO.map((tipo) => {
-      const doc = documentos.find((d) => d.tipo_documento === tipo);
-      if (!doc) {
-        return {
-          tipoDocumento: tipo,
-          estado: tipo === 'papeleta_votacion' && exentaDePapeleta ? 'no_aplica' : 'faltante',
-          documentoId: null,
-          url: null,
-          motivoRechazo: null,
-          uploadedAt: null,
-          reviewedAt: null,
-        };
-      }
-      return {
-        tipoDocumento: tipo,
-        estado: doc.estado,
-        documentoId: doc.id,
-        url: urlByPath.get(doc.storage_path) ?? null,
-        motivoRechazo: doc.motivo_rechazo,
-        uploadedAt: doc.uploaded_at,
-        reviewedAt: doc.reviewed_at,
-      };
-    });
   }
 }
