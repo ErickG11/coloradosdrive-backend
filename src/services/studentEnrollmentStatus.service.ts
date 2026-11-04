@@ -75,7 +75,7 @@ export class StudentEnrollmentStatusService {
     const enrollments = await this.db
       .from('enrollments')
       .select(
-        'id,cohort_id,origen,requisitos_verificados_at,identidad_presencial_at,created_at,cohorts(nombre,fecha_fin_matricula)',
+        'id,cohort_id,origen,requisitos_verificados_at,identidad_presencial_at,created_at,cohorts!enrollments_cohort_id_fkey(nombre,fecha_fin_matricula)',
       )
       .eq('student_id', studentId)
       .in('status', ESTADOS_VIGENTES)
