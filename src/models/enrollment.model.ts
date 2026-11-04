@@ -1,6 +1,6 @@
 // 'pendiente_cohorte': inscripción aprobada pero sin cohorte asignada
 // (ninguna cohorte del curso tenía matrícula abierta al momento de la
-// asignación automática). Nunca tiene cohortId ni montoTotal (ver
+// asignación automática). En etapa reservado puede tener cohorte tentativa sin monto (ver
 // enrollments_pendiente_cohorte_shape en la base de datos).
 export const ENROLLMENT_STATUSES = [
   'activo',

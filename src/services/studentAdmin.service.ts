@@ -46,6 +46,9 @@ export interface StudentDetail {
   practiceSchedule: StudentSchedule;
   enrollments: (ManualEnrollmentDetails & {
     status: EnrollmentRow['status'];
+    origen: EnrollmentRow['origen'];
+    etapa: EnrollmentRow['etapa_inscripcion'];
+    reservaExpiraAt: string | null;
     courseId: string;
     courseType: 'A' | 'B';
     fechaInscripcion: string;
@@ -235,6 +238,9 @@ export class StudentAdminService {
           (documentsResult.data ?? []).filter((d) => d.enrollment_id === e.id),
         ),
         status: e.status,
+        origen: e.origen,
+        etapa: e.etapa_inscripcion,
+        reservaExpiraAt: e.reserva_expira_at,
         courseId: e.course_id,
         courseType: e.course_type,
         fechaInscripcion: e.fecha_inscripcion,
