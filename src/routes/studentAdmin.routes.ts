@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate, validateStudentProfile } from '../middlewares/validate';
+import { StudentIdentityService } from '../services/studentIdentity.service';
 import { StudentAdminService } from '../services/studentAdmin.service';
 import { StudentAccessService } from '../services/studentAccess.service';
 import { StudentAccessLinkService } from '../services/studentAccessLink.service';
@@ -266,5 +267,17 @@ studentAdminRouter.post(
     res
       .set('Cache-Control', 'no-store')
       .json(await accessLinkService.reenviar(actor(req), req.params.id));
+  }),
+);
+
+const identityService = new StudentIdentityService(supabaseAdmin);
+studentAdminRouter.post(
+  '/:id/identidad-presencial',
+  [param('id').isUUID().withMessage('Alumno inválido')],
+  validateStudentProfile,
+  asyncHandler(async (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .json(await identityService.confirmar(req.params.id, actor(req), req.body as unknown));
   }),
 );

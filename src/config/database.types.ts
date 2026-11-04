@@ -351,6 +351,10 @@ export interface Database {
         };
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
       };
+      confirmar_identidad_presencial_admin: {
+        Args: { p_student: string; p_actor: string; p_motivo: string };
+        Returns: { transicion: boolean; confirmadaAt: string; confirmadaPor: string; enrollmentId: string };
+      };
       // B2 · F19
       confirmar_identidad_presencial: {
         Args: { p_slot: string; p_instructor: string; p_certificado_visto: boolean };

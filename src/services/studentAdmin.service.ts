@@ -36,6 +36,12 @@ export interface StudentDetail {
   direccion: string | null;
   createdAt: string;
   updatedAt: string;
+  identidadPresencial: {
+    origenSolicitud: boolean;
+    confirmada: boolean;
+    confirmadaAt: string | null;
+    confirmadaPor: string | null;
+  };
   graduation: StudentGraduation;
   practiceSchedule: StudentSchedule;
   enrollments: (ManualEnrollmentDetails & {
@@ -190,7 +196,14 @@ export class StudentAdminService {
           .eq('rol', 'instructor')
       : { data: [], error: null };
     if (instructors.error) throw databaseError(instructors.error);
+    const currentEnrollment = enrollments.length > 0 ? enrollments[0] : undefined;
     return {
+      identidadPresencial: {
+        origenSolicitud: currentEnrollment?.origen === 'solicitud',
+        confirmada: currentEnrollment?.identidad_presencial_at != null,
+        confirmadaAt: currentEnrollment?.identidad_presencial_at ?? null,
+        confirmadaPor: currentEnrollment?.identidad_presencial_por ?? null,
+      },
       graduation: studentGraduation(
         enrollments,
         documentsResult.data ?? [],
