@@ -32,7 +32,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "security:check-auth": "node scripts/check-auth-settings.js",
-    "security:routes": "ts-node --transpile-only src/scripts/securityRoutes.ts"
+    "security:routes": "ts-node --transpile-only src/scripts/securityRoutes.ts",
+    "check:inscripcion-migrations": "node -r ts-node/register/transpile-only tests/migrations/checkEnrollmentMigrations.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

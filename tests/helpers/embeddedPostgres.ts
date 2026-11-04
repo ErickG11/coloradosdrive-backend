@@ -14,19 +14,21 @@ export class EmbeddedPostgres {
   >();
   private readonly worker: Worker;
 
-  constructor(options: { btreeGist?: boolean } = {}) {
+  constructor(options: { btreeGist?: boolean; snapshot?: Uint8Array } = {}) {
     this.worker = new Worker(
       `
     const {parentPort,workerData} = require('node:worker_threads');
     const {PGlite} = require(workerData.modulePath);
     const options = workerData.btreeGist
       ? {extensions:{btree_gist:require(workerData.btreeGistPath).btree_gist}} : {};
-    const db = new PGlite(options);
+    const db = new PGlite({...options, ...(workerData.snapshot ? {loadDataDir:new Blob([workerData.snapshot])}: {})});
     let queue = Promise.resolve();
     parentPort.on('message', message => {
       queue = queue.then(async () => {
         try {
-          const result = message.op === 'query'
+          const result = message.op === 'snapshot'
+            ? new Uint8Array(await (await db.dumpDataDir('none')).arrayBuffer())
+            : message.op === 'query'
             ? await db.query(message.sql,message.params)
             : await db.exec(message.sql);
           parentPort.postMessage({id:message.id,result});
@@ -41,6 +43,7 @@ export class EmbeddedPostgres {
         workerData: {
           modulePath: require.resolve('@electric-sql/pglite'),
           btreeGist: options.btreeGist === true,
+          snapshot: options.snapshot,
           btreeGistPath: require.resolve('@electric-sql/pglite/contrib/btree_gist'),
         },
       },
@@ -81,6 +84,9 @@ export class EmbeddedPostgres {
   }
   async exec(sql: string): Promise<unknown> {
     return this.request('exec', sql);
+  }
+  async snapshot(): Promise<Uint8Array> {
+    return (await this.request('snapshot', '')) as Uint8Array;
   }
   async close(): Promise<void> {
     await this.worker.terminate();
