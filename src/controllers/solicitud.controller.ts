@@ -5,14 +5,13 @@ import { supabaseAdmin } from '../config/supabase';
 import type {
   CompletarDatosResult,
   ConfirmarCodigoResult,
-  DecidirSolicitudInput,
   SolicitudDocumentoResult,
   VerificarCorreoInput,
 } from '../models/solicitud.model';
 import { AccountService } from '../services/account.service';
 import { CohortAssignmentService } from '../services/cohortAssignment.service';
 import { EmailService } from '../services/email.service';
-import { SolicitudService, type DecidirSolicitudResult } from '../services/solicitud.service';
+import { SolicitudService } from '../services/solicitud.service';
 import { SolicitudAdminService, type AdminEstadoLista } from '../services/solicitudAdmin.service';
 import { SolicitudDecisionService } from '../services/solicitudDecision.service';
 import { SolicitudPrivacyService, privacyNotice } from '../services/solicitudPrivacy.service';
@@ -129,34 +128,6 @@ export async function decisionSolicitud(req: Request, res: Response): Promise<vo
 export async function certificadoUrl(req: Request, res: Response): Promise<void> {
   const result = await adminService.urlCertificado(req.params.id, requireAdminId(req));
   res.set('Cache-Control', 'no-store').json(result);
-}
-
-export async function revisarDocumento(
-  req: Request,
-  res: Response<{ id: string; estado: 'aprobado' | 'rechazado' }>,
-): Promise<void> {
-  const { estado, motivoRechazo } = req.body as {
-    estado: 'aprobado' | 'rechazado';
-    motivoRechazo?: string;
-  };
-  const result = await solicitudService.revisarDocumento(req.params.id, req.params.docId, requireAdminId(req), {
-    estado,
-    motivoRechazo,
-  });
-  res.status(200).json(result);
-}
-
-export async function decidirSolicitud(
-  req: Request,
-  res: Response<DecidirSolicitudResult>,
-): Promise<void> {
-  const adminId = requireAdminId(req);
-  const result = await solicitudService.decidir(
-    req.params.id,
-    adminId,
-    req.body as DecidirSolicitudInput,
-  );
-  res.status(200).json(result);
 }
 
 const privacyService = new SolicitudPrivacyService(supabaseAdmin);

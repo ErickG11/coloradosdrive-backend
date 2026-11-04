@@ -2,25 +2,20 @@ import { createHash, randomInt } from 'node:crypto';
 import { EnrollmentLimitsService } from './enrollmentLimits.service';
 import type { EnrollmentSummary } from '../models/enrollmentLimits.model';
 
-import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
 import {
   type CompletarDatosResult,
   type ConfirmarCodigoResult,
-  type DecidirSolicitudInput,
   type SolicitudDocumentoResult,
-  type SolicitudEstado,
 } from '../models/solicitud.model';
-import { validateApplicant } from '../utils/solicitudAge';
 import { SolicitudPrivacyService } from './solicitudPrivacy.service';
-import { recordSolicitudAudit } from './solicitudAudit.service';
 import { logSolicitudFailure } from '../utils/solicitudLog';
 import { solicitudError } from '../utils/solicitudError';
 import { AppError } from '../utils/AppError';
 import { PRIVACY_NOTICE_VERSION, TERMS_VERSION } from '../config/privacy';
 import { normalizeSolicitudError } from '../utils/solicitudError';
-import { NotificationService } from './notification.service';
 import { SolicitudCertificateStorage } from './solicitudCertificateStorage.service';
 import { prepareCertificate } from '../utils/certificateFile';
 import { NIVELES_ESTUDIOS, type NivelEstudios } from '../config/enrollmentCatalog';
@@ -30,23 +25,14 @@ import { normalizeEnrollmentEmail, requireKnownFields } from '../utils/enrollmen
 import { validateCertificateSubtype, validateEnrollmentData, validateVerificationCode } from '../utils/enrollmentValidation';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
-import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
+import type { CohortAssignmentService } from './cohortAssignment.service';
 import type { EmailService } from './email.service';
 
 type SolicitudRow = Database['public']['Tables']['solicitudes_inscripcion']['Row'];
 
-// Tope de reintentos ante una condición de carrera real por el último
-// cupo de una cohorte (ver enforce_cohort_cupo, migración 014): cada
-// intento excluye la cohorte que acaba de llenarse y vuelve a pedir
-// candidatas frescas. Es un caso rarísimo (dos aprobaciones exactamente
-// simultáneas para el mismo curso); el tope solo evita un loop patológico
-// si algo más estuviera mal.
-const MAX_INTENTOS_ASIGNACION_COHORTE = 5;
-
 export const SOLICITUDES_BUCKET = 'solicitudes-documentos';
 export const CODE_TTL_MINUTES = 15;
 export const MAX_CODE_ATTEMPTS = env.ENROLLMENT_FAILED_CODES_PER_EMAIL_DAILY_CAP;
-const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 // Filtro barato en Multer, ANTES de bufferizar el archivo completo (ver
 // middlewares/upload.ts): usa el Content-Type que declara el cliente,
@@ -59,21 +45,7 @@ function hashCode(code: string): string {
   return createHash('sha256').update(code).digest('hex');
 }
 
-function isUniqueViolation(error: PostgrestError | null): boolean {
-  return error?.code === POSTGRES_UNIQUE_VIOLATION;
-}
-
 export { calcularEdad } from '../utils/solicitudAge';
-
-export interface DecidirSolicitudResult {
-  id: string;
-  estado: SolicitudEstado;
-  studentId: string | null;
-  // Solo para 'aprobada': false si la cuenta se creó pero el correo con la
-  // clave temporal falló (queda registrado en logs para reintento manual).
-  correoEnviado: boolean | null;
-  cohorteAsignada?: { cohortId: string | null; estado: string };
-}
 
 // Recibe el cliente de Supabase y los servicios por constructor para poder
 // mockearlos en tests.
@@ -87,8 +59,9 @@ export class SolicitudService {
   constructor(
     private readonly supabase: SupabaseClient<Database>,
     private readonly emailService: EmailService,
-    private readonly accountService: AccountService,
-    private readonly cohortAssignmentService: CohortAssignmentService,
+    // Sin uso desde que la aprobación vive en SolicitudApprovalService; se conservan por firma.
+    readonly accountService: AccountService,
+    readonly cohortAssignmentService: CohortAssignmentService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -249,165 +222,9 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   async resumen():Promise<EnrollmentSummary>{return new EnrollmentLimitsService(this.supabase).summary();}
 
-  async revisarDocumento(
-    solicitudId: string,
-    documentoId: string,
-    adminId: string,
-    input: { estado: 'aprobado' | 'rechazado'; motivoRechazo?: string },
-  ): Promise<{ id: string; estado: 'aprobado' | 'rechazado' }> {
-    if (input.estado === 'rechazado' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
-    const row=await this.getOrThrow(solicitudId);
-    if(!row.enviada_at)throw solicitudError('La solicitud no ha sido enviada',409,'SOLICITUD_NO_ENVIADA');
-    if(row.estado==='rechazada'||(row.estado==='pendiente_revision'&&row.reviewed_at))throw solicitudError('La solicitud está cerrada o en resolución',409,'SOLICITUD_CERRADA');
-    const doc=await this.supabase.from('solicitud_documentos').select('id,estado').eq('id',documentoId).eq('solicitud_id',solicitudId).maybeSingle();
-    if(doc.error)throw doc.error;
-    if(!doc.data)throw solicitudError('El documento no existe en esta solicitud',404,'NO_ENCONTRADO');
-    if(doc.data.estado!=='recibido')throw solicitudError('Este documento ya fue revisado',409,'DOCUMENTO_YA_REVISADO');
-    return new NotificationService(this.supabase).reviewDocument(solicitudId,documentoId,adminId,input);
-  }
-
-  async decidir(
-    solicitudId: string,
-    adminId: string,
-    input: DecidirSolicitudInput,
-  ): Promise<DecidirSolicitudResult> {
-    if (input.estado === 'rechazada' && !input.motivoRechazo?.trim()) throw solicitudError('Indica el motivo del rechazo', 400, 'MOTIVO_REQUERIDO');
-    const solicitud = await this.getOrThrow(solicitudId);
-    if (!solicitud.enviada_at) throw solicitudError('La solicitud no ha sido enviada',409,'SOLICITUD_NO_ENVIADA');
-    if (solicitud.estado !== 'pendiente_revision' || solicitud.reviewed_at) {
-      throw new AppError('La solicitud ya fue resuelta', 409);
-    }
-
-    const reviewedAt = new Date().toISOString();
-
-    if (input.estado === 'rechazada') {
-      const { data, error } = await this.supabase
-        .from('solicitudes_inscripcion')
-        .update({
-          estado: 'rechazada',
-          motivo_rechazo: input.motivoRechazo ?? null,
-          reviewed_by: adminId,
-          reviewed_at: reviewedAt,
-        })
-        .eq('id', solicitudId)
-        .eq('estado', 'pendiente_revision').is('reviewed_at', null)
-        .select()
-        .maybeSingle();
-      if (error) {
-        throw error;
-      }
-      if (!data) {
-        throw new AppError('La solicitud ya fue resuelta', 409);
-      }
-      await recordSolicitudAudit(this.supabase, solicitudId, adminId, 'solicitud_rechazada');
-      let correoEnviado = true;
-      try { await this.emailService.sendApplicationRejectedEmail({ to: solicitud.correo, motivo: input.motivoRechazo?.trim() ?? '' }); }
-      catch { correoEnviado = false; }
-      return { id: solicitudId, estado: 'rechazada', studentId: null, correoEnviado };
-    }
-
-    if (!solicitud.cedula || !solicitud.nombre_completo || !solicitud.fecha_nacimiento || !solicitud.correo_verificado || !solicitud.solicitada_at) {
-      throw solicitudError('La solicitud no tiene los datos completos para aprobarse', 409, 'DATOS_INCOMPLETOS');
-    }
-    const consent = await new SolicitudPrivacyService(this.supabase).requireConsent(solicitudId);
-    validateApplicant(solicitud.fecha_nacimiento, {
-      nombre: consent.representante_nombre, cedula: consent.representante_cedula, acepta: consent.representante_acepta,
-    });
-    // Reclamo CAS antes de Auth: una sola decisión puede crear la cuenta.
-    const claim = await this.supabase.from('solicitudes_inscripcion')
-      .update({ reviewed_by: adminId, reviewed_at: reviewedAt }).eq('id', solicitudId)
-      .eq('estado', 'pendiente_revision').is('reviewed_at', null).select('id').maybeSingle();
-    if (claim.error) throw claim.error;
-    if (!claim.data) throw solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
-    let account: { userId: string; temporaryPassword: string } | null = null;
-    let assigned: { id: string; cohortId: string | null; estado: string };
-    let uncertain = false;
-    try {
-      account = await this.accountService.crearCuentaConClaveTemporal(solicitud.correo);
-      const { error } = await this.supabase.from('users').insert({
-        id: account.userId, cedula: solicitud.cedula, nombre_completo: solicitud.nombre_completo,
-        telefono: solicitud.telefono, fecha_nacimiento: solicitud.fecha_nacimiento,
-        rol: 'estudiante', status: 'verificado', debe_cambiar_password: true,
-      });
-      if (error) throw isUniqueViolation(error) ? solicitudError('Ya existe un usuario con esta cédula', 409, 'CEDULA_ACTIVA') : error;
-      assigned = await this.crearEnrollmentConAsignacion(account.userId, solicitud.course_id, new Date(solicitud.solicitada_at));
-      const result = await this.supabase.rpc('finalizar_aprobacion_solicitud', {
-        p_solicitud: solicitudId, p_actor: adminId, p_claim: reviewedAt, p_student: account.userId, p_enrollment: assigned.id,
-      });
-      if (result.error) {
-        // Una respuesta perdida puede ocultar una transacción ya confirmada.
-        const confirmed = await this.supabase.from('solicitudes_inscripcion').select('estado,student_id').eq('id', solicitudId).maybeSingle();
-        if (confirmed.error) {
-          uncertain = true;
-          throw solicitudError('No se pudo confirmar la aprobación. Recarga antes de reintentar', 503, 'APROBACION_NO_CONFIRMADA');
-        }
-        if (confirmed.data?.estado !== 'aprobada' || confirmed.data.student_id !== account.userId) throw result.error;
-      }
-    } catch (err) {
-      if (uncertain) throw err;
-      if (account) {
-        await this.eliminarEnrollmentDeEstudiante(account.userId);
-        await this.accountService.eliminarCuenta(account.userId);
-      }
-      const released = await this.supabase.from('solicitudes_inscripcion').update({ reviewed_at: null, reviewed_by: null })
-        .eq('id', solicitudId).eq('estado', 'pendiente_revision').eq('reviewed_at', reviewedAt);
-      if (released.error) console.error('solicitud_claim_release_failed');
-      throw err;
-    }
-    let correoEnviado = true;
-    try {
-      await this.emailService.sendApplicationApprovedEmail({ to: solicitud.correo, nombreCompleto: solicitud.nombre_completo, temporaryPassword: account.temporaryPassword });
-    } catch { correoEnviado = false; }
-    return { id: solicitudId, estado: 'aprobada', studentId: account.userId, correoEnviado,
-      cohorteAsignada: { cohortId: assigned.cohortId, estado: assigned.estado } };
-  }
-
   // ---------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------
-
-  // Asigna automáticamente una cohorte del curso indicado y crea el
-  // enrollment correspondiente. Si assignCohort no encuentra ninguna
-  // cohorte elegible, crea la inscripción como 'pendiente_cohorte' (sin
-  // cohortId ni montoTotal) — el admin la asignará manualmente después.
-  //
-  // Si la cohorte elegida se llenó por una condición de carrera real
-  // justo entre que se contó el cupo y este INSERT (ver
-  // enforce_cohort_cupo, migración 014), reintenta la asignación
-  // excluyendo esa cohorte, con candidatas y conteos frescos.
-  private async crearEnrollmentConAsignacion(studentId: string, courseId: string, requestedAt: Date): Promise<{ id: string; cohortId: string | null; estado: string }> {
-    const excluded: string[] = [];
-    for (let attempt = 0; attempt < MAX_INTENTOS_ASIGNACION_COHORTE; attempt++) {
-      const chosen = await this.cohortAssignmentService.assignCohortForSolicitud(courseId, requestedAt, excluded);
-      try {
-        const estado = chosen.cohortId ? 'activo' as const : 'pendiente_cohorte' as const;
-        const { data, error } = await this.supabase.from('enrollments').insert({
-          student_id: studentId, course_id: courseId, cohort_id: chosen.cohortId,
-          status: estado, monto_total: chosen.precio,
-        }).select('id').single();
-        if (error) throw error;
-        return { id: data.id, cohortId: chosen.cohortId, estado };
-      } catch (err) {
-        if (isCupoExceededError(err) && chosen.cohortId) { excluded.push(chosen.cohortId); continue; }
-        throw err;
-      }
-    }
-    const { data, error } = await this.supabase.from('enrollments').insert({
-      student_id: studentId, course_id: courseId, cohort_id: null, status: 'pendiente_cohorte', monto_total: null,
-    }).select('id').single();
-    if (error) throw error;
-    return { id: data.id, cohortId: null, estado: 'pendiente_cohorte' };
-  }
-
-  // Compensación best-effort (igual que AccountService.eliminarCuenta):
-  // si falla, solo se registra, nunca enmascara el error original que
-  // disparó el rollback.
-  private async eliminarEnrollmentDeEstudiante(studentId: string): Promise<void> {
-    const { error } = await this.supabase.from('enrollments').delete().eq('student_id', studentId);
-    if (error) {
-      logSolicitudFailure('enrollment_rollback_failed');
-    }
-  }
 
   private async getOrThrow(solicitudId: string): Promise<SolicitudRow> {
     const { data, error } = await this.supabase
