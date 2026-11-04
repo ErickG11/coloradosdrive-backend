@@ -20,6 +20,7 @@ export interface DecisionResult {
   id: string;
   estado: 'devuelta' | 'rechazada' | 'aprobada';
   studentId: string | null;
+  etapa?: 'por_agendar';
   cohorte?: { id: string; nombre: string } | null;
   pendienteCohorte?: boolean;
   correoEnviado?: boolean;
@@ -134,6 +135,7 @@ export class SolicitudDecisionService {
       id,
       estado: 'aprobada',
       studentId: r.studentId,
+      etapa: r.etapa,
       cohorte: r.cohorte,
       pendienteCohorte: r.pendienteCohorte,
       correoEnviado: r.correoEnviado,

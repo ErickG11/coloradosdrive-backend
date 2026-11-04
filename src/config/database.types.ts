@@ -71,6 +71,8 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      cohort_cupos_ocupados: { Args: {p_cohorts:string[]}; Returns:{cohort_id:string;ocupados:number}[] };
+
       tomar_recuperacion_aprobacion: {Args:{p_intento:string;p_ttl:number;p_forzar?:boolean};Returns:{intentoId:string;solicitudId:string;token:string}|null};
       cerrar_recuperacion_aprobacion: {Args:{p_intento:string;p_token:string};Returns:boolean};
       liberar_reclamo_aprobacion_legacy: {Args:{p_id:string;p_claim:string;p_ttl:number};Returns:boolean};
@@ -659,6 +661,8 @@ export interface Database {
           horas_practica_objetivo: number | null;
           fecha_inscripcion: string;
           origen: 'manual' | 'solicitud';
+          etapa_inscripcion: 'por_agendar' | 'reservado' | 'activa';
+          reserva_expira_at: string | null;
           requisitos_verificados_at: string | null;
           identidad_presencial_at: string | null;
           identidad_presencial_por: string | null;

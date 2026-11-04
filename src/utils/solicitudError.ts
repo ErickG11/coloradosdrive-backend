@@ -31,6 +31,7 @@ export function solicitudError(message: string, status: number, code: string): A
 export function normalizeSolicitudError(error: Error): Error {
   const sql = 'code' in error ? error.code : undefined;
   const map: Partial<Record<string, [number, string, string]>> = {
+    IE409: [409, 'APROBACION_REQUIERE_ACTUALIZACION', 'La aprobación requiere el backend actualizado. Recarga antes de reintentar.'],
     SI404: [404, 'NO_ENCONTRADO', 'La solicitud o el documento no existe'],
     SI401: [403, 'CORREO_NO_VERIFICADO', 'Verifica tu correo'],
     SI410: [409, 'SOLICITUD_ENVIADA', 'La solicitud ya fue enviada'],
