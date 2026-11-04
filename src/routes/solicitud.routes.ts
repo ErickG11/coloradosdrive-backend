@@ -11,10 +11,13 @@ import {
   progresoSolicitud,
   completarDatos,
   confirmarCodigo,
+  certificadoUrl,
   decidirSolicitud,
+  detalleSolicitud,
   documentoUrl,
   eliminarSolicitud,
   listarSolicitudes,
+  registrarVerificacion,
   revisarDocumento,
   subirDocumento,
   verificarCorreo,
@@ -25,7 +28,8 @@ import { requireRole } from '../middlewares/rbac.middleware';
 import { authenticateSolicitud } from '../middlewares/solicitudAuth.middleware';
 import { uploadCertificado } from '../middlewares/uploadCertificado';
 import { validateFields as validate } from '../middlewares/validate';
-import { DOCUMENTO_ESTADOS_REVISION, SOLICITUD_ESTADOS } from '../models/solicitud.model';
+import { DOCUMENTO_ESTADOS_REVISION } from '../models/solicitud.model';
+import { ADMIN_ESTADOS_LISTA } from '../services/solicitudAdmin.service';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireKnownFields } from '../utils/enrollmentSanitization';
 import { verifyEnrollmentCaptcha } from '../middlewares/captcha.middleware';
@@ -126,8 +130,8 @@ solicitudAdminRouter.get(
     query('q').optional().isString().trim().isLength({ max: 100 }),
     query('estado')
       .optional()
-      .isIn([...SOLICITUD_ESTADOS, 'con_documentos_por_revisar'])
-      .withMessage('estado debe ser uno de: ' + SOLICITUD_ESTADOS.join(', ')),
+      .isIn([...ADMIN_ESTADOS_LISTA])
+      .withMessage('estado debe ser uno de: ' + ADMIN_ESTADOS_LISTA.join(', ')),
   ],
   validate,
   asyncHandler(listarSolicitudes),
@@ -208,3 +212,20 @@ solicitudRouter.post(
 );
 
 solicitudAdminRouter.get('/resumen', asyncHandler(resumenSolicitudes));
+
+// F14: rutas con :id después de /resumen para que no lo capturen como UUID.
+solicitudAdminRouter.get('/:id', idParamValidator, validate, asyncHandler(detalleSolicitud));
+
+solicitudAdminRouter.post(
+  '/:id/verificaciones',
+  idParamValidator,
+  validate,
+  asyncHandler(registrarVerificacion),
+);
+
+solicitudAdminRouter.get(
+  '/:id/certificado/url',
+  idParamValidator,
+  validate,
+  asyncHandler(certificadoUrl),
+);
