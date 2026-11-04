@@ -1,11 +1,11 @@
-# Orden definitivo de migraciones del flujo final (042 a 054)
+# Orden definitivo de migraciones del flujo final y del alumno (042 a064)
 
-Ninguna se ha aplicado. Se aplican a mano, una por una, en este orden, con su
-`inscripcion-NNN-preflight.sql` antes y `inscripcion-NNN-verificacion.sql` (termina en
-ROLLBACK) después. Cada una tiene su `inscripcion-NNN-rollback.sql`. **Aplicarlas todas en
-una sola ventana y desplegar backend y frontend nuevos justo después**: 042 cambia estados y
-contratos, y el backend anterior deja de funcionar con ellas. Los números 055 a 059 quedaron
-reservados y sin usar.
+042–057 están aplicadas según confirmación del usuario (incluida056, confirmada
+por sus objetos); no se consultó Supabase. 057 se conserva intacta. Las nuevas se
+aplican MANUALMENTE, con preflight antes y verificación ROLLBACK después. Coordinar
+cada fase con su backend/frontend; los archivos reservados aún no existen.
+Numeración autorizada:058 I02,059 I05,060 I10;061–064 para ampliaciones necesarias.
+No modificar estados/cohortes/importes de matrículas existentes.
 
 | N.º | Tarea | Qué hace                                                                                                                                                | Depende de | Resultado esperado                                                                                                           |
 | --- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -22,6 +22,14 @@ reservados y sin usar.
 | 052 | F16   | Aprobación en dos pasos (reclamar y finalizar)                                                                                                          | 051        | RPC de aprobación; escribe `origen='solicitud'` y `requisitos_verificados_at`                                                |
 | 053 | F20   | Vencimiento de devueltas y detección de huérfanos                                                                                                       | 052        | RPC de vencimiento y de retención                                                                                            |
 | 054 | F19   | Confirmación atómica de identidad presencial                                                                                                            | 042 y 052  | RPC idempotente y auditada; marcas en la agenda del instructor                                                               |
+
+| 055 | F44-c | Intenciones durables y recuperación de aprobación | 052/054 | Aplicada, según usuario |
+| 056 | F44-d | Override admin de identidad presencial, auditado | 055 | Aplicada, según usuario; no reasignar número |
+| 057 | F46 | Conversión text→enum al finalizar aprobación | 055 | Aplicada e INMUTABLE |
+| 058 | I02 | Etapas de matrícula, aprobación sin cohorte/monto y cupo con reservas | 057/056 | Nueva, aplicación manual pendiente |
+| 059 | I05 | Reservas, contadores y transiciones atómicas | 058 | Número reservado, no implementada |
+| 060 | I10 | Pagos idempotentes y confirmación atómica | 059 | Número reservado, no implementada |
+| 061–064 | H7 | Ampliaciones que hagan falta | Según tarea | Reservadas |
 
 Después de aplicar cada una: ejecutar su verificación, anotar la hora y no continuar si
 alguna falla (usar su rollback). Pruebas manuales de red pendientes: el canal Realtime
@@ -129,7 +137,8 @@ Recorrido001–056:56 aplicaciones,34 preflights,27 verificaciones y37 rollbacks
 reporte `/tmp/inscripcion-f45-056.json`. Los scripts056 comprueban ACL/RLS, actor,
 matrícula manual, ventana no vencida, override exitoso, idempotencia y certificado
 original intacto usando fixtures que terminan en ROLLBACK. Ningún cambio a042–054.
-055/056 no se aplicaron en Supabase; siguen pendientes de ejecución manual.
+En aquella tanda055/056 quedaron pendientes de aplicación manual. El usuario confirmó
+posteriormente que ambas están aplicadas (estado vigente en la cabecera).
 
 ### Corrección057 (aprobación, 2026-11-04)
 
@@ -138,3 +147,14 @@ explícitamente a public.enrollment_status. Requiere052/055;056 es independiente
 Preflight, verificación de catálogo con ROLLBACK y rollback entregados, NO ejecutados
 (no hay autorización para ejecutar pruebas/SQL). Revisión estática únicamente;
 no se incluye057 en las cifras F45 anteriores. Ver inscripcion-057.md.
+
+
+### I02 — ensayo058 (2026-11-04)
+
+ArnésF45 con MIGRATIONS_THROUGH=058:058 aplicación/preflight/verificación/rollback OK.
+El recorrido001–058 terminó sin errores:58 aplicaciones,36 preflights,29 verificaciones,
+39 rollbacks OK. Reporte local /tmp/inscripcion-i02-058.json. Se incluyó057 intacta.
+Verificación058: nuevas aprobaciones por_agendar sin cohorte/monto; checklist y guarda055;
+manuales activa, bloqueo de asignación admin, cupo vigente/vencido y reserva→activa,
+reducción de cupo y resumen. No hubo SQL remoto ni otras suites. No prueba bloqueos
+multiconexión, Auth/red real ni pagos. Reaplicación/escenarios HTTP completos en deuda.
