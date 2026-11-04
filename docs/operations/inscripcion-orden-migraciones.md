@@ -130,3 +130,11 @@ reporte `/tmp/inscripcion-f45-056.json`. Los scripts056 comprueban ACL/RLS, acto
 matrícula manual, ventana no vencida, override exitoso, idempotencia y certificado
 original intacto usando fixtures que terminan en ROLLBACK. Ningún cambio a042–054.
 055/056 no se aplicaron en Supabase; siguen pendientes de ejecución manual.
+
+### Corrección057 (aprobación, 2026-11-04)
+
+057_aprobacion_estado_matricula.sql: delta de052 para convertir p_estado:text
+explícitamente a public.enrollment_status. Requiere052/055;056 es independiente.
+Preflight, verificación de catálogo con ROLLBACK y rollback entregados, NO ejecutados
+(no hay autorización para ejecutar pruebas/SQL). Revisión estática únicamente;
+no se incluye057 en las cifras F45 anteriores. Ver inscripcion-057.md.
