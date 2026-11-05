@@ -4,7 +4,8 @@
 por sus objetos); no se consultó Supabase. 057 se conserva intacta. Las nuevas se
 aplican MANUALMENTE, con preflight antes y verificación ROLLBACK después. Coordinar
 cada fase con su backend/frontend; los archivos reservados aún no existen.
-Numeración autorizada:058 I02,059 I05,060 I10;061–064 para ampliaciones necesarias.
+Numeración final: 058 I02, 059 I05, 060 I10, 061 I13, 062 ampliación I10.
+063–064 siguen reservadas. 058–062 creadas, comprobadas en arnés y SIN aplicar remotamente.
 No modificar estados/cohortes/importes de matrículas existentes.
 
 | N.º | Tarea | Qué hace                                                                                                                                                | Depende de | Resultado esperado                                                                                                           |
@@ -27,9 +28,11 @@ No modificar estados/cohortes/importes de matrículas existentes.
 | 056 | F44-d | Override admin de identidad presencial, auditado | 055 | Aplicada, según usuario; no reasignar número |
 | 057 | F46 | Conversión text→enum al finalizar aprobación | 055 | Aplicada e INMUTABLE |
 | 058 | I02 | Etapas de matrícula, aprobación sin cohorte/monto y cupo con reservas | 057/056 | Nueva, aplicación manual pendiente |
-| 059 | I05 | Reservas, contadores y transiciones atómicas | 058 | Número reservado, no implementada |
-| 060 | I10 | Pagos idempotentes y confirmación atómica | 059 | Número reservado, no implementada |
-| 061–064 | H7 | Ampliaciones que hagan falta | Según tarea | Reservadas |
+| 059 | I05 | Reservas, contadores y transiciones atómicas | 058 | Creada; aplicación manual pendiente |
+| 060 | I10 | Pagos idempotentes y confirmación atómica | 059 | Creada; aplicación manual pendiente |
+| 061 | I13 | Filtro de pendientes solo etapaactiva | 058/060 | Creada; aplicación manual pendiente |
+| 062 | I10 | Caducar solo intentos nunca enviados y revalidar lease antes de dispatch | 059/060/061 | Creada; aplicación manual pendiente |
+| 063–064 | H7 | Ampliaciones futuras | Según tarea | Reservadas; no creadas |
 
 Después de aplicar cada una: ejecutar su verificación, anotar la hora y no continuar si
 alguna falla (usar su rollback). Pruebas manuales de red pendientes: el canal Realtime
@@ -130,6 +133,7 @@ reales y la compatibilidad de cada flujo requieren la fase final de pruebas/F23.
 (`MIGRATIONS_THROUGH=055`, reporte `/tmp/inscripcion-f45-055.json`). El recorrido
 001–055 completo terminó sin errores. Verifica lease exclusivo, token de cierre,
 auditoría y ACL/RLS del ledger. No simula Auth real ni carreras multiconexión.
+
 ### Extensión F44-d (056)
 
 056: aplicación, preflight, verificación y rollback OK en arnés F45.
@@ -148,7 +152,6 @@ Preflight, verificación de catálogo con ROLLBACK y rollback entregados, NO eje
 (no hay autorización para ejecutar pruebas/SQL). Revisión estática únicamente;
 no se incluye057 en las cifras F45 anteriores. Ver inscripcion-057.md.
 
-
 ### I02 — ensayo058 (2026-11-04)
 
 ArnésF45 con MIGRATIONS_THROUGH=058:058 aplicación/preflight/verificación/rollback OK.
@@ -160,17 +163,27 @@ reducción de cupo y resumen. No hubo SQL remoto ni otras suites. No prueba bloq
 multiconexión, Auth/red real ni pagos. Reaplicación/escenarios HTTP completos en deuda.
 
 ### I05 —059 reservas (NO aplicada remotamente)
+
 Después de058:059_alumno_reservas_horario.sql; preflight, verificación con ROLLBACK
 y rollback en inscripcion-059-*.sql. Runbook inscripcion-059.md.
 060 reservada I10;061 filtro Alumnos I13;062–064 disponibles según autorización.
 
 ### I10 —060 pagos (NO aplicada remotamente)
+
 Orden057 aplicada →058 →059 →060_alumno_pagos_atomicos.sql, luego061 filtro I13.
 Preflight/verificación ROLLBACK/rollback en inscripcion-060-*.sql; runbook060.
 060 sustituye guardas de borrado globales por alumno antes de efectos externos,
-conserva pagos recibidos y no reescribe matrículas existentes.062–064 reservadas.
+conserva pagos recibidos y no reescribe matrículas existentes. 063–064 reservadas.
 
 ### I13 —061 filtro Alumnos (NO aplicada remotamente)
+
 Después de060:061_alumnos_pendientes_solo_activa.sql, preflight/verificación ROLLBACK/
 rollback inscripcion-061-*.sql. Solo semántica del filtro p_pending, sin mutar filas.
-No crear/aplicar062–064; siguen reservadas.058/059/060/061 se aplican MANUALMENTE.
+058/059/060/061/062 se aplican MANUALMENTE, en ese orden.
+
+### I10 —062 intentos sin envío (NO aplicada remotamente)
+
+Después de061:062_pagos_sin_envio_vencidos.sql y sus preflight/verificación ROLLBACK/
+rollback. Revalida reserva antes del dispatch y caduca solo pendientes nunca enviados;
+no cancela dinero en tránsito. Runbook inscripcion-062.md. F45 hasta062:
+62 aplicaciones,40 preflights,33 verificaciones y43 rollbacks OK. 063–064 reservadas.
