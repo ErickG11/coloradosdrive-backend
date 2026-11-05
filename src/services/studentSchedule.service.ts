@@ -3,40 +3,60 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import type { StudentScheduleConfig } from '../config/studentScheduleConfig';
 import type {
-  StudentScheduleAvailability,
   StudentScheduleInput,
+  StudentScheduleOptions,
+  StudentSchedulePreview,
+  StudentSchedulePreviewDay,
   StudentScheduleReservation,
   StudentScheduleSelection,
 } from '../models/studentSchedule.model';
 import { AppError } from '../utils/AppError';
-import { parseFechaCivil, SCHOOL_TIMEZONE, toScheduledAtUTC } from '../utils/schoolTimezone';
+import { SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
+import {
+  buildFixedPlan,
+  possibleStartHours,
+  summarizeSlots,
+  type FixedPlan,
+} from '../utils/studentFixedPlan';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { expireStudentSchedule } from './studentScheduleExpiry.service';
-import { PracticeSlotGenerationService } from './practiceSlotGeneration.service';
 
 type Db = SupabaseClient<Database>;
-type Cohort = Pick<
+type CohortRow = Pick<
   Database['public']['Tables']['cohorts']['Row'],
   | 'id'
+  | 'nombre'
   | 'fecha_inicio_curso'
   | 'fecha_fin_curso'
   | 'fecha_inicio_matricula'
   | 'fecha_fin_matricula'
   | 'cupo_maximo'
 >;
-const INVALID = (): AppError =>
-  new AppError('Revisa la modalidad, fecha de inicio y horas por día.', 400, {
-    code: 'PLAN_INVALIDO',
-  });
+const HOUR_MS = 3_600_000;
+const NO_COHORT_MESSAGE =
+  'No hay una cohorte con cupo que contenga todo el plan. Prueba un inicio posterior o consulta a la escuela.';
+const dateError = (message: string): AppError =>
+  new AppError(message, 400, { code: 'FECHA_INICIO_INVALIDA', field: 'fechaInicio' });
+
+function firstPlan(plans: Map<number, FixedPlan>): FixedPlan {
+  for (const plan of plans.values()) return plan;
+  throw new AppError('No se pudo calcular el plan.', 400, { code: 'PLAN_INVALIDO' });
+}
+interface Evaluation {
+  serverNow: string;
+  required: number;
+  plans: Map<number, FixedPlan>;
+  cohort: { id: string; nombre: string } | null;
+  sinCohorte: StudentScheduleOptions['sinCohorte'];
+  free: Map<number, boolean>;
+  own: number[];
+}
 
 export class StudentScheduleService {
-  private readonly planner: PracticeSlotGenerationService;
   constructor(
     private readonly db: Db,
     private readonly config: StudentScheduleConfig,
-  ) {
-    this.planner = new PracticeSlotGenerationService(db);
-  }
+  ) {}
 
   private async context(
     studentId: string,
@@ -74,48 +94,63 @@ export class StudentScheduleService {
     return { courseId: data.course_id, required };
   }
 
-  private dates(input: StudentScheduleInput, required: number): string[] {
-    if (
-      !['entre_semana', 'fin_de_semana'].includes(input.modalidad) ||
-      !Number.isInteger(input.horasPorDia) ||
-      input.horasPorDia < 1 ||
-      input.horasPorDia > 6
-    )
-      throw INVALID();
-    const start = parseFechaCivil(input.fechaInicio);
+  /** Mañana (Guayaquil) como mínimo y 365 días como máximo. */
+  private startDate(value: unknown): string {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+      throw dateError('Selecciona una fecha de inicio válida.');
+    const date = DateTime.fromISO(value, { zone: SCHOOL_TIMEZONE });
+    if (!date.isValid) throw dateError('Selecciona una fecha de inicio válida.');
     const today = DateTime.now().setZone(SCHOOL_TIMEZONE).startOf('day');
-    if (start < today || start > today.plus({ days: 365 })) throw INVALID();
-    return this.planner.sessionDates({
-      ...input,
-      numeroSesiones: Math.ceil(required / input.horasPorDia),
-    });
+    if (date < today.plus({ days: 1 }))
+      throw dateError('La fecha de inicio debe ser desde mañana.');
+    if (date > today.plus({ days: 365 }))
+      throw dateError('La fecha de inicio no puede superar un año.');
+    return value;
   }
 
-  private contains(cohort: Cohort, dates: string[], today: string): boolean {
+  private fits(cohort: CohortRow, first: string, last: string, today: string): boolean {
     return (
       cohort.fecha_inicio_matricula <= today &&
       today <= cohort.fecha_fin_matricula &&
-      dates[0] >= cohort.fecha_inicio_curso &&
-      dates[dates.length - 1] <=
-        parseFechaCivil(cohort.fecha_fin_curso)
+      first >= cohort.fecha_inicio_curso &&
+      last <=
+        DateTime.fromISO(cohort.fecha_fin_curso, { zone: SCHOOL_TIMEZONE })
           .minus({ days: this.config.COHORT_MARGIN_DAYS })
           .toFormat('yyyy-LL-dd')
     );
   }
 
-  async availability(
+  /**
+   * Un solo recorrido por la base: cohorte tentativa (misma regla que la RPC: primera
+   * por inicio e id con cupo) y disponibilidad en lote de TODAS las franjas candidatas.
+   */
+  private async evaluate(
     studentId: string,
     enrollmentId: string,
     input: StudentScheduleInput,
-  ): Promise<StudentScheduleAvailability> {
+    hours: number[],
+  ): Promise<Evaluation> {
     await this.expire(studentId);
     const { courseId, required } = await this.context(studentId, enrollmentId);
-    const dates = this.dates(input, required);
+    const start = this.startDate(input.fechaInicio);
+    const plans = new Map<number, FixedPlan>();
+    for (const hour of hours)
+      plans.set(
+        hour,
+        buildFixedPlan({
+          modalidad: input.modalidad,
+          fechaInicio: start,
+          horaInicio: hour,
+          horasPorDia: input.horasPorDia,
+          totalHoras: required,
+        }),
+      );
+    const sample = firstPlan(plans);
     const today = DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-LL-dd');
     const cohorts = await this.db
       .from('cohorts')
       .select(
-        'id,fecha_inicio_curso,fecha_fin_curso,fecha_inicio_matricula,fecha_fin_matricula,cupo_maximo',
+        'id,nombre,fecha_inicio_curso,fecha_fin_curso,fecha_inicio_matricula,fecha_fin_matricula,cupo_maximo',
       )
       .eq('course_id', courseId)
       .lte('fecha_inicio_matricula', today)
@@ -123,93 +158,186 @@ export class StudentScheduleService {
       .order('fecha_inicio_curso')
       .order('id');
     if (cohorts.error) throwStudentScheduleError(cohorts.error);
-    const candidates = cohorts.data.filter((c) => this.contains(c, dates, today));
-    let eligible = false;
-    if (candidates.length) {
+    const occupied = new Map<string, number>();
+    if (cohorts.data.length) {
       const counts = await this.db.rpc('cohort_cupos_ocupados', {
-        p_cohorts: candidates.map((c) => c.id),
+        p_cohorts: cohorts.data.map((c) => c.id),
       });
       if (counts.error) throwStudentScheduleError(counts.error);
-      const occupied = new Map(counts.data.map((c) => [c.cohort_id, c.ocupados]));
-      eligible = candidates.some(
-        (c) => occupied.has(c.id) && (occupied.get(c.id) ?? Infinity) < c.cupo_maximo,
-      );
+      for (const c of counts.data) occupied.set(c.cohort_id, c.ocupados);
     }
-    const cells = dates.flatMap((date) =>
-      Array.from({ length: 16 }, (_, i) => ({
-        date,
-        hour: i + 6,
-        scheduled: toScheduledAtUTC(parseFechaCivil(date), { hour: i + 6, minute: 0 }),
-      })),
+    const withRoom = cohorts.data.filter(
+      (c) => occupied.has(c.id) && (occupied.get(c.id) ?? Infinity) < c.cupo_maximo,
     );
+    const chosen = withRoom.find((c) =>
+      this.fits(c, sample.dias[0].fecha, sample.ultimaFecha, today),
+    );
+    let sinCohorte: Evaluation['sinCohorte'] = null;
+    if (!chosen) {
+      // Primera fecha posible: orientativa, el alumno vuelve a consultar.
+      let first: string | null = null;
+      const tomorrow = DateTime.now()
+        .setZone(SCHOOL_TIMEZONE)
+        .startOf('day')
+        .plus({ days: 1 })
+        .toFormat('yyyy-LL-dd');
+      for (const c of withRoom) {
+        const from = c.fecha_inicio_curso > tomorrow ? c.fecha_inicio_curso : tomorrow;
+        try {
+          const alt = buildFixedPlan({
+            modalidad: input.modalidad,
+            fechaInicio: from,
+            horaInicio: 6,
+            horasPorDia: input.horasPorDia,
+            totalHoras: required,
+          });
+          if (this.fits(c, alt.fechaInicioEfectiva, alt.ultimaFecha, today)) {
+            first = alt.fechaInicioEfectiva;
+            break;
+          }
+        } catch (error) {
+          if (!(error instanceof AppError)) throw error;
+        }
+      }
+      sinCohorte = {
+        codigo: 'SIN_COHORTE_ELEGIBLE',
+        mensaje: NO_COHORT_MESSAGE,
+        primeraFechaPosible: first,
+      };
+    }
+    // Disponibilidad en lote: una consulta de franjas libres y una de prácticas propias.
+    const slots = [...new Set([...plans.values()].flatMap((p) => p.franjas))];
     const free = new Map<number, boolean>();
-    if (eligible) {
-      const result = await this.db.rpc('student_schedule_free_slots', {
-        p_slots: cells.map((c) => c.scheduled),
-      });
+    let own: number[] = [];
+    if (slots.length) {
+      const result = await this.db.rpc('student_schedule_free_slots', { p_slots: slots });
       if (result.error) throwStudentScheduleError(result.error);
       for (const slot of result.data) free.set(Date.parse(slot.scheduled_at), slot.libre);
-      // Una matrícula manual coexistente no permite solapar al mismo alumno.
+      const times = slots.map((s) => Date.parse(s));
       const busy = await this.db
         .from('practice_slots')
         .select('scheduled_at')
         .eq('student_id', studentId)
         .in('status', ['asignado', 'confirmado', 'completado'])
-        .gte('scheduled_at', new Date(Date.parse(cells[0].scheduled) - 3_600_000).toISOString())
-        .lte(
-          'scheduled_at',
-          new Date(Date.parse(cells[cells.length - 1].scheduled) + 3_600_000).toISOString(),
-        );
+        .gte('scheduled_at', new Date(Math.min(...times) - HOUR_MS).toISOString())
+        .lte('scheduled_at', new Date(Math.max(...times) + HOUR_MS).toISOString());
       if (busy.error) throwStudentScheduleError(busy.error);
-      for (const slot of busy.data) {
-        const time = Date.parse(slot.scheduled_at);
-        for (const cell of cells)
-          if (Math.abs(Date.parse(cell.scheduled) - time) < 3_600_000)
-            free.set(Date.parse(cell.scheduled), false);
-      }
-    }
-    const days = dates.map((date, index) => ({
-      fecha: date,
-      horasASeleccionar: Math.min(input.horasPorDia, required - index * input.horasPorDia),
-      franjas: cells
-        .filter((c) => c.date === date)
-        .map((c) => ({
-          hora: `${String(c.hour).padStart(2, '0')}:00`,
-          libre: free.get(Date.parse(c.scheduled)) === true,
-        })),
-    }));
-    const available =
-      eligible && days.every((d) => d.franjas.filter((s) => s.libre).length >= d.horasASeleccionar);
-    const suggestions: string[] = [];
-    if (!available) {
-      // Fechas orientativas, jamás una promesa de cupo: el alumno vuelve a consultar.
-      for (const c of cohorts.data) {
-        const start =
-          c.fecha_inicio_curso > input.fechaInicio
-            ? c.fecha_inicio_curso
-            : parseFechaCivil(input.fechaInicio).plus({ days: 7 }).toFormat('yyyy-LL-dd');
-        try {
-          const alternative = this.dates({ ...input, fechaInicio: start }, required);
-          if (this.contains(c, alternative, today) && !suggestions.includes(start))
-            suggestions.push(start);
-        } catch (error) {
-          if (!(error instanceof AppError)) throw error;
-        }
-        if (suggestions.length === 3) break;
-      }
+      own = busy.data.map((b) => Date.parse(b.scheduled_at));
     }
     return {
-      enrollmentId,
       serverNow: new Date().toISOString(),
-      horasRequeridas: required,
+      required,
+      plans,
+      cohort: chosen ? { id: chosen.id, nombre: chosen.nombre } : null,
+      sinCohorte,
+      free,
+      own,
+    };
+  }
+
+  private days(plan: FixedPlan, ev: Evaluation): StudentSchedulePreviewDay[] {
+    return plan.dias.map((day) => {
+      const times = day.franjas.map((s) => Date.parse(s));
+      const overlap = times.some((t) => ev.own.some((o) => Math.abs(o - t) < HOUR_MS));
+      const noInstructor = times.some((t) => ev.free.get(t) !== true);
+      return {
+        fecha: day.fecha,
+        inicio: day.inicio,
+        fin: day.fin,
+        horaInicio: day.horaInicio,
+        horaFin: day.horaFin,
+        horas: day.horas,
+        disponible: !overlap && !noInstructor,
+        motivo: overlap
+          ? { codigo: 'SOLAPE_PROPIO', mensaje: 'Ya tienes una práctica en ese horario.' }
+          : noInstructor
+            ? { codigo: 'DIA_SIN_INSTRUCTOR', mensaje: 'No hay instructor libre a esa hora.' }
+            : null,
+      };
+    });
+  }
+
+  /** Horas de inicio posibles con su factibilidad (consulta en lote). */
+  async options(
+    studentId: string,
+    enrollmentId: string,
+    input: StudentScheduleInput,
+  ): Promise<StudentScheduleOptions> {
+    if (!Number.isInteger(input.horasPorDia) || input.horasPorDia < 1 || input.horasPorDia > 6)
+      throw new AppError('Selecciona entre 1 y 6 horas por día.', 400, { code: 'PLAN_INVALIDO' });
+    const ev = await this.evaluate(
+      studentId,
+      enrollmentId,
+      input,
+      possibleStartHours(input.horasPorDia),
+    );
+    const first = firstPlan(ev.plans);
+    return {
+      enrollmentId,
+      serverNow: ev.serverNow,
+      horasRequeridas: ev.required,
+      fechaInicioEfectiva: first.fechaInicioEfectiva,
+      ajustada: first.ajustada,
+      cohorte: ev.cohort,
+      sinCohorte: ev.sinCohorte,
+      horas: [...ev.plans.entries()].map(([, plan]) => {
+        const days = this.days(plan, ev);
+        const failing = days.filter((d) => !d.disponible);
+        if (!ev.cohort)
+          return {
+            hora: plan.horaInicio,
+            factible: false,
+            motivo: { codigo: 'SIN_COHORTE_ELEGIBLE' as const, mensaje: NO_COHORT_MESSAGE },
+            diasFallan: failing.map((d) => d.fecha),
+          };
+        return {
+          hora: plan.horaInicio,
+          factible: failing.length === 0,
+          motivo: failing.length
+            ? {
+                codigo: failing.every((d) => d.motivo?.codigo === 'SOLAPE_PROPIO')
+                  ? ('SOLAPE_PROPIO' as const)
+                  : ('DIA_SIN_INSTRUCTOR' as const),
+                mensaje:
+                  failing.length === 1
+                    ? 'Falta disponibilidad en 1 día del plan.'
+                    : `Falta disponibilidad en ${String(failing.length)} días del plan.`,
+              }
+            : null,
+          diasFallan: failing.map((d) => d.fecha),
+        };
+      }),
+    };
+  }
+
+  /** Vista previa de solo lectura del plan para una hora de inicio concreta. */
+  async preview(
+    studentId: string,
+    enrollmentId: string,
+    input: StudentScheduleSelection,
+  ): Promise<StudentSchedulePreview> {
+    const ev = await this.evaluate(studentId, enrollmentId, input, [input.horaInicio]);
+    const plan = firstPlan(ev.plans);
+    const days = this.days(plan, ev);
+    const failing = days.filter((d) => !d.disponible).map((d) => d.fecha);
+    return {
+      enrollmentId,
+      serverNow: ev.serverNow,
+      modalidad: input.modalidad,
+      horasTotales: plan.totalHoras,
+      horasPorDia: plan.horasPorDia,
+      horaInicio: plan.horaInicio,
+      fechaInicioSolicitada: plan.fechaInicioSolicitada,
+      fechaInicioEfectiva: plan.fechaInicioEfectiva,
+      ajustada: plan.ajustada,
       dias: days,
-      disponible: available,
-      fechasSugeridas: suggestions,
-      mensaje: available
-        ? null
-        : eligible
-          ? 'No hay suficientes franjas libres en todas las fechas. Prueba otro inicio.'
-          : 'No hay una cohorte con cupo que contenga todo el plan y el margen final. Prueba un inicio posterior o consulta a la escuela.',
+      ultimaFecha: plan.ultimaFecha,
+      ultimaHoraFin: plan.ultimaHoraFin,
+      ultimoFin: plan.ultimoFin,
+      cohorte: ev.cohort,
+      sinCohorte: ev.sinCohorte,
+      diasFallan: failing,
+      factible: !!ev.cohort && failing.length === 0,
     };
   }
 
@@ -218,33 +346,30 @@ export class StudentScheduleService {
     enrollmentId: string,
     input: StudentScheduleSelection,
   ): Promise<StudentScheduleReservation> {
-    await this.expire(studentId);
-    const { required } = await this.context(studentId, enrollmentId);
-    const dates = this.dates(input, required);
-    if (!Array.isArray(input.franjas) || input.franjas.length !== required) throw INVALID();
-    const slots = input.franjas.map((s) => {
-      if (!dates.includes(s.fecha) || !/^(0[6-9]|1\d|2[01]):00$/.test(s.hora)) throw INVALID();
-      return toScheduledAtUTC(parseFechaCivil(s.fecha), {
-        hour: Number(s.hora.slice(0, 2)),
-        minute: 0,
+    // El servidor recalcula el plan completo; el cliente solo aporta cuatro datos.
+    const ev = await this.evaluate(studentId, enrollmentId, input, [input.horaInicio]);
+    const plan = firstPlan(ev.plans);
+    if (!ev.cohort)
+      throw new AppError(NO_COHORT_MESSAGE, 409, {
+        code: 'SIN_COHORTE_ELEGIBLE',
+        detalles: { primeraFechaPosible: ev.sinCohorte?.primeraFechaPosible ?? null },
       });
-    });
-    if (new Set(slots).size !== slots.length) throw INVALID();
-    dates.forEach((date, index) => {
-      if (
-        input.franjas.filter((s) => s.fecha === date).length !==
-        Math.min(input.horasPorDia, required - index * input.horasPorDia)
-      )
-        throw INVALID();
-    });
+    const failing = this.days(plan, ev)
+      .filter((d) => !d.disponible)
+      .map((d) => d.fecha);
+    if (failing.length)
+      throw new AppError('Este horario no es factible: faltan instructores en algunos días.', 409, {
+        code: 'PLAN_NO_FACTIBLE',
+        detalles: { dias: failing },
+      });
     // SQL vuelve a elegir cohorte por inicio, instructor POR FRANJA y cupo bajo locks.
-    // El cliente nunca propone cohorte, instructor ni precio.
+    // El cliente nunca propone cohorte, instructor, franjas ni precio.
     const result = await this.db.rpc('reserve_student_schedule', {
       p_student: studentId,
       p_enrollment: enrollmentId,
-      p_slots: slots,
+      p_slots: plan.franjas,
       p_modalidad: input.modalidad,
-      p_inicio: input.fechaInicio,
+      p_inicio: plan.fechaInicioEfectiva,
       p_horas: input.horasPorDia,
       p_ttl: this.config.RESERVA_TTL_MINUTES,
       p_max_dia: this.config.RESERVA_MAX_POR_DIA,
@@ -257,6 +382,7 @@ export class StudentScheduleService {
   private present(reservation: StudentScheduleReservation): StudentScheduleReservation {
     return {
       ...reservation,
+      plan: summarizeSlots(reservation.franjas.map((f) => f.scheduledAt)),
       puedeAmpliar:
         reservation.puedeAmpliar && reservation.extensiones < this.config.RESERVA_MAX_EXTENSIONES,
     };
