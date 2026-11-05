@@ -81,7 +81,7 @@ export interface Database {
       claim_payment_dispatch: { Args: { p_id: string }; Returns: boolean };
       record_payment_reference: { Args: { p_id: string; p_proveedor: string; p_referencia: string }; Returns: undefined };
       confirm_student_payment: {
-        Args: { p_id: string; p_proveedor: string; p_referencia: string; p_resultado: string;
+        Args: { p_id: string; p_proveedor: string; p_referencia: string | null; p_resultado: string;
           p_total: number; p_moneda: string; p_event: string; p_hash: string };
         Returns: StudentPayment;
       };

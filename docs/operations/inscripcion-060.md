@@ -1,11 +1,25 @@
 # I10 — pagos e idempotencia (060)
 
-MANUAL:057 aplicada/intacta →058 etapas →059 reservas →060 pagos.058/059 siguen
-sin aplicar remotamente. Preflight060 comprueba dependencias y se niega si payments
+MANUAL:057 aplicada/intacta →058 etapas →059 reservas →060 pagos. Según la última
+confirmación del usuario,060/061/062 NO están aplicadas. Preflight060 comprueba dependencias y se niega si payments
 ya existe: no reescribe un ledger previo ni instala sobre un esquema desconocido.
 La transacción de migración falla sin efectos parciales. Verificación termina con
 ROLLBACK; rollback de060 se niega si existe cualquier intento, incluso rechazado.
 No hay SQL remoto automático.061 corresponde al filtro de Alumnos enI13.
+
+## Migraciones aplicadas desde Windows (CRLF)
+
+Los cuerpos de funciones guardados en `pg_proc.prosrc` pueden conservar finales de
+línea CRLF si el SQL se aplicó desde Windows. Los chequeos de 060, 061 y 062 calculan
+`md5(replace(prosrc,chr(13),''))`: eliminan únicamente CR antes de comparar con las
+huellas LF ya revisadas. Sus preflight y los rollback con chequeos equivalentes usan
+la misma normalización. Los scripts de verificación no comparan estas huellas.
+
+No se cambian los hashes esperados, los cuerpos de funciones ni sus permisos. No se
+normalizan espacios, tabulaciones o LF, ni se acepta un cuerpo desconocido por el
+hecho de venir de Windows. Si la comparación sigue fallando, detener la aplicación
+y reconciliar el SQL; no sustituir la huella esperada para forzarla. Este ajuste no
+vuelve repetible 060 sobre un ledger existente ni requiere modificar 057.
 
 ## Dinero y autoridades
 
@@ -28,9 +42,18 @@ una sola vez; I11 concilia por webhook o consulta y muestra pendiente hasta reso
 payment_events conserva hashesSHA256 del evento y cuerpo; evento repetido con otro
 contenido/pago se rechaza. Mismo resultado no duplica activación, franjas, avisos ni
 outbox. Toda confirmación verifica proveedor/referencia/importe/moneda contra el ledger.
-Una aprobación por monto distinto se conserva en revisión; pendiente/rechazado con
-monto distinto se rechaza. Firma/tiempo/repetición HTTP se verifican enI11 ANTES de SQL.
+Solo una aprobación compara monto/moneda con el snapshot: discordancia se conserva
+en revisión. Pendiente y rechazado admiten importe cero o moneda distinta sin IP422;
+recibido_centavos/recibido_moneda conservan el último importe/moneda reportado, no
+alteran total_centavos/moneda esperados. Un rechazo posterior no revoca una aprobación.
+Firma/tiempo/repetición HTTP se verifican enI11 ANTES de SQL.
 Las RPC son solo service_role: el cliente nunca puede declarar un pago aprobado real.
+
+Un rechazo Kushki sin ticket pasa referencia NULL a confirm_student_payment. Bajo
+el lock del pago usa la referencia existente; si no hay, crea `kushki-rechazado:<uuid>`.
+Una referencia sintética propia se sustituye por el ticket HTTP real si llega después,
+y los reintentos siguen siendo idempotentes. Una referencia real distinta continúa
+provocando conflicto. Una aprobación sigue requiriendo ticket, nunca usa ese fallback.
 
 ## Atomicidad y llegadas tardías
 
@@ -95,3 +118,11 @@ quedan en la deuda de pruebas sin ejecutar hasta autorización expresa del usuar
 Ensayo F45 final001–060:60 aplicaciones,38 preflights,31 verificaciones y41
 rollbacks OK. Reporte local /tmp/inscripcion-i10-060-final.json. Typecheck/lint
 tocado backend OK. No se ejecutaron otras suites ni SQL remoto.
+
+Corrección previa a aplicación060 (2026-11-04): F45 repetido hasta062 con entradas
+LF y con una copia de058–062 en CRLF. En cada ejecución:62 aplicaciones,40 preflights,
+33 verificaciones y43 rollbacks OK;060/061/062 completas. Verificación060 ampliada
+con cero/moneda distinta, rechazo sin ticket, referencia sintética y ticket HTTP
+tardío, replay y reserva sin renovar vencimiento. Aprobación discordante sigue en
+revisión. Reportes locales `/tmp/inscripcion-i10-correcciones-lf.json` y
+`/tmp/inscripcion-i10-correcciones-crlf.json`; arnés original sin cambios.

@@ -24,7 +24,7 @@ do $$ declare f i10_fixture;u uuid;c text;d date;v date[]:='{}';ats timestamptz[
 end $$;
 grant select on i10_fixture to service_role;
 set local role service_role;
-do $$ declare f i10_fixture;r jsonb;res uuid;p jsonb;pid uuid;k uuid;dup jsonb;token uuid;func text;t text;rol text;begin
+do $$ declare f i10_fixture;r jsonb;res uuid;p jsonb;pid uuid;k uuid;dup jsonb;token uuid;func text;t text;rol text;v_expira timestamptz;v_ref text;begin
  select * into f from i10_fixture;
  foreach t in array array['payments','payment_events','payment_mail_outbox'] loop
  if not(select relrowsecurity from pg_class where oid=('public.'||t)::regclass) then raise exception 'FaltaRLS';end if;
@@ -39,16 +39,32 @@ do $$ declare f i10_fixture;r jsonb;res uuid;p jsonb;pid uuid;k uuid;dup jsonb;t
  if not has_function_privilege('service_role',func,'EXECUTE') then raise exception 'Falta execute backend';end if;end loop;
  r:=public.reserve_student_schedule(f.student,f.enrollment,f.slots,'entre_semana',f.inicio,1);res:=(r->>'id')::uuid;k:=gen_random_uuid();
  begin perform public.begin_student_payment(f.student,res,'manual',k,0,10,f.student);raise exception 'Estudiante registró efectivo';exception when insufficient_privilege then null;end;
- p:=public.begin_student_payment(f.student,res,'simulado',k);pid:=(p->>'id')::uuid;
- dup:=public.begin_student_payment(f.student,res,'simulado',k);
+ p:=public.begin_student_payment(f.student,res,'kushki',k);pid:=(p->>'id')::uuid;
+ dup:=public.begin_student_payment(f.student,res,'kushki',k);
  if dup->>'id'<>p->>'id' or (p->>'totalCentavos')::bigint<>10000 then raise exception 'Intento no idempotente o monto incorrecto';end if;
  if not public.claim_payment_dispatch(pid) or public.claim_payment_dispatch(pid) then raise exception 'Dispatch repetido';end if;
  begin perform public.begin_student_payment(f.other_student,res,'simulado',k);raise exception 'Usó clave ajena';exception when sqlstate 'IP409' then null;end;
  begin perform public.begin_student_deletion(f.actor,f.student,(select cedula from public.users where id=f.student));raise exception 'Borró pago pendiente';exception when sqlstate 'IP423' then null;end;
- -- Rechazado libera estado de pago sin nueva gracia ni ampliación.
- p:=public.confirm_student_payment(pid,'simulado','fixture1','rechazado',10000,'USD',repeat('a',64),repeat('b',64));
- if p->>'estado'<>'rechazado' then raise exception 'No rechazó';end if;
+ -- Pendiente/rechazado aceptan cero y moneda distinta sin IP422, guardando lo recibido.
+ select expira_at into v_expira from public.student_schedule_reservations where id=res;
+ p:=public.confirm_student_payment(pid,'kushki','fixture1','pendiente',0,'EUR',repeat('3',64),repeat('4',64));
+ if p->>'estado'<>'pendiente' or not exists(select 1 from public.payments where id=pid and recibido_centavos=0 and recibido_moneda='EUR') then raise exception 'No conservó importe pendiente';end if;
+ -- Sin ticket en DECLINED usa la referencia real guardada, sin cambiar el vencimiento.
+ p:=public.confirm_student_payment(pid,'kushki',null,'rechazado',0,'GBP',repeat('a',64),repeat('b',64));
+ if p->>'estado'<>'rechazado' or not exists(select 1 from public.payments where id=pid and referencia='fixture1' and recibido_centavos=0 and recibido_moneda='GBP') then raise exception 'No rechazó importe cero/sin ticket';end if;
+ if not exists(select 1 from public.student_schedule_reservations where id=res and estado='vigente' and expira_at=v_expira) then raise exception 'Rechazo alteró vencimiento/estado de reserva';end if;
  begin perform public.manage_student_reservation(f.student,'ampliar',res);raise exception 'Amplió después de iniciar pago';exception when sqlstate 'IR411' then null;end;
+ -- Sin referencia HTTP aún: sintética propia y estable, reemplazable por el ticket real.
+ p:=public.begin_student_payment(f.student,res,'kushki',gen_random_uuid());pid:=(p->>'id')::uuid;
+ begin perform public.confirm_student_payment(pid,'kushki',null,'aprobado',10000,'USD',repeat('5',64),repeat('6',64));raise exception 'Aceptó aprobación sin ticket';exception when invalid_parameter_value then null;end;
+ p:=public.confirm_student_payment(pid,'kushki',null,'rechazado',0,'USD',repeat('7',64),repeat('8',64));
+ v_ref:='kushki-rechazado:'||pid::text;
+ if p->>'estado'<>'rechazado' or(select referencia from public.payments where id=pid)<>v_ref then raise exception 'Falta referencia sintética estable';end if;
+ perform public.record_payment_reference(pid,'kushki','fixture-sin-ticket');
+ dup:=public.confirm_student_payment(pid,'kushki',v_ref,'rechazado',0,'USD',repeat('7',64),repeat('8',64));
+ if dup->>'estado'<>'rechazado' or(select referencia from public.payments where id=pid)<>'fixture-sin-ticket'
+ or(select count(*) from public.payment_events where payment_id=pid)<>1 then raise exception 'Replay sintético cambió referencia o duplicó evento';end if;
+ if not exists(select 1 from public.student_schedule_reservations where id=res and estado='vigente' and expira_at=v_expira) then raise exception 'Rechazo sin referencia renovó plazo';end if;
  p:=public.begin_student_payment(f.student,res,'simulado',gen_random_uuid());pid:=(p->>'id')::uuid;
  p:=public.confirm_student_payment(pid,'simulado','fixture2','aprobado',10000,'USD',repeat('c',64),repeat('d',64));
  if p->>'estado'<>'aprobado' then raise exception 'No activó: %',p;end if;
@@ -63,6 +79,9 @@ do $$ declare f i10_fixture;r jsonb;res uuid;p jsonb;pid uuid;k uuid;dup jsonb;t
  if token is null or public.claim_payment_email(pid) is not null then raise exception 'Lease correo no exclusivo';end if;
  if public.finish_payment_email(pid,gen_random_uuid(),true) then raise exception 'Cerró lease ajeno';end if;
  if not public.finish_payment_email(pid,token,true) then raise exception 'No cerró correo';end if;
+ -- Un rechazo tardío con importe/moneda distintos tampoco lanza IP422 ni revoca acceso.
+ dup:=public.confirm_student_payment(pid,'simulado','fixture2','rechazado',0,'EUR',repeat('9',64),repeat('a',64));
+ if dup->>'estado'<>'aprobado' or not exists(select 1 from public.payments where id=pid and recibido_centavos=0 and recibido_moneda='EUR') then raise exception 'Rechazo tardío revocó o comparó importe';end if;
  -- Liberar cupo de fixture1, reservar fixture2 y recibir un monto distinto: conserva dinero, no activa.
  update public.enrollments set status='retirado' where id=f.enrollment;
  r:=public.reserve_student_schedule(f.other_student,f.otro,array(select x+interval '1 hour' from unnest(f.slots) x),'entre_semana',f.inicio,1);
