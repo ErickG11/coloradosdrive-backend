@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { studentScheduleRouter } from './studentSchedule.routes';
 import { body, query } from 'express-validator';
 import {
   studentPracticeEnrollments,
@@ -24,6 +25,7 @@ import { AppError } from '../utils/AppError';
 export const estudianteRouter = Router();
 
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
+estudianteRouter.use('/inscripcion', studentScheduleRouter);
 // Solo lectura: el alumno con cuenta no sube documentos; los físicos se llevan a la escuela.
 const estadoInscripcion = new StudentEnrollmentStatusService(supabaseAdmin);
 estudianteRouter.get(

@@ -36,3 +36,30 @@ para cupo inferior a matrículas y reservas vigentes.
 
 I07 publica las rutas propias y límites; I09 consume este contrato en el selector;
 I10/I11 son los únicos dueños de comenzar pago/confirmar, aún sin endpoint de pago.
+
+## Rutas propias (I07)
+
+Todas bajo `/estudiantes/inscripcion`, con JWT/rol estudiante y cuenta activa,
+contraseña vigente y propiedad derivada del JWT; ninguna recibe studentId.
+
+| Método/ruta                | Entrada / resultado                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| POST /disponibilidad       | enrollmentId,modalidad,fechaInicio,horasPorDia; celdas booleanas/fechas sugeridas/serverNow |
+| POST /reservas             | los anteriores +franjas[{fecha,hora}];201 con reserva sin instructor                        |
+| GET /reserva               | sin parámetros;200 {reserva:null o última propia,serverNow}                                 |
+| POST /reservas/:id/ampliar | UUID propio y cuerpo vacío;200 {reserva,serverNow}                                          |
+| POST /reservas/:id/liberar | UUID propio y cuerpo vacío;200 {reserva,serverNow}                                          |
+
+UUID/fechas/números/arrays validados, campos extra y query prohibidos. Selección
+máximo500 bloques y JSON100KB (límite global existente). `INVALID_FIELD`400 es
+error estructural; códigos de negocio en studentScheduleError.ts. Vencida se devuelve
+explícitamente para que la UI regrese al selector: no se revierte limpieza por error.
+GET devuelve también la última cerrada para recuperar el aviso tras recargar; una
+reserva confirmada es historial, no un nuevo permiso para pagar.
+
+Allowlist de I03 se amplía únicamente para estas cinco rutas; cualquier otra sigue
+bloqueada antes de acceder al router. Limites por alumno autenticado/HMAC:180lecturas,
+12reservar,20ampliar/liberar por15min; los dos últimos tipos comparten su contador.
+Son protección adicional de proceso (tests la omiten como los límites existentes).
+El máximo diario3 y ampliación1 son persistentes y atómicos en SQL, también con
+varias instancias. No hay endpoint público ni de iniciar pago hastaI11.

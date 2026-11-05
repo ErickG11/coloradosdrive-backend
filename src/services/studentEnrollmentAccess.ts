@@ -42,5 +42,14 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
     ['/estudiantes/cambiar-password', '/notifications/read-all'].includes(path)
   )
     return true;
+  if (method === 'GET' && path === '/estudiantes/inscripcion/reserva') return true;
+  if (
+    method === 'POST' &&
+    (['/estudiantes/inscripcion/disponibilidad', '/estudiantes/inscripcion/reservas'].includes(
+      path,
+    ) ||
+      /^\/estudiantes\/inscripcion\/reservas\/[\da-f-]{36}\/(ampliar|liberar)$/i.test(path))
+  )
+    return true;
   return method === 'PATCH' && /^\/notifications\/[\da-f-]{36}\/read$/i.test(path);
 }
