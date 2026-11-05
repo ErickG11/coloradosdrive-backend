@@ -13,6 +13,11 @@ export function effectivePracticeDuration(duration: number | undefined): 60 {
 
 // No exponer details de PostgreSQL (pueden contener identificadores).
 export function throwPracticeWriteError(error: PostgrestError): never {
+  if (error.code === 'IR409') {
+    throw new AppError('La franja está reservada por una inscripción. Consulta otro horario.', 409, {
+      code: 'HORARIO_NO_DISPONIBLE',
+    });
+  }
   if (error.code === '22023') {
     throw new AppError(error.message, 400);
   }

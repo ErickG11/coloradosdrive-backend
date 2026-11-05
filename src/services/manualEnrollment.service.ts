@@ -50,6 +50,10 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 export function manualEnrollmentError(error: PostgrestError): Error {
+  if (['IR409', '55P03', '40P01', '40001'].includes(error.code))
+    return new AppError('El horario cambió o está reservado. Consulta una nueva sugerencia.', 409, {
+      code: 'HORARIO_NO_DISPONIBLE',
+    });
   if (error.code === 'CD030')
     return new AppError('El alumno tiene una eliminación pendiente', 409, { code: 'DELETION_PENDING' });
   if (error.code === 'CD023')

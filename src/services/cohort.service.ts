@@ -66,6 +66,14 @@ const COHORT_CONSTRAINTS: Record<string, PostgresErrorOverride> = {
 };
 
 export function cohortError(error: unknown): unknown {
+  if (error && typeof error === 'object' && 'code' in error && error.code === 'IR413')
+    return new AppError(
+      'La cohorte tiene reservas vigentes. Conserva el curso, el precio y las fechas compatibles.',
+      409,
+      {
+        code: 'COHORT_CON_RESERVAS',
+      },
+    );
   if (error && typeof error === 'object' && 'code' in error && error.code === 'IC409')
     return new AppError('El cupo no puede ser menor que las matrículas y reservas vigentes.', 409, {
       code: 'COHORT_CUPO_BELOW_ACTIVE',
