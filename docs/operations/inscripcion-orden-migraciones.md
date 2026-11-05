@@ -158,3 +158,8 @@ Verificación058: nuevas aprobaciones por_agendar sin cohorte/monto; checklist y
 manuales activa, bloqueo de asignación admin, cupo vigente/vencido y reserva→activa,
 reducción de cupo y resumen. No hubo SQL remoto ni otras suites. No prueba bloqueos
 multiconexión, Auth/red real ni pagos. Reaplicación/escenarios HTTP completos en deuda.
+
+### I05 —059 reservas (NO aplicada remotamente)
+Después de058:059_alumno_reservas_horario.sql; preflight, verificación con ROLLBACK
+y rollback en inscripcion-059-*.sql. Runbook inscripcion-059.md.
+060 reservada I10;061 filtro Alumnos I13;062–064 disponibles según autorización.
