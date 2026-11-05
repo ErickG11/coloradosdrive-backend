@@ -1,3 +1,4 @@
+import { expireStudentSchedule } from './studentScheduleExpiry.service';
 import { DateTime } from 'luxon';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
@@ -88,6 +89,7 @@ export async function tieneRequisitosPendientes(db: Db, studentId: string): Prom
 export class StudentEnrollmentStatusService {
   constructor(private readonly db: Db) {}
   async get(studentId: string, now = new Date()): Promise<EstadoInscripcionAlumno> {
+    await expireStudentSchedule(this.db, studentId);
     const enrollments = await this.db
       .from('enrollments')
       .select(

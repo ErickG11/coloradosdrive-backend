@@ -63,3 +63,21 @@ bloqueada antes de acceder al router. Limites por alumno autenticado/HMAC:180lec
 Son protección adicional de proceso (tests la omiten como los límites existentes).
 El máximo diario3 y ampliación1 son persistentes y atómicos en SQL, también con
 varias instancias. No hay endpoint público ni de iniciar pago hastaI11.
+
+## Expiración conectada (I08)
+
+Estado-inscripcion limpia sus reservas antes de leer. Account-status/guarda limpia
+si detecta etapa reservado; disponibilidad/reservar limpian antes de validar, y la
+RPC de actual/ampliar/liberar también lo hace bajo lock. Ninguna operación depende
+del cron para considerar libre un lease vencido ni para permitir reservar otra vez.
+El cierre atómico deja por_agendar, conserva solicitud/cuenta, libera cupo y franjas,
+añade evento y un aviso en bandeja. No envía correo al vencer.
+
+Cron cada minutoGuayaquil, solo si DISABLE_CRON no es true. Revisa las100 primeras
+cabeceras por vencimiento, sin confiar en el relojNode: SQL decide cuáles caducaron.
+Procesa5 alumnos en paralelo, falla por alumno sin interrumpir el lote, registra
+solo cifras/códigos y no se solapa consigo mismo. Instancias múltiples se serializan
+por usuario en SQL. Con más de100 pendientes hay limpieza gradual, pero todas las
+vencidas YA dejan libre cupo/calendario; el siguiente lote y las lecturas completan
+los avisos. Un fallo DB permite reintentar la siguiente vuelta y falla cerrado en
+la consulta del alumno. No hay llamadas de red/correo dentro de una transacciónSQL.

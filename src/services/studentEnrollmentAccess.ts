@@ -1,3 +1,4 @@
+import { expireStudentSchedule } from './studentScheduleExpiry.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { AppError } from '../utils/AppError';
@@ -12,18 +13,20 @@ export async function inscripcionIncompleta(
 ): Promise<boolean> {
   const { data, error } = await db
     .from('enrollments')
-    .select('id')
+    .select('id,etapa_inscripcion,reserva_expira_at')
     .eq('student_id', studentId)
     .eq('origen', 'solicitud')
     .neq('etapa_inscripcion', 'activa')
     .in('status', ['activo', 'pendiente_cohorte'])
-    .limit(1);
+    .limit(100);
   if (error) {
     logSafeError('student_enrollment_access_failed', error);
     throw new AppError('No se pudo verificar tu inscripción. Intenta nuevamente.', 503, {
       code: 'INSCRIPCION_NO_DISPONIBLE',
     });
   }
+  if (data.some((r) => r.etapa_inscripcion === 'reservado'))
+    await expireStudentSchedule(db, studentId);
   return data.length > 0;
 }
 

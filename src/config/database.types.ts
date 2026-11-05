@@ -401,6 +401,14 @@ export interface Database {
       };
     };
     Tables: {
+      student_schedule_reservations: {
+        Row: { id: string; student_id: string; enrollment_id: string; cohort_id: string;
+          estado: StudentScheduleReservation['estado']; creada_at: string; expira_at: string;
+          extensiones: number; pago_iniciado_at: string | null; cerrada_at: string | null;
+          modalidad: 'entre_semana' | 'fin_de_semana'; fecha_inicio: string; horas_por_dia: number; margen_dias: number };
+        Insert: never; Update: never; Relationships: [];
+      };
+
       solicitud_aprobacion_intentos: {
         Row:{id:string;solicitud_id:string;actor_id:string;claim:string;estado:'pendiente'|'recuperando'|'completado'|'compensado'|'revision_manual';updated_at:string;resuelto_at:string|null;recovery_token:string|null};
         Insert:never;Update:never;Relationships:[];
