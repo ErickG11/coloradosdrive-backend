@@ -64,6 +64,15 @@ export function verifyKushkiWebhook(
   if (components.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0))
     throw new AppError('Importe inválido.', 400, { code: 'WEBHOOK_INVALIDO' });
   const reported = data.approved_transaction_amount ?? data.request_amount;
+  // Un importe presente con tipo inválido no se sustituye por el solicitado.
+  // Sin ningún importe explícito tampoco se inventa un pago de cero.
+  if (
+    (reported !== undefined && (typeof reported !== 'number' || !Number.isFinite(reported))) ||
+    (reported === undefined &&
+      !['subtotalIva0', 'subtotalIva', 'iva', 'ice'].some((k) => amount[k] !== undefined))
+  )
+    throw new AppError('Importe notificado inválido.', 400, { code: 'WEBHOOK_INVALIDO' });
+
   const dollars =
     typeof reported === 'number'
       ? reported
