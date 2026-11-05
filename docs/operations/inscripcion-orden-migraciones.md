@@ -163,3 +163,9 @@ multiconexión, Auth/red real ni pagos. Reaplicación/escenarios HTTP completos 
 Después de058:059_alumno_reservas_horario.sql; preflight, verificación con ROLLBACK
 y rollback en inscripcion-059-*.sql. Runbook inscripcion-059.md.
 060 reservada I10;061 filtro Alumnos I13;062–064 disponibles según autorización.
+
+### I10 —060 pagos (NO aplicada remotamente)
+Orden057 aplicada →058 →059 →060_alumno_pagos_atomicos.sql, luego061 filtro I13.
+Preflight/verificación ROLLBACK/rollback en inscripcion-060-*.sql; runbook060.
+060 sustituye guardas de borrado globales por alumno antes de efectos externos,
+conserva pagos recibidos y no reescribe matrículas existentes.062–064 reservadas.
