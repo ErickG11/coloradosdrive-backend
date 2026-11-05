@@ -38,7 +38,11 @@ Admin: `GET /admin/solicitudes`, `GET /admin/solicitudes/resumen`, `GET /admin/s
 `POST /admin/solicitudes/:id/verificaciones`, `GET /admin/solicitudes/:id/certificado/url`,
 `POST /admin/solicitudes/:id/decision`, `DELETE /admin/solicitudes/:id`,
 `GET|PUT /admin/inscripciones/config`, `POST /admin/estudiantes/:id/reenviar-enlace-acceso`.
-Alumno: `GET /estudiantes/estado-inscripcion`. Instructor: `PATCH /practice-slots/:id/identidad-presencial`.
+Alumno: `GET /estudiantes/estado-inscripcion`; horario (I15, hora fija y plan automático)
+`POST /estudiantes/inscripcion/horario/opciones`, `POST .../horario/plan` (vista previa),
+`POST .../reservas` (solo modalidad, fechaInicio, horaInicio y horasPorDia; rechaza
+`franjas`), `GET .../reserva`, `POST .../reservas/:id/ampliar|liberar` (detalle en
+`inscripcion-alumno-horarios.md`). Instructor: `PATCH /practice-slots/:id/identidad-presencial`.
 Códigos de error y diferencias de contrato: `inscripcion-contratos-backend-b1.md`, `-b2.md` y `-b3.md`.
 
 ## Variables de entorno nuevas (valores por defecto)
@@ -93,7 +97,8 @@ elegir nivel `decimo_aprobado` y subir una foto JPG pequeña; (5) revisar y envi
 «pendiente de revisión» y el acuse en consola; (6) como admin, abrir la solicitud, registrar
 verificación de identidad (`registro_civil_portal`) y de estudios (`codigo_qr_certificado`);
 (7) probar devolver con un motivo y reenviar desde el postulante; (8) aprobar; copiar el enlace
-`/crear-contrasena?...` de la consola; (9) crear la contraseña (mínimo 10) y entrar; (10) ver el bloque
+`/crear-contrasena?...` de la consola; (9) crear la contraseña (mínimo 10) y entrar; (9b) en «Elige tu horario» probar una hora de inicio fija, ver el plan automático de solo
+lectura y reservar; (10) ver el bloque
 de estado y «Documentos para llevar» como alumno; (11) como instructor, confirmar la cédula original
 en la primera clase. Repetir con una subida de 3 MB (debe rechazarse), con un PDF con JavaScript
 (rechazado) y con el interruptor de inscripciones cerrado (503 y pantalla de cerrado).

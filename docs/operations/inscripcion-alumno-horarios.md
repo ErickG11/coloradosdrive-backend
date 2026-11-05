@@ -1,27 +1,37 @@
 # Motor de horario del alumno (I06)
 
-El backend recibe solo modalidad, inicio y horasPorDia1–6. El calendario usa
-`PracticeSlotGenerationService.sessionDates`, el mismo generador civil del wizard
-manual. El número de días es ceil(horas_requeridas/horasPorDia); el último día se
-recorta al número exacto de horas. Cada celda es una hora entera06–22. Se admite un
-inicio hasta365 días adelante; los cursos deben tener1–500 horas configuradas.
+## Hora fija y plan automático (I15)
 
-Disponibilidad consulta solo la matrícula propia pendiente, verificada, de origen
-solicitud. Busca cohortes del mismo curso abiertas HOY en Guayaquil, con cupo real,
-y que contengan TODO el calendario y margen configurado al final. Si no caben todos
-los días no se muestran franjas seleccionables. La disponibilidad por lote usa el
-mismo `practice_free_instructors` del manual: cuenta instructor activo, franjas
-físicas ocupadas y holds vigentes; filtra también solapes del propio alumno. Nunca
-retorna IDs/nombres de instructores, datos de otro alumno, precio ni cohorte antes
-de reservar. Las sugerencias de fecha son orientativas, requieren nueva consulta.
+El alumno elige solo cuatro datos: modalidad (entre_semana o fin_de_semana), fecha de
+inicio, horas por día (1–6) y hora de inicio (entera, 06–21). El servidor calcula el
+plan con `src/utils/studentFixedPlan.ts`, función pura y determinista:
 
-El alumno puede elegir horas diferentes cada día. El servidor vuelve a construir el
-calendario y exige la cantidad exacta por día/curso, sin repetidas ni fuera de06–22.
-La RPC059 elige la primera cohorte por inicio/id bajo lock, y un instructor libre
-por franja con el helper compartido. El alumno nunca selecciona esos IDs ni montos.
-No se repiten mutaciones automáticamente ante timeout/deadlock/conflicto; se invita
-a consultar el estado antes de reintentar. Reservar/extender/actual limpiar vencidas
-no depende del cron (I08 conecta además el estado general y el trabajo por minuto).
+- totalHoras = `courses.horas_requeridas` de la matrícula (hoy 15).
+- Días: desde la fecha de inicio, solo los de la modalidad (lunes a viernes, o sábado
+  y domingo). Si la fecha elegida no es un día de la modalidad, el primer día es el
+  siguiente válido y la respuesta lo informa (`ajustada`, `fechaInicioEfectiva`).
+- Cada día empieza a la MISMA hora y dura min(horasPorDia, horas restantes), en bloques
+  de 1 hora consecutivos. Ejemplo: 07:00 con 3 h/día y 15 h = 5 días de 07:00 a 10:00;
+  con 6 h/día son 3 días (6, 6, 3).
+- Debe terminar a más tardar a las 22:00 (inicio + horas del día ≤ 22) y la fecha de
+  inicio va de mañana a 365 días, en America/Guayaquil. **Limitación: no se consideran
+  feriados.**
+- Cohorte (cupo, matrícula abierta hoy, ventana del curso y margen COHORT_MARGIN_DAYS=5),
+  instructor libre por franja (asignación automática, nunca visible) y ausencia de
+  solapes con las prácticas propias del alumno se mantienen.
+- Un plan con algún día sin instructor es NO factible y se informa qué días fallan.
+
+Las opciones y la vista previa calculan todas las franjas candidatas y consultan
+`student_schedule_free_slots` UNA vez en lote (más una consulta de prácticas propias).
+Nunca retornan IDs ni nombres de instructores, datos de otro alumno ni precio; sí la
+cohorte tentativa (id y nombre) del propio curso, que se confirma al reservar.
+
+La reserva recibe SOLO `{enrollmentId, modalidad, fechaInicio, horaInicio, horasPorDia}`,
+recalcula el plan y llama a la RPC 059 sin cambios (que vuelve a validar fechas, horas
+por día, cohorte, cupo e instructor por franja bajo lock). Una lista `franjas` enviada
+por el cliente se rechaza con 400 `FRANJAS_NO_PERMITIDAS`. La hora de inicio y el plan
+se derivan de las franjas retenidas (campo `plan` de la reserva); no hay cambios de
+modelo de datos. No se repiten mutaciones automáticamente ante timeout/deadlock/conflicto.
 
 Variables backend, todas opcionales sin secretos: RESERVA_TTL_MINUTES15(1–15),
 RESERVA_MAX_EXTENSIONES1(0–1), RESERVA_EXTENSION_MINUTES10(1–10),
@@ -42,22 +52,27 @@ I10/I11 son los únicos dueños de comenzar pago/confirmar, aún sin endpoint de
 Todas bajo `/estudiantes/inscripcion`, con JWT/rol estudiante y cuenta activa,
 contraseña vigente y propiedad derivada del JWT; ninguna recibe studentId.
 
-| Método/ruta                | Entrada / resultado                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------- |
-| POST /disponibilidad       | enrollmentId,modalidad,fechaInicio,horasPorDia; celdas booleanas/fechas sugeridas/serverNow |
-| POST /reservas             | los anteriores +franjas[{fecha,hora}];201 con reserva sin instructor                        |
-| GET /reserva               | sin parámetros;200 {reserva:null o última propia,serverNow}                                 |
-| POST /reservas/:id/ampliar | UUID propio y cuerpo vacío;200 {reserva,serverNow}                                          |
-| POST /reservas/:id/liberar | UUID propio y cuerpo vacío;200 {reserva,serverNow}                                          |
+| Método/ruta                | Entrada / resultado                                                                                                                                |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST /horario/opciones     | enrollmentId,modalidad,fechaInicio,horasPorDia; horas de inicio posibles con factible/motivo/diasFallan, cohorte o sinCohorte, fechaInicioEfectiva |
+| POST /horario/plan         | los anteriores +horaInicio; vista previa de solo lectura: días, última fecha/hora, horasTotales, cohorte tentativa, factible                       |
+| POST /reservas             | enrollmentId,modalidad,fechaInicio,horaInicio,horasPorDia; 201 con reserva y `plan` derivado, sin instructor. Rechaza `franjas`                    |
+| GET /reserva               | sin parámetros;200 {reserva:null o última propia,serverNow}                                                                                        |
+| POST /reservas/:id/ampliar | UUID propio y cuerpo vacío;200 {reserva,serverNow}                                                                                                 |
+| POST /reservas/:id/liberar | UUID propio y cuerpo vacío;200 {reserva,serverNow}                                                                                                 |
 
-UUID/fechas/números/arrays validados, campos extra y query prohibidos. Selección
-máximo500 bloques y JSON100KB (límite global existente). `INVALID_FIELD`400 es
+`POST /disponibilidad` (cuadrícula día×hora) se eliminó. Códigos estables nuevos:
+`PLAN_NO_FACTIBLE` (409, `detalles.dias` con las fechas que fallan), `SIN_COHORTE_ELEGIBLE`
+(409, `detalles.primeraFechaPosible`), `HORA_INICIO_INVALIDA` (400), `FECHA_INICIO_INVALIDA`
+(400) y `FRANJAS_NO_PERMITIDAS` (400). `RESERVA_YA_EXISTE` y los demás se conservan.
+
+UUID/fechas/números/arrays validados, campos extra y query prohibidos. JSON100KB (límite global existente). `INVALID_FIELD`400 es
 error estructural; códigos de negocio en studentScheduleError.ts. Vencida se devuelve
 explícitamente para que la UI regrese al selector: no se revierte limpieza por error.
 GET devuelve también la última cerrada para recuperar el aviso tras recargar; una
 reserva confirmada es historial, no un nuevo permiso para pagar.
 
-Allowlist de I03 se amplía únicamente para estas cinco rutas; cualquier otra sigue
+Allowlist de I03 se amplía únicamente para estas rutas; cualquier otra sigue
 bloqueada antes de acceder al router. Limites por alumno autenticado/HMAC:180lecturas,
 12reservar,20ampliar/liberar por15min; los dos últimos tipos comparten su contador.
 Son protección adicional de proceso (tests la omiten como los límites existentes).
@@ -84,14 +99,15 @@ la consulta del alumno. No hay llamadas de red/correo dentro de una transacción
 
 ## Selector y contador (I09)
 
-`/student/inscripcion` integra selección de modalidad/inicio/horas por día, tabla
-horizontal día×hora con botones accesibles y estados Libre/Elegido/Ocupado. Cada día
-exige su cuota y el último se recorta; el servidor decide las horas totales del curso.
-Cambiar parámetros invalida celdas y selección, aborta la lectura anterior y descarta
-respuestas tardías. Un error al reservar obliga a consultar antes de otro intento.
+`/student/inscripcion` integra (I15) modalidad y horas por día como controles
+segmentados, fecha de inicio y la hora de inicio como fichas (las no factibles quedan
+deshabilitadas con su razón). El plan resultante se muestra en solo lectura, sin
+casillas clicables; los días sin instructor se marcan y bloquean "Reservar este
+horario". Cambiar parámetros aborta la lectura anterior y descarta respuestas
+tardías. Un error al reservar obliga a consultar antes de otro intento.
 No hay persistencia de selección/cohorte/instructor/monto en localStorage.
 
-Después de reservar, muestra cohorte tentativa y plan completo, sin instructor.
+Con la reserva vigente muestra cohorte y plan completo en solo lectura, sin instructor.
 Con varias matrículas incompletas el estado prioriza la reservada para que el Paso1
 coincida con la única reserva vigente. GET propio recupera el plan tras recargar.
 Liberar exige confirmación y advierte que el intento diario se conserva.

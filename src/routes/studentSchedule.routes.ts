@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { Router } from 'express';
 import { body, matchedData, param, type ValidationChain } from 'express-validator';
-import type { Request } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { env } from '../config/env';
 import { supabaseAdmin } from '../config/supabase';
 import { StudentScheduleService } from '../services/studentSchedule.service';
@@ -39,51 +39,47 @@ function onlyKeys(value: unknown, allowed: string[]): boolean {
   );
 }
 const planFields = ['enrollmentId', 'modalidad', 'fechaInicio', 'horasPorDia'];
-function planValidators(selection: boolean): ValidationChain[] {
+// La fecha y la hora de inicio se validan en el servicio para devolver sus códigos
+// estables (FECHA_INICIO_INVALIDA, HORA_INICIO_INVALIDA); aquí solo el tipo.
+function planValidators(withStartHour: boolean): ValidationChain[] {
   return [
     body()
       .custom((value: unknown) =>
-        onlyKeys(value, selection ? [...planFields, 'franjas'] : planFields),
+        onlyKeys(value, withStartHour ? [...planFields, 'horaInicio'] : planFields),
       )
       .withMessage('La solicitud contiene campos no permitidos.'),
     body('enrollmentId').isUUID().withMessage('Selecciona una matrícula válida.'),
     body('modalidad')
       .isIn(['entre_semana', 'fin_de_semana'])
       .withMessage('Selecciona la modalidad.'),
-    body('fechaInicio')
-      .isString()
-      .bail()
-      .matches(/^\d{4}-\d{2}-\d{2}$/)
-      .bail()
-      .isDate({ format: 'YYYY-MM-DD', strictMode: true })
-      .withMessage('Selecciona una fecha válida.'),
+    body('fechaInicio').isString().withMessage('Selecciona una fecha de inicio válida.'),
     body('horasPorDia')
       .custom(
         (value: unknown) =>
           typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 6,
       )
       .withMessage('Selecciona entre 1 y 6 horas por día.'),
-    ...(selection
+    ...(withStartHour
       ? [
-          body('franjas')
-            .isArray({ min: 1, max: 500 })
-            .withMessage('Selecciona las franjas del plan.'),
-          body('franjas.*')
-            .custom((value: unknown) => onlyKeys(value, ['fecha', 'hora']))
-            .withMessage('La franja contiene campos no permitidos.'),
-          body('franjas.*.fecha')
-            .isString()
-            .bail()
-            .matches(/^\d{4}-\d{2}-\d{2}$/)
-            .withMessage('La fecha de una franja no es válida.'),
-          body('franjas.*.hora')
-            .isString()
-            .bail()
-            .matches(/^(0[6-9]|1\d|2[01]):00$/)
-            .withMessage('Selecciona horas entre 06:00 y 21:00.'),
+          body('horaInicio')
+            .custom((value: unknown) => typeof value === 'number')
+            .withMessage('Selecciona la hora de inicio.'),
         ]
       : []),
   ];
+}
+// El cliente ya no propone franjas: el servidor calcula el plan fijo (I15).
+function rejectSlotList(req: Request, _res: Response, next: NextFunction): void {
+  if (req.body && typeof req.body === 'object' && 'franjas' in (req.body as object)) {
+    next(
+      new AppError('El horario se calcula en el servidor; envía solo la hora de inicio.', 400, {
+        code: 'FRANJAS_NO_PERMITIDAS',
+        field: 'franjas',
+      }),
+    );
+    return;
+  }
+  next();
 }
 studentScheduleRouter.use((req, _res, next) => {
   if (Object.keys(req.query).length) {
@@ -93,20 +89,35 @@ studentScheduleRouter.use((req, _res, next) => {
   next();
 });
 studentScheduleRouter.post(
-  '/disponibilidad',
+  '/horario/opciones',
   readLimit,
+  rejectSlotList,
   planValidators(false),
   validateFields,
   asyncHandler(async (req, res) => {
     const input = matchedData<StudentScheduleInput & { enrollmentId: string }>(req, {
       locations: ['body'],
     });
-    res.json(await service.availability(subject(req), input.enrollmentId, input));
+    res.json(await service.options(subject(req), input.enrollmentId, input));
+  }),
+);
+studentScheduleRouter.post(
+  '/horario/plan',
+  readLimit,
+  rejectSlotList,
+  planValidators(true),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const input = matchedData<StudentScheduleSelection & { enrollmentId: string }>(req, {
+      locations: ['body'],
+    });
+    res.json(await service.preview(subject(req), input.enrollmentId, input));
   }),
 );
 studentScheduleRouter.post(
   '/reservas',
   reserveLimit,
+  rejectSlotList,
   planValidators(true),
   validateFields,
   asyncHandler(async (req, res) => {

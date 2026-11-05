@@ -50,8 +50,10 @@ webhook en ledger o logs. Manual y simulado no solicitan tarjeta.
   curso, con matrícula abierta hoy en Guayaquil y cupo para activas y reservas vigentes.
 - La última práctica queda al menos COHORT_MARGIN_DAYS (5 por defecto) días antes
   del fin del curso. Instructor automático por franja, oculto hasta pagar.
-- Se reutiliza la modalidad del motor manual: 1–6 horas al día, bloques de una hora,
-  de 06:00 a 22:00 y último día parcial para cubrir exactamente horas_requeridas.
+- Hora fija y plan automático (I15): el alumno elige modalidad, fecha de inicio (desde
+  mañana), 1–6 horas al día y una hora de inicio 06–21; el servidor arma bloques de una
+  hora consecutivos desde esa hora, termina a más tardar a las 22:00 y recorta el último
+  día para cubrir exactamente horas_requeridas. No se consideran feriados.
   Una práctica física disponible/liberada también ocupa el calendario del instructor;
   no se sobrescribe para otro plan o cohorte.
 - Un lease vencido no ocupa franja ni cupo, incluso sin cron. Las lecturas y acciones
@@ -151,9 +153,12 @@ cédula ficticia válida según el validador del proyecto. No publicar datos rea
    horarios o historial debe redirigir; API responde 403 INSCRIPCION_INCOMPLETA.
 5. Paso 1: identidad/estudios verificados y checklist físico. Ensayar además no_sabe
    y papeleta exenta desde 65 años. No debe existir subida digital desde el alumno.
-6. Paso 2: elegir modalidad, inicio y 3 horas por día hasta completar 15; con 4 horas
-   al día, el último requiere 3. Ocupadas o sin cohorte compatible no son elegibles.
-   No se muestran instructores. Cohorte tentativa solo aparece después de reservar.
+6. Paso 2: elegir modalidad, fecha de inicio, horas por día y una hora de inicio (ficha).
+   Con 3 horas por día y 07:00 el plan es 5 días de 07:00 a 10:00; con 6 horas, 3 días
+   (6, 6, 3). Fecha en fin de semana con entre_semana: el plan empieza el lunes y lo
+   dice. Las horas sin instructor o sin cohorte aparecen deshabilitadas con su razón y
+   no hay casillas clicables. Resumen en una frase y cohorte tentativa «se confirma al
+   reservar»; sin instructores visibles. «Reservar este horario» inicia el contador.
 7. Reservar: contador global de 15 minutos, recargar conserva el plan. Ampliar una vez
    añade 10 minutos; una segunda ampliación se deniega. Liberar pide confirmación;
    la cuarta reserva del día se bloquea y liberar no devuelve intentos diarios.
