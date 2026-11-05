@@ -157,6 +157,12 @@ export class StudentPaymentService {
     if (payment.proveedor !== 'simulado')
       throw new AppError('Este pago no es simulado.', 403, { code: 'PAGO_NO_PERMITIDO' });
     if (payment.estado !== 'pendiente') return paymentView(payment);
+    // Incluso el simulado registra que el proveedor recibió el intento; así un
+    // resultado pendiente puede llegar tarde sin confundirse con un checkout vacío.
+    const dispatch = await this.db.rpc('claim_payment_dispatch', { p_id: payment.id });
+    if (dispatch.error) throwStudentPaymentError(dispatch.error);
+    const current = await this.own(studentId, id);
+    if (current.estado !== 'pendiente' || !current.dispatch_at) return paymentView(current);
     const outcome = await new SimulatedPaymentProvider().charge(paymentView(payment), {
       resultado: result,
     });
