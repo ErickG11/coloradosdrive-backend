@@ -59,6 +59,7 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
     (['/estudiantes/inscripcion/pagos/config', '/estudiantes/inscripcion/pagos/actual'].includes(
       path,
     ) ||
+      /^\/estudiantes\/inscripcion\/pagos\/matricula\/[\da-f-]{36}\/actual$/i.test(path) ||
       /^\/estudiantes\/inscripcion\/pagos\/[\da-f-]{36}$/i.test(path) ||
       /^\/estudiantes\/inscripcion\/pagos\/reserva\/[\da-f-]{36}\/cotizacion$/i.test(path))
   )

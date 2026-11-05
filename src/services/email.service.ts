@@ -64,6 +64,17 @@ function escapeHtml(value: string): string {
 export class EmailService {
   constructor(private readonly transporter: MailTransport) {}
 
+  async sendPaymentWelcomeEmail(params: { to: string; nombreCompleto: string; paymentId: string }): Promise<void> {
+    const url = new URL('/student', env.FRONTEND_URL);
+    const intro = 'Tu pago fue confirmado y tu matrícula ya está activa. Puedes consultar tus prácticas, documentos y exámenes en la plataforma.';
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM, to: params.to, subject: 'Bienvenido a ColoradosDrive: tu matrícula está activa',
+      messageId: `<pago-bienvenida-${params.paymentId}@${url.hostname}>`,
+      text: [`Hola ${params.nombreCompleto},`, intro, `Ingresar: ${url.toString()}`, 'Recuerda llevar tus documentos físicos antes de tu primera práctica.'].join('\n'),
+      html: `<p>Hola ${escapeHtml(params.nombreCompleto)},</p><p>${intro}</p><p><a href="${escapeHtml(url.toString())}">Ingresar a la plataforma</a></p><p>Recuerda llevar tus documentos físicos antes de tu primera práctica.</p>`,
+    });
+  }
+
   async sendInstructorCredentials(params: WelcomeEmailParams): Promise<void> {
     const login = new URL('/login', env.FRONTEND_URL).toString();
     const reset = params.reason === 'admin_reset';

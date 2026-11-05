@@ -1,3 +1,4 @@
+import { paymentWelcome } from '../services/paymentWelcome';
 import { Router } from 'express';
 import { env } from '../config/env';
 import { supabaseAdmin } from '../config/supabase';
@@ -30,6 +31,7 @@ kushkiWebhookRouter.post(
       p_hash: event.hash,
     });
     if (result.error) throwStudentPaymentError(result.error);
+    if (result.data.estado === 'aprobado') await paymentWelcome.deliver(result.data.id);
     res.json({ recibido: true });
   }),
 );

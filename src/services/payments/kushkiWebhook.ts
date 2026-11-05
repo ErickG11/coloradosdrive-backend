@@ -29,7 +29,8 @@ export function verifyKushkiWebhook(
   const unauthorized = (): AppError =>
     new AppError('Firma de pago inválida.', 401, { code: 'FIRMA_PAGO_INVALIDA' });
   if (
-    config.PAYMENT_PROVIDER !== 'kushki' ||
+    !config.KUSHKI_WEBHOOK_SECRET ||
+    !config.KUSHKI_MERCHANT_ID ||
     !time ||
     !/^\d{10}(\d{3})?$/.test(time) ||
     !signature ||
