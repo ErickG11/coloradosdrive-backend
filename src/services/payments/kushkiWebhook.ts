@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { PaymentConfig } from '../../config/paymentConfig';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '../../config/database.types';
 import { AppError } from '../../utils/AppError';
 import { paymentDigest } from '../studentPayment.service';
+import { throwStudentPaymentError } from '../../utils/studentPaymentError';
 // Política oficial de reintentos: hasta3h;5min adicionales para tránsito/reloj.
 const MAX_AGE_MS = 185 * 60_000;
 function object(value: unknown): Record<string, unknown> {
@@ -9,9 +12,9 @@ function object(value: unknown): Record<string, unknown> {
     throw new AppError('Evento inválido.', 400, { code: 'WEBHOOK_INVALIDO' });
   return value as Record<string, unknown>;
 }
-interface VerifiedPaymentEvent {
-  id: string;
-  reference: string;
+export interface VerifiedPaymentEvent {
+  id: string | null;
+  reference: string | null;
   result: 'aprobado' | 'rechazado';
   total: number;
   currency: string;
@@ -46,14 +49,22 @@ export function verifyKushkiWebhook(
     .digest();
   if (!timingSafeEqual(computed, Buffer.from(signature, 'hex'))) throw unauthorized();
   const data = object(body);
-  const metadata = object(data.metadata);
-  const id = metadata.drivePaymentId;
-  const reference = data.ticket_number;
+  // La ausencia o invalidez de metadata no invalida una firma: aún se puede
+  // correlacionar por ticket con un pago Kushki propio.
+  const metadata =
+    data.metadata && typeof data.metadata === 'object' && !Array.isArray(data.metadata)
+      ? (data.metadata as Record<string, unknown>)
+      : {};
+  const candidate = metadata.drivePaymentId;
+  const id =
+    typeof candidate === 'string' && /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(candidate)
+      ? candidate.toLowerCase()
+      : null;
+  const reference = data.ticket_number ?? null;
   if (
-    typeof id !== 'string' ||
-    !/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(id) ||
-    typeof reference !== 'string' ||
-    !/^[A-Za-z0-9_.:-]{1,200}$/.test(reference) ||
+    (reference !== null &&
+      (typeof reference !== 'string' || !/^[A-Za-z0-9_.:-]{1,200}$/.test(reference))) ||
+    (data.transaction_status === 'APPROVAL' && reference === null) ||
     data.transaction_type !== 'SALE' ||
     !['APPROVAL', 'DECLINED'].includes(String(data.transaction_status)) ||
     (data.merchant_id !== undefined && data.merchant_id !== config.KUSHKI_MERCHANT_ID)
@@ -63,7 +74,10 @@ export function verifyKushkiWebhook(
   const components = ['subtotalIva0', 'subtotalIva', 'iva', 'ice'].map((k) => amount[k] ?? 0);
   if (components.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0))
     throw new AppError('Importe inválido.', 400, { code: 'WEBHOOK_INVALIDO' });
-  const reported = data.approved_transaction_amount ?? data.request_amount;
+  const reported =
+    data.transaction_status === 'DECLINED'
+      ? (data.request_amount ?? data.approved_transaction_amount)
+      : (data.approved_transaction_amount ?? data.request_amount);
   // Un importe presente con tipo inválido no se sustituye por el solicitado.
   // Sin ningún importe explícito tampoco se inventa un pago de cero.
   if (
@@ -95,7 +109,34 @@ export function verifyKushkiWebhook(
     result: data.transaction_status === 'APPROVAL' ? 'aprobado' : 'rechazado',
     total,
     currency,
-    event: paymentDigest(`${time}.${reference}.${String(data.transaction_status)}`),
+    event: paymentDigest(
+      `${time}.${reference ?? id ?? paymentDigest(canonical)}.${String(data.transaction_status)}`,
+    ),
     hash: paymentDigest(canonical),
   };
+}
+
+export async function correlateKushkiPayment(
+  db: SupabaseClient<Database>,
+  event: Pick<VerifiedPaymentEvent, 'id' | 'reference'>,
+): Promise<string | null> {
+  if (event.id) {
+    const payment = await db
+      .from('payments')
+      .select('id')
+      .eq('proveedor', 'kushki')
+      .eq('id', event.id)
+      .maybeSingle();
+    if (payment.error) throwStudentPaymentError(payment.error);
+    if (payment.data) return payment.data.id;
+  }
+  if (!event.reference) return null;
+  const payment = await db
+    .from('payments')
+    .select('id')
+    .eq('proveedor', 'kushki')
+    .eq('referencia', event.reference)
+    .maybeSingle();
+  if (payment.error) throwStudentPaymentError(payment.error);
+  return payment.data?.id ?? null;
 }
