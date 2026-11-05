@@ -11,10 +11,10 @@ do $$ declare f text;begin
  if to_regclass('public.payments') is not null then raise exception 'payments ya existe:060 requiere revisión, no se modifica';end if;
 end $$;
 do $$ begin
- if (select md5(prosrc) from pg_proc where oid=to_regprocedure('public.manage_student_reservation(uuid,text,uuid,integer,integer,integer)')) is distinct from '6e547bb5f1c9196d37bc50b7c169e127' then raise exception '060: cuerpo distinto al revisado: public.manage_student_reservation(uuid,text,uuid,integer,integer,integer)';end if;
- if (select md5(prosrc) from pg_proc where oid=to_regprocedure('private.student_reservation_json(uuid)')) is distinct from '07576532175c23401fc166ef9c4741d5' then raise exception '060: cuerpo distinto al revisado: private.student_reservation_json(uuid)';end if;
- if (select md5(prosrc) from pg_proc where oid=to_regprocedure('public.delete_student_data(uuid,uuid,timestamptz,text[])')) is distinct from '7f4a4b6eef9d99b30d469ddafdd976ef' then raise exception '060: cuerpo distinto al revisado: public.delete_student_data(uuid,uuid,timestamptz,text[])';end if;
- if (select md5(prosrc) from pg_proc where oid=to_regprocedure('public.begin_student_deletion(uuid,uuid,text)')) is distinct from '68908b6fa7be09f7cbc26cb3ec4b128e' then raise exception '060: cuerpo distinto al revisado: public.begin_student_deletion(uuid,uuid,text)';end if;
+ if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('public.manage_student_reservation(uuid,text,uuid,integer,integer,integer)')) is distinct from '6e547bb5f1c9196d37bc50b7c169e127' then raise exception '060: cuerpo distinto al revisado: public.manage_student_reservation(uuid,text,uuid,integer,integer,integer)';end if;
+ if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.student_reservation_json(uuid)')) is distinct from '07576532175c23401fc166ef9c4741d5' then raise exception '060: cuerpo distinto al revisado: private.student_reservation_json(uuid)';end if;
+ if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('public.delete_student_data(uuid,uuid,timestamptz,text[])')) is distinct from '7f4a4b6eef9d99b30d469ddafdd976ef' then raise exception '060: cuerpo distinto al revisado: public.delete_student_data(uuid,uuid,timestamptz,text[])';end if;
+ if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('public.begin_student_deletion(uuid,uuid,text)')) is distinct from '68908b6fa7be09f7cbc26cb3ec4b128e' then raise exception '060: cuerpo distinto al revisado: public.begin_student_deletion(uuid,uuid,text)';end if;
 end $$;
 
 create table public.payments(
@@ -134,7 +134,8 @@ create function public.record_payment_reference(p_id uuid,p_proveedor text,p_ref
 language plpgsql security invoker set search_path='' as $$ begin
  if p_referencia is null or p_referencia !~ '^[A-Za-z0-9_.:-]{1,200}$' then raise exception 'Referencia inválida' using errcode='22023';end if;
  update public.payments set referencia=p_referencia,updated_at=clock_timestamp()
- where id=p_id and proveedor=p_proveedor and(referencia is null or referencia=p_referencia);
+ where id=p_id and proveedor=p_proveedor and(referencia is null or referencia=p_referencia
+  or(proveedor='kushki' and referencia='kushki-rechazado:'||id::text));
  if not found then raise exception 'Referencia no corresponde al intento' using errcode='IP409';end if;
 end $$;
 
@@ -142,10 +143,11 @@ create function public.confirm_student_payment(p_id uuid,p_proveedor text,p_refe
  p_total bigint,p_moneda text,p_event text,p_hash text)
 returns jsonb language plpgsql security invoker set search_path='' set lock_timeout='5s' as $$
 declare p public.payments;r public.student_schedule_reservations;e public.enrollments;c public.cohorts;
- ev public.payment_events;v_student uuid;v_error text;v_revision text;v_count integer;v_day date;begin
+ ev public.payment_events;v_student uuid;v_error text;v_revision text;v_count integer;v_day date;v_referencia text;begin
  if p_resultado is null or p_resultado not in ('pendiente','rechazado','aprobado') or p_proveedor is null
  or p_total is null or p_total<0 or p_total>10001000000 or p_moneda is null or length(p_moneda)>8
- or p_referencia is null or p_referencia !~ '^[A-Za-z0-9_.:-]{1,200}$'
+ or(p_referencia is null and not(p_proveedor='kushki' and p_resultado='rechazado'))
+ or(p_referencia is not null and p_referencia !~ '^[A-Za-z0-9_.:-]{1,200}$')
  or p_event is null or p_event !~ '^[a-f0-9]{64}$' or p_hash is null or p_hash !~ '^[a-f0-9]{64}$' then
  raise exception 'Evento de pago inválido' using errcode='22023';end if;
  select student_id into v_student from public.payments where id=p_id;
@@ -155,10 +157,13 @@ declare p public.payments;r public.student_schedule_reservations;e public.enroll
  perform 1 from public.enrollments where student_id=v_student order by id for update;
  select * into r from public.student_schedule_reservations where id=(select reservation_id from public.payments where id=p_id) for update;
  select * into p from public.payments where id=p_id for update;
- if p.proveedor<>p_proveedor or(p.referencia is not null and p.referencia<>p_referencia) then
+ -- Resolver falta de ticket DENTRO del lock: no compite con el ticket HTTP tardío.
+ v_referencia:=case when p_proveedor='kushki' and p_resultado='rechazado'
+  and(p_referencia is null or p_referencia='kushki-rechazado:'||p.id::text)
+  then coalesce(p.referencia,'kushki-rechazado:'||p.id::text) else p_referencia end;
+ if p.proveedor<>p_proveedor or(p.referencia is not null and p.referencia<>v_referencia
+  and not(p_proveedor='kushki' and p.referencia='kushki-rechazado:'||p.id::text)) then
  raise exception 'Proveedor o referencia no corresponde' using errcode='IP409';end if;
- if p_resultado<>'aprobado' and(p_total<>p.total_centavos or p_moneda<>p.moneda) then
- raise exception 'Monto no coincide' using errcode='IP422';end if;
  select * into ev from public.payment_events where proveedor=p_proveedor and event_key=p_event;
  if found then
  if ev.payment_id<>p.id or ev.body_hash<>p_hash or ev.resultado<>p_resultado then
@@ -167,10 +172,14 @@ declare p public.payments;r public.student_schedule_reservations;e public.enroll
  insert into public.payment_events(payment_id,proveedor,event_key,body_hash,resultado)
  values(p.id,p_proveedor,p_event,p_hash,p_resultado);
  -- Un evento no puede adjudicar una referencia ya usada por otro pago.
- update public.payments set referencia=p_referencia,updated_at=clock_timestamp() where id=p.id;
+ -- Guardar lo reportado también en pendientes/rechazos; solo una aprobación
+ -- confronta importe/moneda con el snapshot. Un aviso posterior no desactiva una cuenta.
+ update public.payments set referencia=v_referencia,recibido_centavos=p_total,recibido_moneda=p_moneda,
+ updated_at=clock_timestamp() where id=p.id;
  if p.estado in ('aprobado','revision') then
- if p_total<>p.total_centavos or p_moneda<>p.moneda then raise exception 'Monto no coincide' using errcode='IP422';end if;
+ if p_resultado<>'aprobado' or(p_total=p.total_centavos and p_moneda=p.moneda) then
  return private.payment_json(p.id);end if;
+ v_revision:='MONTO_NO_COINCIDE';end if;
  if p_resultado='pendiente' then return private.payment_json(p.id);end if;
  if p_resultado='rechazado' then
  update public.payments set estado='rechazado',recibido_centavos=p_total,recibido_moneda=p_moneda,updated_at=clock_timestamp() where id=p.id;
