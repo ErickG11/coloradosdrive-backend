@@ -81,3 +81,37 @@ por usuario en SQL. Con más de100 pendientes hay limpieza gradual, pero todas l
 vencidas YA dejan libre cupo/calendario; el siguiente lote y las lecturas completan
 los avisos. Un fallo DB permite reintentar la siguiente vuelta y falla cerrado en
 la consulta del alumno. No hay llamadas de red/correo dentro de una transacciónSQL.
+
+## Selector y contador (I09)
+
+`/student/inscripcion` integra selección de modalidad/inicio/horas por día, tabla
+horizontal día×hora con botones accesibles y estados Libre/Elegido/Ocupado. Cada día
+exige su cuota y el último se recorta; el servidor decide las horas totales del curso.
+Cambiar parámetros invalida celdas y selección, aborta la lectura anterior y descarta
+respuestas tardías. Un error al reservar obliga a consultar antes de otro intento.
+No hay persistencia de selección/cohorte/instructor/monto en localStorage.
+
+Después de reservar, muestra cohorte tentativa y plan completo, sin instructor.
+Con varias matrículas incompletas el estado prioriza la reservada para que el Paso1
+coincida con la única reserva vigente. GET propio recupera el plan tras recargar.
+Liberar exige confirmación y advierte que el intento diario se conserva.
+
+Banner/contador visible en los tres pasos, también durante errores/carga del estado.
+Se ancla a serverNow/expiraAt y avanza con reloj monotónico, resincroniza cada30s y
+al volver a la pestaña/foco. Aviso de5min; ampliación única solo si SQL la permite.
+Al llegar a cero bloquea continuar y consulta al servidor: no declara vencimiento ni
+libera localmente. Al recibir vencida muestra aviso y vuelve al Paso2 sin perder
+solicitud/sesión. Una lectura anterior no pisa la respuesta de ampliar/reservar.
+Ante red incierta conserva información y ofrece consultar el estado; no repite una
+mutación automáticamente. Pago en curso impide cambiar/liberar desde alumno.
+
+El Paso3 aún es informativo hastaI12: no hay checkout ni cobro falso. I10 debe
+confirmar users.status verificado→activo y matrícula/franjas/pago en una transacción;
+I12/I13 recargarán estado/layout tras pago, también desde otra pestaña/admin.
+No se cambiaron estilos globales, tokens ni componentes compartidos enI09.
+
+Cierre fase2: source typecheck/lint tocado OK, build backend OK y build frontend de
+aplicación webpack OK. Para frontend se excluyeron temporalmente tests heredados
+(9 errores TS conocidos) y .claude del build, con tsconfig restaurado sin diff y
+variables públicas ficticias solo en el proceso. No se ejecutaron ni editaron tests.
+Solo059 se comprobó con arnésF45 autorizado; no se aplicó SQL remoto.
