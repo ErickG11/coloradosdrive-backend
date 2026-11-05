@@ -9,6 +9,7 @@
 // para poder embeber instructor/estudiante tipado en el listado, en vez
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
+import type { StudentPayment, PaymentRow } from '../models/studentPayment.model';
 import type { StudentScheduleReservation } from '../models/studentSchedule.model';
 import type { StudentListResult } from '../models/studentAdmin.model';
 import type { NotificationRow } from '../models/notification.model';
@@ -72,6 +73,22 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      begin_student_payment: {
+        Args: { p_student: string; p_reserva: string; p_proveedor: string; p_attempt: string;
+          p_recargo: number; p_gracia: number; p_actor?: string; p_comprobante?: string };
+        Returns: StudentPayment;
+      };
+      claim_payment_dispatch: { Args: { p_id: string }; Returns: boolean };
+      record_payment_reference: { Args: { p_id: string; p_proveedor: string; p_referencia: string }; Returns: undefined };
+      confirm_student_payment: {
+        Args: { p_id: string; p_proveedor: string; p_referencia: string; p_resultado: string;
+          p_total: number; p_moneda: string; p_event: string; p_hash: string };
+        Returns: StudentPayment;
+      };
+      admin_release_student_reservation: { Args: { p_actor: string; p_reserva: string }; Returns: StudentScheduleReservation };
+      claim_payment_email: { Args: { p_id: string }; Returns: string | null };
+      finish_payment_email: { Args: { p_id: string; p_token: string; p_ok: boolean }; Returns: boolean };
+
       student_schedule_free_slots: {
         Args: { p_slots: string[] };
         Returns: { scheduled_at: string; libre: boolean }[];
@@ -401,6 +418,14 @@ export interface Database {
       };
     };
     Tables: {
+      payments: { Row: PaymentRow; Insert: never; Update: never; Relationships: [] };
+      payment_mail_outbox: {
+        Row: { payment_id: string; estado: 'pendiente' | 'enviando' | 'enviado' | 'fallido';
+          intentos: number; lease_token: string | null; lease_until: string | null;
+          next_attempt_at: string; sent_at: string | null };
+        Insert: never; Update: never; Relationships: [];
+      };
+
       student_schedule_reservations: {
         Row: { id: string; student_id: string; enrollment_id: string; cohort_id: string;
           estado: StudentScheduleReservation['estado']; creada_at: string; expira_at: string;
