@@ -1,4 +1,5 @@
 import { config as loadDotenv } from 'dotenv';
+import { loadPaymentConfig } from './paymentConfig';
 import { loadStudentScheduleConfig } from './studentScheduleConfig';
 import { loadEnrollmentConfig } from './enrollmentConfig';
 import { validateCaptchaConfiguration } from './captcha';
@@ -77,6 +78,7 @@ export const env = {
   SOLICITUD_TOKEN_SECRET: requireEnv('SOLICITUD_TOKEN_SECRET'),
   ...loadEnrollmentConfig(process.env),
   ...loadStudentScheduleConfig(process.env),
+  ...loadPaymentConfig(process.env),
   // B3 (F42): credenciales OAuth de la API de Gmail; vacías salvo EMAIL_PROVIDER=gmail_api.
   GMAIL_CLIENT_ID: gmailClientId,
   GMAIL_CLIENT_SECRET: gmailClientSecret,
