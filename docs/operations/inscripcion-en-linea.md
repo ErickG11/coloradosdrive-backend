@@ -1,5 +1,9 @@
 # Inscripción en línea — CC-01 / CC-02
 
+> Flujo vigente del alumno aprobado: [runbook I01–I14](inscripcion-alumno-runbook.md).
+> Sustituye la asignación de cohorte desde aprobación por etapas/reserva/pago para
+> nuevas solicitudes. Orden manual 058 → 059 → 060 → 061 → 062; 057 no se modifica.
+
 ## Aplicación manual
 
 No ejecutar SQL desde la aplicación ni durante las pruebas HTTP. Verificar primero 001–036 (especialmente 026, 029, 035 y 036). Orden: 037_inscripcion_privacidad.sql → 038_solicitudes_aprobacion_atomica.sql → 039_solicitudes_eliminacion_atomica.sql. Cada número tiene preflight, verificación terminada en ROLLBACK y rollback en esta carpeta. Revisar resultados antes de aplicar; un archivo en git no acredita aplicación. 037 es repetible; no elimina ni deduce consentimientos para solicitudes antiguas.
