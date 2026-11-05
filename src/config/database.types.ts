@@ -9,6 +9,7 @@
 // para poder embeber instructor/estudiante tipado en el listado, en vez
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
+import type { StudentScheduleReservation } from '../models/studentSchedule.model';
 import type { StudentListResult } from '../models/studentAdmin.model';
 import type { NotificationRow } from '../models/notification.model';
 import type { AttendanceEventRow, PracticeHistoryResult } from '../models/practiceAttendance.model';
@@ -71,6 +72,38 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      student_schedule_free_slots: {
+        Args: { p_slots: string[] };
+        Returns: { scheduled_at: string; libre: boolean }[];
+      };
+      reserve_student_schedule: {
+        Args: {
+          p_student: string;
+          p_enrollment: string;
+          p_slots: string[];
+          p_modalidad: string;
+          p_inicio: string;
+          p_horas: number;
+          p_ttl: number;
+          p_max_dia: number;
+          p_margen: number;
+        };
+        Returns: StudentScheduleReservation;
+      };
+      manage_student_reservation: {
+        Args: {
+          p_student: string;
+          p_accion: 'actual' | 'ampliar' | 'liberar' | 'iniciar_pago';
+          p_id?: string;
+          p_extension: number;
+          p_max_extensiones: number;
+          p_gracia: number;
+        };
+        Returns: StudentScheduleReservation | null;
+      };
+      expire_student_reservations: { Args: { p_student: string }; Returns: number };
+
+
       cohort_cupos_ocupados: { Args: {p_cohorts:string[]}; Returns:{cohort_id:string;ocupados:number}[] };
 
       tomar_recuperacion_aprobacion: {Args:{p_intento:string;p_ttl:number;p_forzar?:boolean};Returns:{intentoId:string;solicitudId:string;token:string}|null};
