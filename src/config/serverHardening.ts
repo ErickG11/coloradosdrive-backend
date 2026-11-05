@@ -9,6 +9,9 @@ import { AppError } from '../utils/AppError';
 // (correo, datos personales, motivos). Los archivos van por multipart.
 export const ENROLLMENT_JSON_LIMIT = '16kb';
 export const ENROLLMENT_JSON_PATHS = [
+  '/webhooks/kushki',
+  '/admin/pagos',
+  '/estudiantes/inscripcion/pagos',
   '/solicitudes',
   '/public/inscripcion',
   '/admin/solicitudes',

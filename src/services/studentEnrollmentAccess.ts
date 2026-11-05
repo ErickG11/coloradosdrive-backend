@@ -54,5 +54,20 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
       /^\/estudiantes\/inscripcion\/reservas\/[\da-f-]{36}\/(ampliar|liberar)$/i.test(path))
   )
     return true;
+  if (
+    method === 'GET' &&
+    (['/estudiantes/inscripcion/pagos/config', '/estudiantes/inscripcion/pagos/actual'].includes(
+      path,
+    ) ||
+      /^\/estudiantes\/inscripcion\/pagos\/[\da-f-]{36}$/i.test(path) ||
+      /^\/estudiantes\/inscripcion\/pagos\/reserva\/[\da-f-]{36}\/cotizacion$/i.test(path))
+  )
+    return true;
+  if (
+    method === 'POST' &&
+    (path === '/estudiantes/inscripcion/pagos' ||
+      /^\/estudiantes\/inscripcion\/pagos\/[\da-f-]{36}\/(simular|cobrar)$/i.test(path))
+  )
+    return true;
   return method === 'PATCH' && /^\/notifications\/[\da-f-]{36}\/read$/i.test(path);
 }

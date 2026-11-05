@@ -5,6 +5,12 @@ import type { PublicRouteEntry } from '../utils/routeInventory';
 // aquí exige justificar por qué es pública. Formato: método + ruta tal como la
 // reporta el inventario (parámetros como :id).
 export const PUBLIC_ROUTE_ALLOWLIST: readonly PublicRouteEntry[] = [
+  {
+    method: 'POST',
+    path: '/webhooks/kushki',
+    reason:
+      'I11: firma HMAC cuerpo+timestamp/merchant, ventana temporal, replay persistente y verificación de importe antes de activar',
+  },
   { method: 'GET', path: '/health', reason: 'Sonda de salud de la plataforma; sin datos' },
   { method: 'GET', path: '/public/courses', reason: 'Catálogo público de cursos para la landing' },
   {
@@ -25,7 +31,8 @@ export const PUBLIC_ROUTE_ALLOWLIST: readonly PublicRouteEntry[] = [
   {
     method: 'POST',
     path: '/solicitudes/confirmar-codigo',
-    reason: 'Emite el token de solicitud tras validar el código de 6 dígitos; con límite de intentos',
+    reason:
+      'Emite el token de solicitud tras validar el código de 6 dígitos; con límite de intentos',
   },
   // Rutas públicas nuevas de otros agentes: añadir aquí al final con su razón.
 ];

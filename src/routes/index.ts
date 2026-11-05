@@ -1,3 +1,5 @@
+import { adminPaymentRouter } from './adminPayment.routes';
+import { kushkiWebhookRouter } from './kushkiWebhook.routes';
 import { Router } from 'express';
 import {
   publicEnrollmentConfigRouter,
@@ -29,6 +31,8 @@ import { adminMfaGuard } from '../middlewares/adminMfa.middleware';
 export const apiRouter = Router();
 // B2 · F21: debe ir antes de cualquier router /admin/*; no hace nada con ADMIN_MFA_REQUIRED=false.
 apiRouter.use('/admin', adminMfaGuard());
+apiRouter.use('/admin/pagos', adminPaymentRouter);
+apiRouter.use('/webhooks/kushki', kushkiWebhookRouter);
 apiRouter.use('/public/inscripcion', publicEnrollmentConfigRouter);
 apiRouter.use('/admin/inscripciones', adminEnrollmentConfigRouter);
 apiRouter.use('/notifications', notificationRouter);
