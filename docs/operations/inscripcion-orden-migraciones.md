@@ -169,3 +169,8 @@ Orden057 aplicada →058 →059 →060_alumno_pagos_atomicos.sql, luego061 filtr
 Preflight/verificación ROLLBACK/rollback en inscripcion-060-*.sql; runbook060.
 060 sustituye guardas de borrado globales por alumno antes de efectos externos,
 conserva pagos recibidos y no reescribe matrículas existentes.062–064 reservadas.
+
+### I13 —061 filtro Alumnos (NO aplicada remotamente)
+Después de060:061_alumnos_pendientes_solo_activa.sql, preflight/verificación ROLLBACK/
+rollback inscripcion-061-*.sql. Solo semántica del filtro p_pending, sin mutar filas.
+No crear/aplicar062–064; siguen reservadas.058/059/060/061 se aplican MANUALMENTE.
