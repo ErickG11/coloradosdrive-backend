@@ -11,6 +11,7 @@ import type {
 import { AppError } from '../utils/AppError';
 import { parseFechaCivil, SCHOOL_TIMEZONE, toScheduledAtUTC } from '../utils/schoolTimezone';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
+import { expireStudentSchedule } from './studentScheduleExpiry.service';
 import { PracticeSlotGenerationService } from './practiceSlotGeneration.service';
 
 type Db = SupabaseClient<Database>;
@@ -279,8 +280,6 @@ export class StudentScheduleService {
   }
 
   async expire(studentId: string): Promise<number> {
-    const result = await this.db.rpc('expire_student_reservations', { p_student: studentId });
-    if (result.error) throwStudentScheduleError(result.error);
-    return result.data;
+    return expireStudentSchedule(this.db, studentId);
   }
 }

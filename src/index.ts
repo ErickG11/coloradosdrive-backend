@@ -1,3 +1,4 @@
+import { startStudentScheduleExpiryCron } from './jobs/studentScheduleExpiryCron';
 import { createApp } from './app';
 import { env } from './config/env';
 import { applyServerTimeouts } from './config/serverHardening';
@@ -14,8 +15,9 @@ applyServerTimeouts(server);
 
 if (process.env.DISABLE_CRON !== 'true') {
   startPracticeSlotCron();
+  startStudentScheduleExpiryCron();
   startSolicitudCleanupCron();
   startSolicitudApprovalRecoveryCron();
 } else {
-  console.warn('Crons de prácticas y solicitudes desactivados (DISABLE_CRON=true)');
+  console.warn('Crons de prácticas, solicitudes y reservas desactivados (DISABLE_CRON=true)');
 }
