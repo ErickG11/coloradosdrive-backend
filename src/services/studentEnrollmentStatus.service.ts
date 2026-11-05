@@ -106,6 +106,7 @@ export class StudentEnrollmentStatusService {
       (r) => r.origen === 'solicitud' && r.etapa_inscripcion !== 'activa',
     );
     const principal =
+      rows.find((r) => r.origen === 'solicitud' && r.etapa_inscripcion === 'reservado') ??
       rows.find((r) => r.origen === 'solicitud' && r.etapa_inscripcion !== 'activa') ??
       rows.find((r) => r.origen === 'solicitud') ??
       rows.at(0);
