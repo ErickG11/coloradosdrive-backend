@@ -4,8 +4,9 @@ import { env } from '../config/env';
 import { supabaseAdmin } from '../config/supabase';
 import { buildRateLimiter } from '../middlewares/rateLimit';
 import { asyncHandler } from '../utils/asyncHandler';
-import { verifyKushkiWebhook } from '../services/payments/kushkiWebhook';
+import { correlateKushkiPayment, verifyKushkiWebhook } from '../services/payments/kushkiWebhook';
 import { throwStudentPaymentError } from '../utils/studentPaymentError';
+import { logSafeError } from '../utils/safeLog';
 export const kushkiWebhookRouter = Router();
 kushkiWebhookRouter.post(
   '/',
@@ -20,8 +21,16 @@ kushkiWebhookRouter.post(
       },
       req.body,
     );
+    const paymentId = await correlateKushkiPayment(supabaseAdmin, event);
+    if (!paymentId) {
+      // Ni payload, UUID, ticket ni datos del cliente en el registro. No escribir
+      // nada en BD; 202 conserva los reintentos del proveedor (éxito: 200/201).
+      logSafeError('kushki_webhook_no_correlacionado');
+      res.status(202).json({ recibido: false, code: 'PAGO_NO_CORRELACIONADO' });
+      return;
+    }
     const result = await supabaseAdmin.rpc('confirm_student_payment', {
-      p_id: event.id,
+      p_id: paymentId,
       p_proveedor: 'kushki',
       p_referencia: event.reference,
       p_resultado: event.result,

@@ -56,7 +56,9 @@ La referencia de comprobante se sanea a texto plano y se registra actor, sin adj
 
 El adaptador usa POST /card/v1/charges y Private-Merchant-Id; solo recibe token de
 Hosted Fields. Envía desglose USD con subtotalIva0 y metadato drivePaymentId propio.
-Conserva ticketNumber como referencia; el webhook trae ticket_number. No llama al
+Conserva ticketNumber como referencia; APPROVAL exige ticket_number. En DECLINED
+sin ticket, SQL usa la referencia guardada o una sintética estable reemplazable por
+el ticket HTTP posterior. No llama al
 endpoint de tokenización ni acepta un objeto card. La interfaz de tarjeta es I12.
 Fuentes oficiales: [guía Ecuador](https://docs.kushki.com/ec/card-payments/one-step-payments/accept-a-payment/),
 [referencia Ecuador](https://api-docs.kushkipagos.com/en/ecuador/online-payments/card-payments/charge),
@@ -84,13 +86,21 @@ máxima185min para admitir la política oficial de reintentos de hasta3h. SQL pe
 la clave de evento y hash del cuerpo; un duplicado no repite activación/correo/avisos.
 La ventana no es un permiso para duplicar efectos.
 
-Solo acepta SALE y APPROVAL/DECLINED, metadato propio UUID, ticket y monto/moneda válidos.
-El importe real notificado se confronta en SQL con el congelado; discordancia aprobada
-va a revisión conservando dinero. No se persiste ni registra el cuerpo/token/card.
+Solo acepta SALE y APPROVAL/DECLINED e importes/moneda con formato válido. Primero
+correlaciona por UUID de metadata; si falta, no sirve o no existe ese pago Kushki,
+busca por ticket contra la referencia de ese proveedor. Sin coincidencia:202, sin
+escribir en BD y log de evento fijo sin datos personales, para permitir reintentos.
+DECLINED prioriza request_amount; APPROVAL prioriza approved_transaction_amount.
+Solo aprobaciones confrontan importe/moneda con el snapshot; discordancia aprobada
+va a revisión. Pendiente/rechazado conservan el reporte, incluso cero o moneda distinta,
+sin IP422. No se persiste ni registra el cuerpo/token/card.
 Fuentes: [autenticación y reintentos](https://docs.kushki.com/ec/notifications/overview/),
 [payload de tarjetas Ecuador](https://docs.kushki.com/ec/notifications/one-time-payments/webhook-card/).
 Configurar el webhook del comercio para enviar aprobaciones y rechazos de pagos únicos
 con tarjeta a la URL HTTPS propia; verificar que conserva drivePaymentId en metadata.
+Los supuestos y discrepancias contractuales están inventariados en
+[verificación de Kushki](inscripcion-kushki-verificacion.md). Corregir cero/ticket
+ausente no acredita el request completo, los callbacks reales ni certificación UAT.
 
 ## Pendientes operativos y de validación
 
