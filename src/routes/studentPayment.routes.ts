@@ -1,3 +1,4 @@
+import { paymentWithWelcome } from '../services/paymentWelcome';
 import { Router, type Request } from 'express';
 import { body, param, matchedData, type ValidationChain } from 'express-validator';
 import { env } from '../config/env';
@@ -48,10 +49,22 @@ studentPaymentRouter.get('/config', readLimit, (_req, res) =>
   }),
 );
 studentPaymentRouter.get(
+  '/matricula/:id/actual',
+  readLimit,
+  [id()],
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const { id: enrollmentId } = matchedData<{ id: string }>(req);
+    const pago = await paymentService.current(subject(req), enrollmentId);
+    res.json({ pago: pago ? await paymentWithWelcome(pago) : null });
+  }),
+);
+studentPaymentRouter.get(
   '/actual',
   readLimit,
   asyncHandler(async (req, res) => {
-    res.json({ pago: await paymentService.current(subject(req)) });
+    const pago = await paymentService.current(subject(req));
+    res.json({ pago: pago ? await paymentWithWelcome(pago) : null });
   }),
 );
 studentPaymentRouter.get(
@@ -87,7 +100,9 @@ studentPaymentRouter.get(
   validateFields,
   asyncHandler(async (req, res) => {
     const data = matchedData<{ id: string }>(req);
-    res.json(paymentView(await paymentService.own(subject(req), data.id)));
+    res.json(
+      await paymentWithWelcome(paymentView(await paymentService.own(subject(req), data.id))),
+    );
   }),
 );
 studentPaymentRouter.post(
@@ -105,7 +120,11 @@ studentPaymentRouter.post(
     const data = matchedData<{ id: string; resultado: 'aprobado' | 'rechazado' | 'pendiente' }>(
       req,
     );
-    res.json(await paymentService.simulate(subject(req), data.id, data.resultado));
+    res.json(
+      await paymentWithWelcome(
+        await paymentService.simulate(subject(req), data.id, data.resultado),
+      ),
+    );
   }),
 );
 studentPaymentRouter.post(

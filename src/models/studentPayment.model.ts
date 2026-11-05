@@ -15,6 +15,7 @@ export interface StudentPayment {
   confirmedAt: string | null;
   serverNow: string;
   requiereRevision: boolean;
+  puedeCobrar?: boolean;
 }
 export interface PaymentRow extends Record<string, unknown> {
   id: string;

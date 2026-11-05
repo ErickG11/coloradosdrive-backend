@@ -32,6 +32,7 @@ export function paymentView(p: PaymentRow): StudentPayment {
     confirmedAt: p.confirmed_at,
     serverNow: new Date().toISOString(),
     requiereRevision: p.estado === 'revision',
+    puedeCobrar: p.proveedor === 'kushki' && p.estado === 'pendiente' && p.dispatch_at === null,
   };
 }
 export class StudentPaymentService {
@@ -51,11 +52,10 @@ export class StudentPaymentService {
       throw new AppError('Pago no encontrado.', 404, { code: 'PAGO_NO_ENCONTRADO' });
     return result.data;
   }
-  async current(studentId: string): Promise<StudentPayment | null> {
-    const result = await this.db
-      .from('payments')
-      .select()
-      .eq('student_id', studentId)
+  async current(studentId: string, enrollmentId?: string): Promise<StudentPayment | null> {
+    const query = this.db.from('payments').select().eq('student_id', studentId);
+    if (enrollmentId) query.eq('enrollment_id', enrollmentId);
+    const result = await query
       .order('created_at', { ascending: false })
       .order('id')
       .limit(1)
@@ -86,7 +86,7 @@ export class StudentPaymentService {
         : {}),
     });
     if (result.error) throwStudentPaymentError(result.error);
-    return result.data;
+    return paymentView(await this.own(studentId, result.data.id));
   }
   async quote(
     studentId: string,

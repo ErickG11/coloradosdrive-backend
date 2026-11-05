@@ -1,3 +1,4 @@
+import { paymentWithWelcome } from '../services/paymentWelcome';
 import { Router } from 'express';
 import { body, param, matchedData } from 'express-validator';
 import { authenticate } from '../middlewares/auth.middleware';
@@ -43,7 +44,17 @@ adminPaymentRouter.get(
     ]);
     if (payments.error || reservation.error)
       throwStudentPaymentError(payments.error ?? reservation.error);
-    res.json({ pagos: payments.data, reserva: reservation.data });
+    let reserva = reservation.data;
+    let cotizacion: Awaited<ReturnType<typeof paymentService.quote>> | null = null;
+    if (reserva && ['vigente', 'pago_en_curso'].includes(reserva.estado)) {
+      try {
+        cotizacion = await paymentService.quote(data.id, reserva.id);
+      } catch (error) {
+        if (error instanceof AppError && error.code === 'RESERVA_VENCIDA') reserva = null;
+        else throw error;
+      }
+    }
+    res.json({ pagos: payments.data, reserva, cotizacion });
   }),
 );
 adminPaymentRouter.post(
@@ -80,12 +91,14 @@ adminPaymentRouter.post(
       comprobante?: string;
     }>(req);
     res.json(
-      await paymentService.cash(
-        req.user.id,
-        data.studentId,
-        data.reservationId,
-        data.attemptKey,
-        data.comprobante,
+      await paymentWithWelcome(
+        await paymentService.cash(
+          req.user.id,
+          data.studentId,
+          data.reservationId,
+          data.attemptKey,
+          data.comprobante,
+        ),
       ),
     );
   }),

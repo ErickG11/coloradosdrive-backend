@@ -1,3 +1,4 @@
+import { startPaymentWelcomeCron } from './jobs/paymentWelcomeCron';
 import { startStudentScheduleExpiryCron } from './jobs/studentScheduleExpiryCron';
 import { createApp } from './app';
 import { env } from './config/env';
@@ -16,6 +17,7 @@ applyServerTimeouts(server);
 if (process.env.DISABLE_CRON !== 'true') {
   startPracticeSlotCron();
   startStudentScheduleExpiryCron();
+  startPaymentWelcomeCron();
   startSolicitudCleanupCron();
   startSolicitudApprovalRecoveryCron();
 } else {
