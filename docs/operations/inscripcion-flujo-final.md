@@ -172,13 +172,11 @@ MFA, límites persistentes y los endpoints restantes siguen pendientes de sus ta
 estados, motivos y mensajes, métodos y checklist físico. `menos_de_decimo` y
 `extranjero_sin_cedula` se muestran para explicar el bloqueo/derivación, pero no
 pueden guardarse en 042. Bachiller no pide archivo; reciente lo recomienda;
-exterior, décimo y cursando exigen su subtipo específico.
+exterior y décimo exigen su subtipo específico. El nivel cursando queda solo para lectura histórica.
 
-La constante `METODOS_VALIDOS_APROBACION` es la única lista de métodos que
-habilitarán aprobación: identidad solo Registro Civil; estudios bachiller* solo
-Ministerio; otros niveles QR/llamada/original. `revision_visual` nunca habilita.
-`registro_civil_web_service` existe en catálogo pero queda fuera de métodos
-manuales: no se construye integración externa.
+Todos los métodos del catálogo habilitan la aprobación con resultado verificado,
+siempre que la última verificación sea vigente. Se conserva `registro_civil_web_service`
+como método previsto, excluido de captura manual, sin construir integración externa.
 
 Los documentos físicos conservan los nombres de `enrollment_documents`, incluido
 `titulo_bachiller` para original del certificado. Ninguno bloquea pago por defecto.
@@ -208,7 +206,7 @@ esta utilidad, sin revelar direcciones en errores ni logs.
 
 `enrollmentValidation.ts` contiene validadores puros con `AppError.code` y `field`:
 nombres/apellidos 2–60 (NFC, letras, apóstrofe, guion y espacios), cédula mediante
-el validador único `cedula.ts`, teléfono local/+593, sangre y nacionalidad de catálogo,
+el validador único `cedula.ts`, teléfono local obligatorio de solo dígitos, sangre y nacionalidad de catálogo,
 fecha real no futura y edad máxima 100. La mínima depende del curso; se exige
 representante autorizado y distinto si la persona es menor de 18 y el curso lo
 permite. La edad usa el día civil de Guayaquil, no la fecha UTC.
@@ -283,3 +281,30 @@ GET /admin/estudiantes/:id añade `identidadPresencial`:
 `{origenSolicitud:boolean,confirmada:boolean,confirmadaAt:string|null,confirmadaPor:string|null}`
 para esa misma matrícula (sin matrícula: false/false/null/null).
 Operación y rollback: inscripcion-056.md y sus tres scripts.
+
+## I17 — contrato vigente de datos y verificaciones
+
+Este apartado sustituye las restricciones anteriores por método y teléfono:
+`nombres`, `apellidos`, `cedula`, `fechaNacimiento`, `telefono`, `nacionalidadTipo`
+y `tipoSangre` son obligatorios. Nombres/apellidos: 2–60 caracteres NFC, letras,
+espacios, tildes, apóstrofos y guiones. Cédula: 10 dígitos y checksum ecuatoriano.
+Teléfono: exclusivamente dígitos, `09` +8 o `02`–`07` +7; no +593 ni separadores.
+`no_sabe` es válido para sangre. Fecha civil real/no futura, edad mínima del curso,
+máxima100 y representante autorizado si el curso admite menores de18.
+Códigos estables: NOMBRE_INVALIDO, CEDULA_INVALIDA, TELEFONO_INVALIDO, FECHA_INVALIDA,
+EDAD_MINIMA/MAXIMA, CAMPO_INVALIDO. Conflictos mantienen respuesta genérica sin
+confirmar existencia de cédula ni correo.
+
+`cursando_bachillerato` deja de admitirse en entradas nuevas (NIVEL_ESTUDIOS_INVALIDO).
+Se conserva su catálogo histórico en servidor y el CHECK existente, sin cambiar filas.
+Quien cursa bachillerato selecciona `decimo_aprobado` y adjunta certificado de promoción.
+La 063 revalida teléfono al guardar/enviar y nivel vigente, sin cambiar 042–062.
+
+`GET /solicitudes/:id/progreso` añade `identidadVerificada` y `estudiosVerificados`:
+booleanos de la última fila por tipo, orden `creado_at DESC,id DESC`, true solo para
+resultado verificado, con cualquier método. No publica resultados negativos, método,
+nota ni actor; conserva autenticación, límites y alcance existentes. Estos indicadores
+no sustituyen la revalidación atómica de aprobación: ambas últimas verificaciones
+siguen debiendo ser posteriores a los datos y al certificado vigente. Todos los
+métodos del catálogo habilitan, incluidos original_presencial y revision_visual.
+El web service no se puede introducir manualmente. Append-only y auditoría intactos.

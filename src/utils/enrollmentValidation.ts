@@ -77,10 +77,14 @@ export function validateEnrollmentBirthDate(
     );
   return { fecha, edad };
 }
-export function validateEducationLevel(value: unknown): Exclude<NivelEstudios, 'menos_de_decimo'> {
+export function validateEducationLevel(
+  value: unknown,
+): Exclude<NivelEstudios, 'menos_de_decimo' | 'cursando_bachillerato'> {
   const nivel = enumValue(
     value,
-    Object.keys(NIVELES_ESTUDIOS) as NivelEstudios[],
+    (Object.keys(NIVELES_ESTUDIOS) as NivelEstudios[]).filter(
+      (nivel) => nivel !== 'cursando_bachillerato',
+    ),
     'nivelEstudios',
     'NIVEL_ESTUDIOS_INVALIDO',
   );
@@ -105,10 +109,10 @@ export interface EnrollmentPersonalData {
   nombreCompleto: string;
   cedula: string;
   fechaNacimiento: string;
-  telefono?: string;
+  telefono: string;
   nacionalidadTipo: Exclude<Nacionalidad, 'extranjero_sin_cedula'>;
   tipoSangre: TipoSangre;
-  nivelEstudios?: Exclude<NivelEstudios, 'menos_de_decimo'>;
+  nivelEstudios?: Exclude<NivelEstudios, 'menos_de_decimo' | 'cursando_bachillerato'>;
   representante?: { nombre: string; cedula: string; acepta: true };
 }
 export function validateEnrollmentData(
@@ -184,7 +188,7 @@ export function validateEnrollmentData(
     fechaNacimiento: birth.fecha,
     nacionalidadTipo,
     tipoSangre,
-    ...(telefono ? { telefono } : {}),
+    telefono,
     ...(nivelEstudios ? { nivelEstudios } : {}),
     ...(representante ? { representante } : {}),
   };

@@ -37,7 +37,7 @@ export function isVerificationFresh(v: VerificationRecord, ctx: VerificationCont
 }
 
 // Una verificación habilita la aprobación solo si dice «verificado», usa un método válido para
-// el tipo y el nivel (revision_visual nunca) y está vigente.
+// el catálogo y el nivel y está vigente (todos los métodos habilitan).
 export function verificationEnablesApproval(
   v: VerificationRecord | undefined,
   ctx: VerificationContext,

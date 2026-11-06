@@ -100,6 +100,8 @@ export class SolicitudPrivacyService {
     estado: string;
     enviadaAt: string | null;
     correoVerificado: boolean;
+    identidadVerificada: boolean;
+    estudiosVerificados: boolean;
     consentimientoVigente: boolean;
     datosGuardados: boolean;
     solicitadaAt: string | null;
@@ -153,6 +155,22 @@ export class SolicitudPrivacyService {
       .eq('id', row.course_id)
       .maybeSingle();
     if (course.error) throw course.error;
+    // La última fila manda; el DTO público solo contiene dos booleanos.
+    const [identidad, estudios] = await Promise.all(
+      (['identidad', 'estudios'] as const).map((tipo) =>
+        this.db
+          .from('solicitud_verificaciones')
+          .select('resultado')
+          .eq('solicitud_id', id)
+          .eq('tipo', tipo)
+          .order('creado_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ),
+    );
+    if (identidad.error) throw identidad.error;
+    if (estudios.error) throw estudios.error;
     const requerido = ['bachiller_exterior', 'decimo_aprobado', 'cursando_bachillerato'].includes(
       row.nivel_estudios ?? '',
     );
@@ -160,6 +178,7 @@ export class SolicitudPrivacyService {
       row.nombres &&
       row.apellidos &&
       row.cedula &&
+      row.telefono &&
       row.fecha_nacimiento &&
       row.nacionalidad_tipo &&
       row.tipo_sangre,
@@ -181,6 +200,8 @@ export class SolicitudPrivacyService {
       estado: row.estado,
       enviadaAt: row.enviada_at ?? null,
       correoVerificado: row.correo_verificado,
+      identidadVerificada: identidad.data?.resultado === 'verificado',
+      estudiosVerificados: estudios.data?.resultado === 'verificado',
       consentimientoVigente: Boolean(consent),
       datosGuardados: guardados,
       solicitadaAt: row.solicitada_at,

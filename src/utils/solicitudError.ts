@@ -50,6 +50,8 @@ export function normalizeSolicitudError(error: Error): Error {
     SI427: [400, 'FECHA_INVALIDA', 'Ingresa una fecha de nacimiento real y no futura.'],
     SI428: [503, 'CURSO_NO_DISPONIBLE', 'El curso no está disponible. Contacta a la escuela.'],
     SI429: [409, 'DATOS_NO_REGISTRADOS', MENSAJE_DATOS_DUPLICADOS],
+    SI436: [400, 'TELEFONO_INVALIDO', 'Ingresa un teléfono local: celular de 10 dígitos (09) o convencional de 9 (02 a 07).'],
+    SI437: [400, 'NIVEL_ESTUDIOS_INVALIDO', 'Selecciona un nivel de estudios vigente.'],
     SI435: [409, 'ESTADO_INCORRECTO', 'Esta acción no corresponde al estado actual de tu solicitud.'],
     SI433: [
       409,

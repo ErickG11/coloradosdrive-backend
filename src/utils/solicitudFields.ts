@@ -21,15 +21,16 @@ export function normalizeName(value: unknown, field = 'nombreCompleto'): string 
   }
   return name;
 }
-export function normalizePhone(value: unknown): string | undefined {
-  if (value === undefined || value === '') return undefined;
+export function normalizePhone(value: unknown): string {
+  if (value === undefined || value === '')
+    invalidField('telefono', 'Ingresa tu teléfono.', 'TELEFONO_INVALIDO');
   if (typeof value !== 'string')
     invalidField('telefono', 'Ingresa un teléfono ecuatoriano válido.', 'TELEFONO_INVALIDO');
-  const phone = value.trim().replace(/^\+593/, '0');
+  const phone = value;
   if (!/^(09\d{8}|0[2-7]\d{7})$/.test(phone))
     invalidField(
       'telefono',
-      'Usa un celular de 10 dígitos (09) o convencional de 9 dígitos (02 a 07); se acepta +593.',
+      'Usa un celular de 10 dígitos (09) o convencional de 9 dígitos (02 a 07); solo números, sin prefijos internacionales ni separadores.',
       'TELEFONO_INVALIDO',
     );
   return phone;
