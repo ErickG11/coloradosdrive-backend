@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '../../src/config/database.types';
 import {
   StudentDocumentsService,
   PHYSICAL_DOCUMENT_MAPPING,
@@ -9,7 +7,7 @@ function service(results: { data: unknown; error: unknown }[]) {
   const from = createSupabaseFromMock(results);
   return {
     from,
-    service: new StudentDocumentsService({ from } as unknown as SupabaseClient<Database>),
+    service: new StudentDocumentsService({ from }),
   };
 }
 it('lista solo documentos propios, con estados y entrega física independiente', async () => {
