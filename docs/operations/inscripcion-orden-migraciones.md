@@ -187,3 +187,11 @@ Después de061:062_pagos_sin_envio_vencidos.sql y sus preflight/verificación RO
 rollback. Revalida reserva antes del dispatch y caduca solo pendientes nunca enviados;
 no cancela dinero en tránsito. Runbook inscripcion-062.md. F45 hasta062:
 62 aplicaciones,40 preflights,33 verificaciones y43 rollbacks OK. 063–064 reservadas.
+
+### I17 —063 datos obligatorios (aplicación manual pendiente)
+
+Después de062:063_inscripcion_datos_obligatorios.sql. Teléfono local obligatorio
+al guardar/enviar y rechazo del nivel retirado en entradas nuevas. No cambia CHECK,
+filas históricas ni 042–062. Preflight, verificación ROLLBACK y rollback:
+inscripcion-063-*.sql. La regla de métodos se amplía en TypeScript; SQL ya acepta
+cualquier método y conserva la frescura. 064 continúa reservada.
