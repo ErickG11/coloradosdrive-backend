@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { supabaseAdmin } from '../config/supabase';
-import { CohortAssignmentService } from '../services/cohortAssignment.service';
+import { CohortAssignmentService, schoolToday } from '../services/cohortAssignment.service';
 
 const cohortAssignmentService = new CohortAssignmentService(supabaseAdmin);
 
@@ -25,10 +25,10 @@ export async function previewCohortAssignment(
   res: Response<PreviewCohortAssignmentResponse>,
 ): Promise<void> {
   const { courseId } = req.body as PreviewCohortAssignmentBody;
-  const asignacion = await cohortAssignmentService.assignCohortForCourse(courseId);
+  const asignacion = await cohortAssignmentService.assignCohortForSolicitud(courseId, schoolToday());
 
   if (asignacion.cohortId === null) {
-    res.status(200).json({ cohortId: null, mensaje: 'ninguna cohorte con matrícula abierta' });
+    res.status(200).json({ cohortId: null, mensaje: 'ninguna cohorte con cupo y margen de cinco días' });
     return;
   }
 

@@ -1,83 +1,82 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-
 import { env } from '../config/env';
 
-// Token temporal del flujo público de solicitudes de inscripción. Es un
-// JWT HS256 firmado con SOLICITUD_TOKEN_SECRET, de uso exclusivo de este
-// flujo (claim purpose): nunca es válido como JWT de Supabase Auth, ni al
-// revés. Se implementa con node:crypto (no `jose`) porque jose v6 es solo
-// ESM y su interop en este backend CommonJS vive aislado en config/jwks.ts.
-
-const TOKEN_TTL_SECONDS = 60 * 60;
-const PURPOSE = 'solicitud';
-const HEADER = { alg: 'HS256', typ: 'JWT' };
-
-function base64url(input: Buffer | string): string {
-  return Buffer.from(input).toString('base64url');
+const TTL = 3600;
+export const SOLICITUD_TOKEN_ISSUER = 'coloradosdrive-backend';
+export const SOLICITUD_TOKEN_AUDIENCE = 'coloradosdrive:inscripcion';
+export type SolicitudScope = 'edicion' | 'estado';
+export interface SolicitudClaims {
+  solicitudId: string;
+  scope: SolicitudScope;
+  exp: number;
 }
-
-function sign(data: string): Buffer {
-  return createHmac('sha256', env.SOLICITUD_TOKEN_SECRET).update(data).digest();
-}
-
+const encode = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString('base64url');
+const signature = (value: string): Buffer =>
+  createHmac('sha256', env.SOLICITUD_TOKEN_SECRET).update(value).digest();
+// Mantiene segundo argumento de reloj para tests; todo emisor nuevo fija scope explícito.
 export function signSolicitudToken(
-  solicitudId: string,
-  nowSeconds = Math.floor(Date.now() / 1000),
+  id: string,
+  now = Math.floor(Date.now() / 1000),
+  scope: SolicitudScope = 'edicion',
 ): string {
-  const payload = {
-    sub: solicitudId,
-    purpose: PURPOSE,
-    iat: nowSeconds,
-    exp: nowSeconds + TOKEN_TTL_SECONDS,
-  };
-  const signingInput = `${base64url(JSON.stringify(HEADER))}.${base64url(JSON.stringify(payload))}`;
-  return `${signingInput}.${base64url(sign(signingInput))}`;
+  const input = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({
+    sub: id,
+    purpose: 'solicitud',
+    scope,
+    aud: SOLICITUD_TOKEN_AUDIENCE,
+    iss: SOLICITUD_TOKEN_ISSUER,
+    iat: now,
+    exp: now + TTL,
+  })}`;
+  return `${input}.${signature(input).toString('base64url')}`;
 }
-
-/**
- * Devuelve el id de la solicitud si el token es válido (firma, algoritmo,
- * propósito y expiración); null en cualquier otro caso.
- */
-export function verifySolicitudToken(
+export function verifySolicitudClaims(
   token: string,
-  nowSeconds = Math.floor(Date.now() / 1000),
-): string | null {
+  now = Math.floor(Date.now() / 1000),
+): SolicitudClaims | null {
+  if (token.length > 4096) return null;
   const parts = token.split('.');
-  if (parts.length !== 3) {
-    return null;
-  }
-  const [encodedHeader, encodedPayload, encodedSignature] = parts;
-
+  if (parts.length !== 3) return null;
   try {
-    const header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8')) as {
-      alg?: unknown;
-    };
-    if (header.alg !== HEADER.alg) {
-      return null;
-    }
-
-    const expected = sign(`${encodedHeader}.${encodedPayload}`);
-    const received = Buffer.from(encodedSignature, 'base64url');
-    if (received.length !== expected.length || !timingSafeEqual(received, expected)) {
-      return null;
-    }
-
-    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as {
-      sub?: unknown;
-      purpose?: unknown;
-      exp?: unknown;
-    };
+    const [head, body, sig] = parts;
+    const header = JSON.parse(Buffer.from(head, 'base64url').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
+    if (header.alg !== 'HS256' || header.typ !== 'JWT' || header.crit !== undefined) return null;
+    const received = Buffer.from(sig, 'base64url'),
+      expected = signature(`${head}.${body}`);
+    if (received.length !== expected.length || !timingSafeEqual(received, expected)) return null;
+    const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
     if (
-      payload.purpose !== PURPOSE ||
-      typeof payload.sub !== 'string' ||
-      typeof payload.exp !== 'number' ||
-      payload.exp <= nowSeconds
-    ) {
+      p.purpose !== 'solicitud' ||
+      p.aud !== SOLICITUD_TOKEN_AUDIENCE ||
+      p.iss !== SOLICITUD_TOKEN_ISSUER ||
+      typeof p.sub !== 'string' ||
+      !p.sub ||
+      p.sub.length > 64 ||
+      (p.scope !== 'edicion' && p.scope !== 'estado') ||
+      typeof p.iat !== 'number' ||
+      !Number.isSafeInteger(p.iat) ||
+      p.iat > now + 30 ||
+      typeof p.exp !== 'number' ||
+      !Number.isSafeInteger(p.exp) ||
+      p.exp <= now ||
+      p.exp <= p.iat ||
+      p.exp - p.iat > TTL
+    )
       return null;
-    }
-
-    return payload.sub;
+    return { solicitudId: p.sub, scope: p.scope, exp: p.exp };
   } catch {
     return null;
   }
+}
+export function verifySolicitudToken(
+  token: string,
+  now = Math.floor(Date.now() / 1000),
+): string | null {
+  return verifySolicitudClaims(token, now)?.solicitudId ?? null;
 }

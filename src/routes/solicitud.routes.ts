@@ -1,12 +1,23 @@
 import { Router } from 'express';
+import type { RequestHandler } from 'express';
 import { body, param, query } from 'express-validator';
 
 import {
+  resumenSolicitudes,
+  enviarSolicitud,
+  reenviarSolicitud,
+  aceptarConsentimiento,
+  avisoPrivacidad,
+  progresoSolicitud,
   completarDatos,
   confirmarCodigo,
-  decidirSolicitud,
+  certificadoUrl,
+  decisionSolicitud,
+  detalleSolicitud,
+  documentoUrl,
+  eliminarSolicitud,
   listarSolicitudes,
-  revisarDocumento,
+  registrarVerificacion,
   subirDocumento,
   verificarCorreo,
 } from '../controllers/solicitud.controller';
@@ -14,15 +25,17 @@ import { authenticate } from '../middlewares/auth.middleware';
 import { applicationRateLimiter, verificationRateLimiter } from '../middlewares/rateLimit';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { authenticateSolicitud } from '../middlewares/solicitudAuth.middleware';
-import { uploadDocumento } from '../middlewares/upload';
-import { validate } from '../middlewares/validate';
-import {
-  DOCUMENTO_ESTADOS_REVISION,
-  SOLICITUD_ESTADOS,
-  TIPOS_DOCUMENTO,
-} from '../models/solicitud.model';
+import { uploadCertificado } from '../middlewares/uploadCertificado';
+import { validateFields as validate } from '../middlewares/validate';
+import { ADMIN_ESTADOS_LISTA } from '../services/solicitudAdmin.service';
 import { asyncHandler } from '../utils/asyncHandler';
-import { isValidCedulaEcuatoriana } from '../utils/cedula';
+import { requireKnownFields } from '../utils/enrollmentSanitization';
+import { verifyEnrollmentCaptcha } from '../middlewares/captcha.middleware';
+import {
+  reserveEnrollmentCodeIp,
+  reserveEnrollmentCode,
+  reserveEnrollmentUpload,
+} from '../middlewares/enrollmentLimits.middleware';
 
 // ---------------------------------------------------------------------------
 // Público (postulante): solicitudes de inscripción online. Sin cuenta de
@@ -33,24 +46,33 @@ export const solicitudRouter = Router();
 
 const correoValidator = body('correo')
   .trim()
+  .toLowerCase()
+  .isLength({ max: 254 })
   .isEmail()
   .withMessage('correo debe ser un correo electrónico válido');
 const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID válido');
+function knownFields(allowed: readonly string[]): RequestHandler {
+  return (req, _res, next) => {
+    requireKnownFields(req.body, allowed);
+    next();
+  };
+}
 
 solicitudRouter.post(
   '/verificar-correo',
-  verificationRateLimiter,
-  [
-    correoValidator,
-    body('courseId').isUUID().withMessage('courseId debe ser un UUID válido'),
-  ],
+  reserveEnrollmentCodeIp,
+  verifyEnrollmentCaptcha,
+  knownFields(['correo', 'courseId', 'captchaToken']),
+  [correoValidator, body('courseId').isUUID().withMessage('courseId debe ser un UUID válido')],
   validate,
+  reserveEnrollmentCode,
   asyncHandler(verificarCorreo),
 );
 
 solicitudRouter.post(
   '/confirmar-codigo',
   verificationRateLimiter,
+  knownFields(['correo', 'codigo']),
   [
     correoValidator,
     body('codigo')
@@ -61,43 +83,11 @@ solicitudRouter.post(
   asyncHandler(confirmarCodigo),
 );
 
-function validateFechaNacimiento(value: unknown): boolean {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new Error('fechaNacimiento debe tener el formato YYYY-MM-DD');
-  }
-  const date = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
-    throw new Error('fechaNacimiento no es una fecha válida');
-  }
-  if (date.getTime() > Date.now() || date.getUTCFullYear() < 1900) {
-    throw new Error('fechaNacimiento fuera de rango');
-  }
-  return true;
-}
-
 solicitudRouter.put(
   '/:id/datos',
   applicationRateLimiter,
   authenticateSolicitud,
-  [
-    idParamValidator,
-    body('cedula')
-      .custom((value: unknown) => typeof value === 'string' && isValidCedulaEcuatoriana(value))
-      .withMessage('cedula no es una cédula ecuatoriana válida'),
-    body('nombreCompleto')
-      .isString()
-      .trim()
-      .notEmpty()
-      .withMessage('nombreCompleto es obligatorio'),
-    body('telefono')
-      .optional()
-      .isString()
-      .trim()
-      .notEmpty()
-      .isLength({ max: 20 })
-      .withMessage('telefono no puede estar vacío ni superar 20 caracteres si se envía'),
-    body('fechaNacimiento').custom(validateFechaNacimiento),
-  ],
+  idParamValidator,
   validate,
   asyncHandler(completarDatos),
 );
@@ -109,14 +99,10 @@ solicitudRouter.post(
   '/:id/documentos',
   applicationRateLimiter,
   authenticateSolicitud,
-  uploadDocumento,
-  [
-    idParamValidator,
-    body('tipo_documento')
-      .isIn(TIPOS_DOCUMENTO)
-      .withMessage('tipo_documento debe ser uno de: ' + TIPOS_DOCUMENTO.join(', ')),
-  ],
+  idParamValidator,
   validate,
+  reserveEnrollmentUpload,
+  uploadCertificado,
   asyncHandler(subirDocumento),
 );
 
@@ -127,48 +113,90 @@ export const solicitudAdminRouter = Router();
 
 solicitudAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
-const motivoValidator = body('motivoRechazo')
-  .optional()
-  .isString()
-  .trim()
-  .notEmpty()
-  .withMessage('motivoRechazo no puede estar vacío si se envía');
-
 solicitudAdminRouter.get(
   '/',
   [
+    query('page').optional().isInt({ min: 1, max: 1000000 }),
+    query('pageSize').optional().isInt({ min: 1, max: 100 }),
+    query('q').optional().isString().trim().isLength({ max: 100 }),
     query('estado')
       .optional()
-      .isIn(SOLICITUD_ESTADOS)
-      .withMessage('estado debe ser uno de: ' + SOLICITUD_ESTADOS.join(', ')),
+      .isIn([...ADMIN_ESTADOS_LISTA])
+      .withMessage('estado debe ser uno de: ' + ADMIN_ESTADOS_LISTA.join(', ')),
   ],
   validate,
   asyncHandler(listarSolicitudes),
 );
 
-solicitudAdminRouter.patch(
-  '/:id/documentos/:docId',
-  [
-    idParamValidator,
-    param('docId').isUUID().withMessage('docId debe ser un UUID válido'),
-    body('estado')
-      .isIn(DOCUMENTO_ESTADOS_REVISION)
-      .withMessage('estado debe ser uno de: ' + DOCUMENTO_ESTADOS_REVISION.join(', ')),
-    motivoValidator,
-  ],
+export const privacyRouter = Router();
+privacyRouter.get('/aviso-privacidad', avisoPrivacidad);
+solicitudRouter.get(
+  '/:id/progreso',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  idParamValidator,
   validate,
-  asyncHandler(revisarDocumento),
+  asyncHandler(progresoSolicitud),
 );
 
-solicitudAdminRouter.patch(
-  '/:id',
-  [
-    idParamValidator,
-    body('estado')
-      .isIn(['aprobada', 'rechazada'])
-      .withMessage('estado debe ser aprobada o rechazada'),
-    motivoValidator,
-  ],
+solicitudRouter.put(
+  '/:id/consentimiento',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  [idParamValidator, body('versionAviso').isString()],
   validate,
-  asyncHandler(decidirSolicitud),
+  asyncHandler(aceptarConsentimiento),
+);
+
+solicitudAdminRouter.get(
+  '/:id/documentos/:docId/url',
+  [idParamValidator, param('docId').isUUID()],
+  validate,
+  asyncHandler(documentoUrl),
+);
+
+solicitudAdminRouter.delete('/:id', idParamValidator, validate, asyncHandler(eliminarSolicitud));
+
+solicitudRouter.post(
+  '/:id/enviar',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  idParamValidator,
+  validate,
+  asyncHandler(enviarSolicitud),
+);
+
+solicitudRouter.post(
+  '/:id/reenviar',
+  applicationRateLimiter,
+  authenticateSolicitud,
+  idParamValidator,
+  validate,
+  asyncHandler(reenviarSolicitud),
+);
+
+solicitudAdminRouter.get('/resumen', asyncHandler(resumenSolicitudes));
+
+// F14: rutas con :id después de /resumen para que no lo capturen como UUID.
+solicitudAdminRouter.get('/:id', idParamValidator, validate, asyncHandler(detalleSolicitud));
+
+solicitudAdminRouter.post(
+  '/:id/verificaciones',
+  idParamValidator,
+  validate,
+  asyncHandler(registrarVerificacion),
+);
+
+solicitudAdminRouter.get(
+  '/:id/certificado/url',
+  idParamValidator,
+  validate,
+  asyncHandler(certificadoUrl),
+);
+
+solicitudAdminRouter.post(
+  '/:id/decision',
+  idParamValidator,
+  validate,
+  asyncHandler(decisionSolicitud),
 );

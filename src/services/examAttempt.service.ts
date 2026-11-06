@@ -14,6 +14,7 @@ import { AppError } from '../utils/AppError';
 import type { EmailService } from './email.service';
 import { gradeOpenTextAnswer } from './grading.service';
 import { activeCourseIds } from './studentEnrollmentScope';
+import { logSafeError } from '../utils/safeLog';
 
 type ExamRow = Database['public']['Tables']['exams']['Row'];
 type QuestionRow = Database['public']['Tables']['questions']['Row'];
@@ -444,7 +445,7 @@ export class ExamAttemptService {
         passed: attemptRow.passed ?? false,
       });
     } catch (err) {
-      console.error('No se pudo enviar el correo de resultado de examen:', err);
+      logSafeError('exam_result_email_failed', err);
     }
   }
 

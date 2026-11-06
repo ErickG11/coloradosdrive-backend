@@ -4,8 +4,13 @@ import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate, validateStudentProfile } from '../middlewares/validate';
+import { StudentIdentityService } from '../services/studentIdentity.service';
 import { StudentAdminService } from '../services/studentAdmin.service';
 import { StudentAccessService } from '../services/studentAccess.service';
+import { StudentAccessLinkService } from '../services/studentAccessLink.service';
+import { AccountService } from '../services/account.service';
+import { EmailService } from '../services/email.service';
+import { mailer } from '../config/mailer';
 import { StudentDeletionService } from '../services/studentDeletion.service';
 import { StudentCohortService } from '../services/studentCohort.service';
 import {
@@ -245,5 +250,34 @@ studentAdminRouter.get(
   validate,
   asyncHandler(async (req, res) => {
     res.json(await service.get(req.params.id));
+  }),
+);
+
+// B1 (F17): reenvío auditado del enlace de un solo uso para crear la contraseña.
+const accessLinkService = new StudentAccessLinkService(
+  supabaseAdmin,
+  new EmailService(mailer),
+  new AccountService(supabaseAdmin),
+);
+studentAdminRouter.post(
+  '/:id/reenviar-enlace-acceso',
+  [param('id').isUUID()],
+  validate,
+  asyncHandler(async (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .json(await accessLinkService.reenviar(actor(req), req.params.id));
+  }),
+);
+
+const identityService = new StudentIdentityService(supabaseAdmin);
+studentAdminRouter.post(
+  '/:id/identidad-presencial',
+  [param('id').isUUID().withMessage('Alumno inválido')],
+  validateStudentProfile,
+  asyncHandler(async (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .json(await identityService.confirmar(req.params.id, actor(req), req.body as unknown));
   }),
 );

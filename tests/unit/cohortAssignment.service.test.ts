@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import type { CandidateCohort } from '../../src/models/cohortAssignment.model';
 import {
+  assignSolicitudCohort,
   assignCohort,
   CohortAssignmentService,
   isCohortWindowOpen,
@@ -214,4 +215,15 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
 
     expect(result.cohortId).toBe('con-cupo');
   });
+});
+
+it('el motor público admite ventanas futuras sin cambiar la regla manual', () => {
+  const candidate = buildCandidate({ fechaInicioMatricula: day('2026-02-01'), fechaFinMatricula: day('2026-02-28') });
+  expect(assignSolicitudCohort(day('2026-01-15'), [candidate])).toEqual({ cohortId: candidate.id, warning: null });
+  expect(assignCohort(day('2026-01-15'), [candidate])).toEqual({ cohortId: null });
+});
+it('el motor público salta la primera cohorte si no alcanza el margen', () => {
+  const close = buildCandidate({ id: 'cercana', fechaFinMatricula: day('2026-01-18') });
+  const next = buildCandidate({ id: 'siguiente', fechaInicioCurso: day('2026-03-01') });
+  expect(assignSolicitudCohort(day('2026-01-15'), [close, next]).cohortId).toBe('siguiente');
 });

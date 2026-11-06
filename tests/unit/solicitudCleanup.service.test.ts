@@ -1,74 +1,29 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-
 import type { Database } from '../../src/config/database.types';
-import {
-  ABANDONED_AFTER_DAYS,
-  SolicitudCleanupService,
-} from '../../src/services/solicitudCleanup.service';
-import { createChain, createSupabaseFromMock } from '../helpers/supabaseMock';
-
-function buildService(from: jest.Mock): SolicitudCleanupService {
-  return new SolicitudCleanupService({ from } as unknown as SupabaseClient<Database>);
-}
-
-describe('SolicitudCleanupService.purgeAbandoned', () => {
-  const now = new Date('2026-06-15T03:00:00.000Z');
-
-  it('no hace nada más si no hay solicitudes viejas en pendiente_revision', async () => {
-    const from = createSupabaseFromMock([{ data: [], error: null }]);
-
-    const deleted = await buildService(from).purgeAbandoned(now);
-
-    expect(deleted).toBe(0);
-    expect(from).toHaveBeenCalledTimes(1);
-  });
-
-  it('usa el corte de 7 días sobre pendiente_revision', async () => {
-    const oldChain = createChain({ data: [], error: null });
-    const from = jest.fn().mockReturnValueOnce(oldChain);
-
-    await buildService(from).purgeAbandoned(now);
-
-    const expectedCutoff = new Date(
-      now.getTime() - ABANDONED_AFTER_DAYS * 24 * 60 * 60_000,
-    ).toISOString();
-    expect(oldChain.eq).toHaveBeenCalledWith('estado', 'pendiente_revision');
-    expect(oldChain.lt).toHaveBeenCalledWith('created_at', expectedCutoff);
-  });
-
-  it('elimina solo las que no tienen ningún documento; las que sí tienen quedan esperando revisión', async () => {
-    const deleteChain = createChain({ data: null, error: null });
-    const from = jest
-      .fn()
-      .mockReturnValueOnce(
-        createChain({ data: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], error: null }),
-      )
-      .mockReturnValueOnce(createChain({ data: [{ solicitud_id: 'b' }], error: null }))
-      .mockReturnValueOnce(deleteChain);
-
-    const deleted = await buildService(from).purgeAbandoned(now);
-
-    expect(deleted).toBe(2);
-    expect(deleteChain.in).toHaveBeenCalledWith('id', ['a', 'c']);
-    // Nunca borra una que ya no esté pendiente.
-    expect(deleteChain.eq).toHaveBeenCalledWith('estado', 'pendiente_revision');
-  });
-
-  it('no elimina nada si todas las viejas tienen documentos', async () => {
-    const from = createSupabaseFromMock([
-      { data: [{ id: 'a' }], error: null },
-      { data: [{ solicitud_id: 'a' }], error: null },
-    ]);
-
-    const deleted = await buildService(from).purgeAbandoned(now);
-
-    expect(deleted).toBe(0);
-    expect(from).toHaveBeenCalledTimes(2);
-  });
-
-  it('propaga el error si la consulta falla', async () => {
-    const from = createSupabaseFromMock([{ data: null, error: { message: 'boom' } }]);
-
-    await expect(buildService(from).purgeAbandoned(now)).rejects.toEqual({ message: 'boom' });
-  });
+import { SolicitudCleanupService } from '../../src/services/solicitudCleanup.service';
+import { SolicitudDeletionService } from '../../src/services/solicitudDeletion.service';
+import { createSupabaseFromMock } from '../helpers/supabaseMock';
+afterEach(() => jest.restoreAllMocks());
+it('purga rechazadas a N días y conserva aprobadas fuera de la consulta', async () => {
+ const from = createSupabaseFromMock([{ data: [
+  { id: 'vieja', estado: 'rechazada', created_at: '2026-01-01', reviewed_at: '2026-01-02' },
+  { id: 'reciente', estado: 'rechazada', created_at: '2026-01-01', reviewed_at: '2026-02-09' },
+ ], error: null }]);
+ const remove = jest.spyOn(SolicitudDeletionService.prototype,'remove').mockResolvedValue(true);
+ expect(await new SolicitudCleanupService({ from } as unknown as SupabaseClient<Database>,30).purgeAbandoned(new Date('2026-02-10'))).toBe(1);
+ expect(remove).toHaveBeenCalledWith('vieja',null,'purga_retencion',false);
 });
+it('mantiene la regla de siete días para borradores incluso con documentos', async () => {
+ const from = createSupabaseFromMock([{ data: [{ id:'pendiente',estado:'pendiente_revision',created_at:'2026-02-01',reviewed_at:null }],error:null }]);
+ const remove = jest.spyOn(SolicitudDeletionService.prototype,'remove').mockResolvedValue(false);
+ expect(await new SolicitudCleanupService({ from } as unknown as SupabaseClient<Database>).purgeAbandoned(new Date('2026-02-10'))).toBe(0);
+ expect(remove).toHaveBeenCalledWith('pendiente',null,'purga_retencion',false);
+});
+it('no toca una aprobación en curso',async () => {
+ const from = createSupabaseFromMock([{data:[{id:'ocupada',estado:'pendiente_revision',created_at:'2026-01-01',reviewed_at:'2026-02-10'}],error:null}]);
+ const remove=jest.spyOn(SolicitudDeletionService.prototype,'remove');
+ expect(await new SolicitudCleanupService({from} as unknown as SupabaseClient<Database>).purgeAbandoned(new Date('2026-02-10'))).toBe(0);
+ expect(remove).not.toHaveBeenCalled();
+});
+
+it('conserva enviadas y no adelanta los siete días de borrador aunque N sea menor',async()=>{const from=createSupabaseFromMock([{data:[{id:'enviada',estado:'pendiente_revision',enviada_at:'2026-01-01',created_at:'2026-01-01',reviewed_at:null},{id:'borrador',estado:'pendiente_revision',enviada_at:null,created_at:'2026-02-05',reviewed_at:null}],error:null}]);const remove=jest.spyOn(SolicitudDeletionService.prototype,'remove').mockResolvedValue(true);expect(await new SolicitudCleanupService({from} as unknown as SupabaseClient<Database>,1).purgeAbandoned(new Date('2026-02-10'))).toBe(0);expect(remove).not.toHaveBeenCalled();});
