@@ -29,3 +29,28 @@ npm-debug.log*
 reports/
 artifacts/
 .eslintcache
+
+# Secretos y credenciales locales
+.env*
+!.env.example
+*.pem
+*.key
+
+# Sesiones y resultados de pruebas e2e
+.auth/
+storageState*.json
+playwright-report/
+test-results/
+
+# Herramientas locales de asistentes
+.claude/
+.agents/
+.codex/
+.impeccable/
+.taste-skill/
+.github/skills/
+.github/agents/
+.github/hooks/
+
+# Artefactos de compilación
+.next/
