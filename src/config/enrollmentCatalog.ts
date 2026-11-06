@@ -80,25 +80,19 @@ export const RESULTADOS_VERIFICACION = ['verificado', 'no_coincide', 'no_encontr
 export const METODOS_MANUALES_VERIFICACION = METODOS_VERIFICACION.filter(
   (m) => m !== 'registro_civil_web_service',
 );
-// Una revisión visual o un método de otro tipo NUNCA habilitan la aprobación.
+// I17: cualquier método del catálogo permite verificar ambos tipos; sigue siendo
+// obligatorio el resultado verificado y la frescura de la última verificación.
 export const METODOS_VALIDOS_APROBACION = {
-  identidad: ['registro_civil_portal', 'registro_civil_web_service'],
-  bachiller: ['ministerio_portal'],
-  certificado: ['codigo_qr_certificado', 'llamada_institucion', 'original_presencial'],
-} as const satisfies Record<string, readonly MetodoVerificacion[]>;
+  identidad: METODOS_VERIFICACION,
+  bachiller: METODOS_VERIFICACION,
+  certificado: METODOS_VERIFICACION,
+} as const;
 export function metodoHabilitaAprobacion(
-  tipo: TipoVerificacion,
+  _tipo: TipoVerificacion,
   nivel: NivelEstudios,
   metodo: MetodoVerificacion,
 ): boolean {
-  if (!NIVELES_ESTUDIOS[nivel].permitido) return false;
-  const permitidos: readonly MetodoVerificacion[] =
-    tipo === 'identidad'
-      ? METODOS_VALIDOS_APROBACION.identidad
-      : nivel.startsWith('bachiller')
-        ? METODOS_VALIDOS_APROBACION.bachiller
-        : METODOS_VALIDOS_APROBACION.certificado;
-  return permitidos.includes(metodo);
+  return NIVELES_ESTUDIOS[nivel].permitido && METODOS_VERIFICACION.includes(metodo);
 }
 export const MOTIVOS_DEVOLUCION = {
   DATOS_NO_COINCIDEN_REGISTRO_CIVIL:
@@ -176,7 +170,7 @@ export const LIMITES_CERTIFICADO = {
   esperaMs: 10000,
 } as const;
 export const MENSAJE_DATOS_DUPLICADOS =
-  'No pudimos registrar estos datos. Si ya te inscribiste, usa tu correo para ver el estado o contacta a la escuela.';
+  'No pudimos continuar con estos datos. Si ya enviaste una solicitud o ya eres alumno, consulta el estado con tu correo o comunícate con la escuela.';
 export const MENSAJE_VERIFICACION_CORREO = 'Te enviamos un código de verificación a tu correo';
 // B1 (F15): días de bloqueo del correo tras rechazar por SPAM (solo se guarda su hash).
 export const BLOQUEO_SPAM_DIAS = 30;

@@ -131,7 +131,7 @@ export class SolicitudService {
         apellidos: validated.apellidos,
         cedula: validated.cedula,
         fechaNacimiento: validated.fechaNacimiento,
-        telefono: validated.telefono ?? null,
+        telefono: validated.telefono,
         nacionalidadTipo: validated.nacionalidadTipo,
         tipoSangre: validated.tipoSangre,
         ...(validated.nivelEstudios ? { nivelEstudios: validated.nivelEstudios } : {}),
