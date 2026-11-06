@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { HORAS_POR_DIA_MAX, HORAS_POR_DIA_MIN, HORAS_POR_DIA_MESSAGE } from '../utils/practiceHours';
 import { body, param } from 'express-validator';
 import type { Meta, ValidationChain } from 'express-validator';
 
@@ -61,8 +62,8 @@ const baseValidators = [
     .isIn(MODALIDADES)
     .withMessage('modalidad debe ser uno de: ' + MODALIDADES.join(', ')),
   body('horasPorDia')
-    .isInt({ min: 1, max: 16 })
-    .withMessage('horasPorDia debe ser un entero entre 1 y 16'),
+    .isInt({ min: HORAS_POR_DIA_MIN, max: HORAS_POR_DIA_MAX })
+    .withMessage(HORAS_POR_DIA_MESSAGE),
   body().custom(exactlyOneOfFechaFinOrNumeroSesiones),
 ];
 
