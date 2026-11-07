@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../config/supabase';
 import { EmailService } from '../services/email.service';
 import { PracticeSlotSchedulerService } from '../services/practiceSlotScheduler.service';
 import { RealtimeService } from '../services/realtime.service';
+import { logSafeError } from '../utils/safeLog';
 
 const schedulerService = new PracticeSlotSchedulerService(
   supabaseAdmin,
@@ -25,7 +26,7 @@ export function startPracticeSlotCron(): void {
     if (running) return;
     running = true;
     schedulerService.runOnce().catch((err: unknown) => {
-      console.error('Error en la corrida del scheduler de horarios de práctica:', err);
+      logSafeError('practice_slot_scheduler_failed', err);
     }).finally(() => { running = false; });
   });
 }

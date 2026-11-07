@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 import request from 'supertest';
 
 jest.mock('../../src/config/supabase', () => ({
-  supabaseAdmin: { from: jest.fn() },
+  supabaseAdmin: { from: jest.fn(), rpc: jest.fn() },
   supabaseAnon: {},
 }));
 
@@ -16,9 +16,13 @@ import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { maxCohortDate } from '../../src/utils/cohortRules';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
+const mockedRpc = supabaseAdmin.rpc as jest.Mock;
+// El servicio consulta los cupos ocupados (matrículas activas y reservas vigentes) por RPC.
+const ocupados = (n: number) => mockedRpc.mockResolvedValueOnce({ data: [{ ocupados: n }], error: null });
 const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
 // Versión tal cual la devuelve PostgREST (microsegundos).
@@ -40,6 +44,7 @@ describe('cohorts endpoints', () => {
 
   beforeEach(() => {
     mockedFrom.mockReset();
+    mockedRpc.mockReset();
     mockedVerifySupabaseJwt.mockReset();
   });
 
@@ -52,7 +57,7 @@ describe('cohorts endpoints', () => {
     it('POST /cohorts con rol no-admin responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .post('/cohorts')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
@@ -70,7 +75,7 @@ describe('cohorts endpoints', () => {
     it('PATCH /cohorts/:id con rol no-admin responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .patch('/cohorts/11111111-1111-4111-8111-111111111111')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
@@ -659,6 +664,7 @@ describe('cohorts endpoints', () => {
     });
 
     it('rechaza con 409 mover la cohorte a otro curso que ya tiene ese nombre', async () => {
+      ocupados(0);
       const otherCourse = '33333333-3333-4333-8333-333333333333';
       const namesChain = createChain({
         data: [{ id: 'otra', nombre: validCohortBody.nombre.toUpperCase() }],
@@ -918,6 +924,7 @@ describe('cohorts endpoints', () => {
     });
 
     it('permite cambiar de curso una cohorte sin alumnos', async () => {
+      ocupados(0);
       mockedFrom
         .mockReturnValueOnce(current())
         .mockReturnValueOnce(enrollments())
@@ -948,6 +955,7 @@ describe('cohorts endpoints', () => {
     });
 
     it('traduce la FK compuesta (matrícula creada en carrera) a 409 con código propio', async () => {
+      ocupados(0);
       mockedFrom
         .mockReturnValueOnce(current())
         .mockReturnValueOnce(enrollments())
@@ -974,6 +982,7 @@ describe('cohorts endpoints', () => {
     });
 
     it('F-02: no deja bajar el cupo por debajo de los alumnos activos', async () => {
+      ocupados(3);
       mockedFrom
         .mockReturnValueOnce(current({ cupo_maximo: 20 }))
         .mockReturnValueOnce(enrollments('activo', 'activo', 'activo', 'finalizado'));
@@ -990,6 +999,7 @@ describe('cohorts endpoints', () => {
     });
 
     it('F-02: permite bajar el cupo hasta los activos; finalizados y retirados no ocupan', async () => {
+      ocupados(2);
       mockedFrom
         .mockReturnValueOnce(current({ cupo_maximo: 20 }))
         .mockReturnValueOnce(enrollments('activo', 'activo', 'finalizado', 'retirado', 'retirado'))
@@ -1129,7 +1139,7 @@ describe('cohorts endpoints', () => {
     it('estudiante e instructor reciben 403 y no se consulta la cohorte', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const asStudent = await request(app)
         .delete(`/cohorts/${cohortId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
@@ -1141,7 +1151,7 @@ describe('cohorts endpoints', () => {
 
       expect(asStudent.status).toBe(403);
       expect(asInstructor.status).toBe(403);
-      expect(mockedFrom).toHaveBeenCalledTimes(1); // solo el estado de la cuenta del estudiante
+      expect(mockedFrom).toHaveBeenCalledTimes(2); // solo el estado de la cuenta del estudiante
     });
 
     it('responde 400 si el id no es un UUID', async () => {

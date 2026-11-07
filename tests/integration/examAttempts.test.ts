@@ -22,6 +22,7 @@ import { createApp } from '../../src/app';
 import { mailer } from '../../src/config/mailer';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
@@ -142,6 +143,7 @@ describe('exam attempts endpoints', () => {
     it('responde 404 si el examen no está publicado', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(
           createChain({ data: buildExamRow({ is_published: false }), error: null }),
         );
@@ -156,6 +158,7 @@ describe('exam attempts endpoints', () => {
     it('responde 403 si el estudiante no tiene inscripción activa en el curso del examen', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(createChain({ data: [], error: null })); // sin enrollment activo
 
@@ -171,6 +174,7 @@ describe('exam attempts endpoints', () => {
 
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null })) // enrollment
         .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null })) // cohort
@@ -218,6 +222,7 @@ describe('exam attempts endpoints', () => {
         // fallaría porque sobraría un mock sin usar o faltaría uno.
         mockedFrom
           .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'practica' }), error: null }),
           ) // exam
@@ -236,12 +241,13 @@ describe('exam attempts endpoints', () => {
 
         expect(res.status).toBe(201);
         expect(res.body.attemptId).toBe('attempt-2');
-        expect(mockedFrom).toHaveBeenCalledTimes(8);
+        expect(mockedFrom).toHaveBeenCalledTimes(9);
       });
 
       it('definitivo: permite el primer intento cuando no hay ninguno previo', async () => {
         mockedFrom
           .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
           ) // exam
@@ -268,6 +274,7 @@ describe('exam attempts endpoints', () => {
         // `passed`: el código no lo consulta para esta regla.
         mockedFrom
           .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
           .mockReturnValueOnce(
             createChain({ data: buildExamRow({ type: 'definitivo' }), error: null }),
           ) // exam
@@ -283,7 +290,7 @@ describe('exam attempts endpoints', () => {
         expect(res.status).toBe(409);
         expect(res.body.message).toMatch(/único intento permitido/);
         // No se llega a insertar un intento nuevo.
-        expect(mockedFrom).toHaveBeenCalledTimes(6);
+        expect(mockedFrom).toHaveBeenCalledTimes(7);
       });
     });
   });
@@ -303,6 +310,7 @@ describe('exam attempts endpoints', () => {
 
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: expiredAttemptRow, error: null })) // getOwnAttemptOrThrow
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
@@ -326,7 +334,7 @@ describe('exam attempts endpoints', () => {
       );
       // Nunca se inserta en attempt_answers una respuesta tardía: solo se
       // consultan (select) las que ya existían antes de expirar.
-      expect(mockedFrom).toHaveBeenCalledTimes(7);
+      expect(mockedFrom).toHaveBeenCalledTimes(8);
     });
 
     it('una pregunta no respondida cuenta como incorrecta (envío normal, no expirado)', async () => {
@@ -344,6 +352,7 @@ describe('exam attempts endpoints', () => {
 
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: inProgressAttemptRow, error: null })) // getOwnAttemptOrThrow
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // exam
         .mockReturnValueOnce(
@@ -385,6 +394,7 @@ describe('exam attempts endpoints', () => {
 
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: inProgressAttemptRow, error: null })) // getOwnAttemptOrThrow
         .mockReturnValueOnce(createChain({ data: definitivoExam, error: null })) // exam
         .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null })) // questions
@@ -424,6 +434,7 @@ describe('exam attempts endpoints', () => {
 
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: inProgressAttemptRow, error: null }))
         .mockReturnValueOnce(createChain({ data: buildExamRow(), error: null })) // practica
         .mockReturnValueOnce(createChain({ data: [openTextQuestionRow], error: null }))
@@ -509,6 +520,7 @@ describe('exam attempts endpoints', () => {
       const chainAAnswers = createChain({ data: answersForA, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(chainA)
         .mockReturnValueOnce(chainAQuestions)
         .mockReturnValueOnce(chainAAnswers);
@@ -550,6 +562,7 @@ describe('exam attempts endpoints', () => {
       const chainBAnswers = createChain({ data: answersForB, error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(chainB)
         .mockReturnValueOnce(chainBQuestions)
         .mockReturnValueOnce(chainBAnswers);

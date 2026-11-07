@@ -1,3 +1,5 @@
+// El test controla process.env; dotenv no debe reponer DISABLE_CRON desde .env.
+jest.mock('dotenv', () => ({ config: jest.fn() }));
 jest.mock('../../src/app', () => ({ createApp: jest.fn(() => ({ listen: jest.fn() })) }));
 jest.mock('../../src/jobs/practiceSlotCron', () => ({ startPracticeSlotCron: jest.fn() }));
 jest.mock('../../src/jobs/solicitudCleanupCron', () => ({ startSolicitudCleanupCron: jest.fn() }));

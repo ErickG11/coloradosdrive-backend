@@ -1,14 +1,30 @@
 import { createHmac } from 'node:crypto';
 
 import { env } from '../../src/config/env';
-import { signSolicitudToken, verifySolicitudToken } from '../../src/utils/solicitudToken';
+import {
+  signSolicitudToken,
+  verifySolicitudToken,
+  verifySolicitudClaims,
+  SOLICITUD_TOKEN_ISSUER,
+  SOLICITUD_TOKEN_AUDIENCE,
+} from '../../src/utils/solicitudToken';
 
 const SECRET = env.SOLICITUD_TOKEN_SECRET;
 const NOW = 1_800_000_000;
 
 function forge(header: object, payload: object, secret = SECRET): string {
   const b64 = (v: object): string => Buffer.from(JSON.stringify(v)).toString('base64url');
-  const input = `${b64(header)}.${b64(payload)}`;
+  const valid = {
+    sub: 's',
+    purpose: 'solicitud',
+    scope: 'edicion',
+    iss: SOLICITUD_TOKEN_ISSUER,
+    aud: SOLICITUD_TOKEN_AUDIENCE,
+    iat: NOW,
+    exp: NOW + 3600,
+    ...payload,
+  };
+  const input = `${b64(header)}.${b64(valid)}`;
   const sig = createHmac('sha256', secret).update(input).digest('base64url');
   return `${input}.${sig}`;
 }
@@ -66,4 +82,38 @@ describe('solicitudToken', () => {
   it.each(['', 'abc', 'a.b', 'a.b.c.d'])('rechaza basura (%p)', (token) => {
     expect(verifySolicitudToken(token, NOW)).toBeNull();
   });
+});
+
+it.each(['edicion', 'estado'] as const)('preserva scope %s con aud/iss y una hora', (scope) => {
+  const token = signSolicitudToken('solicitud-1', NOW, scope);
+  expect(verifySolicitudClaims(token, NOW)).toEqual({
+    solicitudId: 'solicitud-1',
+    scope,
+    exp: NOW + 3600,
+  });
+});
+it.each([
+  { aud: 'otra' },
+  { iss: 'otro' },
+  { scope: 'admin' },
+  { scope: ['edicion'] },
+  { scope: { valor: 'estado' } },
+  { iat: NOW + 100 },
+  { exp: NOW + 3601 },
+  { exp: NOW },
+  { scope: null },
+])('rechaza claim alterado con firma válida: %j', (claims) => {
+  expect(verifySolicitudClaims(forge({ alg: 'HS256', typ: 'JWT' }, claims), NOW)).toBeNull();
+});
+it('rechaza tokens legacy sin scopes y límites y crit no soportado', () => {
+  expect(
+    verifySolicitudClaims(
+      forge({ alg: 'HS256', typ: 'JWT' }, { scope: undefined, aud: undefined }),
+      NOW,
+    ),
+  ).toBeNull();
+  expect(
+    verifySolicitudClaims(forge({ alg: 'HS256', typ: 'JWT', crit: ['x'] }, {}), NOW),
+  ).toBeNull();
+  expect(verifySolicitudClaims('x'.repeat(4097), NOW)).toBeNull();
 });

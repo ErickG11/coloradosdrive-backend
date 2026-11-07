@@ -114,9 +114,11 @@ describe('authenticate middleware', () => {
       email: 'estudiante@example.com',
       app_metadata: { role: 'estudiante' },
     });
-    mockedFrom.mockReturnValueOnce(
-      createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-    );
+    mockedFrom
+      .mockReturnValueOnce(
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+      )
+      .mockReturnValueOnce(createChain({ data: [], error: null })); // sin inscripción pendiente
 
     const req = buildRequest('Bearer valid.token.here', 'GET', '/');
     await authenticate(req, res, next);
@@ -127,6 +129,29 @@ describe('authenticate middleware', () => {
       email: 'estudiante@example.com',
       role: 'estudiante',
     });
+  });
+
+  it('bloquea con 403 INSCRIPCION_INCOMPLETA al alumno con una matrícula de solicitud sin activar', async () => {
+    mockedVerify.mockResolvedValue({
+      sub: 'user-123',
+      app_metadata: { role: 'estudiante' },
+    });
+    mockedFrom
+      .mockReturnValueOnce(
+        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+      )
+      .mockReturnValueOnce(
+        createChain({
+          data: [{ id: 'e1', etapa_inscripcion: 'por_agendar', reserva_expira_at: null }],
+          error: null,
+        }),
+      );
+
+    await authenticate(buildRequest('Bearer valid.token.here', 'GET', '/'), res, next);
+
+    const err = next.mock.calls[0]?.[0] as AppError;
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.statusCode).toBe(403);
   });
 
   it('blocks an estudiante with debe_cambiar_password=true on any route other than cambiar-password', async () => {

@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import type { CandidateCohort } from '../../src/models/cohortAssignment.model';
 import {
+  assignSolicitudCohort,
   assignCohort,
   CohortAssignmentService,
   isCohortWindowOpen,
@@ -159,9 +160,18 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
     };
   }
 
-  function buildService(results: ChainResult[]): CohortAssignmentService {
+  // `results` son las consultas a `from` (cohortes). La ocupación (matrículas activas y reservas
+  // vigentes) llega por la RPC cohort_cupos_ocupados: `ocupados` mapea cohorte -> ocupados.
+  function buildService(
+    results: ChainResult[],
+    ocupados: Record<string, number> = {},
+  ): CohortAssignmentService {
     const supabase = {
       from: createSupabaseFromMock(results),
+      rpc: jest.fn().mockResolvedValue({
+        data: Object.entries(ocupados).map(([cohort_id, n]) => ({ cohort_id, ocupados: n })),
+        error: null,
+      }),
     } as unknown as SupabaseClient<Database>;
     return new CohortAssignmentService(supabase);
   }
@@ -175,10 +185,7 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
   });
 
   it('asigna la cohorte elegible y devuelve su precio y nombre', async () => {
-    const service = buildService([
-      { data: [buildCohortRow()], error: null }, // cohorts
-      { data: [], error: null }, // enrollments activos (0 ocupados)
-    ]);
+    const service = buildService([{ data: [buildCohortRow()], error: null }]); // 0 ocupados
 
     const result = await service.assignCohortForCourse('course-1', day('2026-01-15'));
 
@@ -190,11 +197,11 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
     });
   });
 
-  it('cuenta la ocupación real desde enrollments y descarta la cohorte si ya está llena', async () => {
-    const service = buildService([
-      { data: [buildCohortRow({ cupo_maximo: 1 })], error: null },
-      { data: [{ cohort_id: 'cohort-1' }], error: null }, // 1 activo -> cupo lleno
-    ]);
+  it('toma la ocupación de la RPC de cupos y descarta la cohorte si ya está llena', async () => {
+    const service = buildService(
+      [{ data: [buildCohortRow({ cupo_maximo: 1 })], error: null }],
+      { 'cohort-1': 1 }, // 1 ocupado (matrícula activa o reserva vigente) -> cupo lleno
+    );
 
     const result = await service.assignCohortForCourse('course-1', day('2026-01-15'));
 
@@ -207,11 +214,21 @@ describe('CohortAssignmentService (wrapper con base de datos)', () => {
         data: [buildCohortRow({ id: 'llena' }), buildCohortRow({ id: 'con-cupo' })],
         error: null,
       },
-      { data: [], error: null }, // ocupación de la única candidata que queda tras excluir
     ]);
 
     const result = await service.assignCohortForCourse('course-1', day('2026-01-15'), ['llena']);
 
     expect(result.cohortId).toBe('con-cupo');
   });
+});
+
+it('el motor público admite ventanas futuras sin cambiar la regla manual', () => {
+  const candidate = buildCandidate({ fechaInicioMatricula: day('2026-02-01'), fechaFinMatricula: day('2026-02-28') });
+  expect(assignSolicitudCohort(day('2026-01-15'), [candidate])).toEqual({ cohortId: candidate.id, warning: null });
+  expect(assignCohort(day('2026-01-15'), [candidate])).toEqual({ cohortId: null });
+});
+it('el motor público salta la primera cohorte si no alcanza el margen', () => {
+  const close = buildCandidate({ id: 'cercana', fechaFinMatricula: day('2026-01-18') });
+  const next = buildCandidate({ id: 'siguiente', fechaInicioCurso: day('2026-03-01') });
+  expect(assignSolicitudCohort(day('2026-01-15'), [close, next]).cohortId).toBe('siguiente');
 });

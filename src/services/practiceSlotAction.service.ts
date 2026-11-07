@@ -6,6 +6,7 @@ import { throwAttendanceError } from '../utils/practiceAttendanceError';
 import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import type { RealtimeService } from './realtime.service';
 import { PracticeSlotNotificationService } from './practiceSlotNotification.service';
+import { logSafeError } from '../utils/safeLog';
 
 type PracticeSlotRow = Database['public']['Tables']['practice_slots']['Row'];
 
@@ -72,7 +73,7 @@ export class PracticeSlotActionService {
 
   private async notifySwapSafely(channel: string, event: string): Promise<void> {
     try { await this.realtimeService.broadcast(channel, event, {}); }
-    catch (err) { console.error('No se pudo notificar el cambio de práctica:', err); }
+    catch (err) { logSafeError('practice_swap_notify_failed', err); }
   }
 
   async confirmSlot(slotId: string, studentId: string): Promise<PracticeSlot> {
@@ -146,7 +147,7 @@ export class PracticeSlotActionService {
         { slotId: slot.id, scheduledAt: slot.scheduledAt },
       );
     } catch (err) {
-      console.error('No se pudo notificar la liberación del cupo:', err);
+      logSafeError('practice_release_notify_failed', err);
     }
   }
 }

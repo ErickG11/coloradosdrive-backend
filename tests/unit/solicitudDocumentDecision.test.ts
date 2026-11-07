@@ -1,0 +1,34 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '../../src/config/database.types';
+import { NotificationService } from '../../src/services/notification.service';
+it('decide y notifica con una sola operación transaccional', async () => {
+  const rpc = jest.fn().mockResolvedValue({ data: { id: 'd', estado: 'rechazado' }, error: null });
+  const service = new NotificationService({ rpc } as unknown as SupabaseClient<Database>);
+  await expect(
+    service.reviewDocument('s', 'd', 'admin', {
+      estado: 'rechazado',
+      motivoRechazo: 'Foto borrosa',
+    }),
+  ).resolves.toEqual({ id: 'd', estado: 'rechazado' });
+  expect(rpc).toHaveBeenCalledWith('revisar_documento_solicitud', {
+    p_solicitud: 's',
+    p_documento: 'd',
+    p_actor: 'admin',
+    p_estado: 'rechazado',
+    p_motivo: 'Foto borrosa',
+  });
+});
+it.each([
+  ['SI409', 'SOLICITUD_CERRADA'],
+  ['SI411', 'DOCUMENTO_YA_REVISADO'],
+])('traduce %s sin filtrar el detalle SQL', async (sql, code) => {
+  const rpc = jest.fn().mockResolvedValue({ data: null, error: { code: sql, message: 'interno' } });
+  await expect(
+    new NotificationService({ rpc } as unknown as SupabaseClient<Database>).reviewDocument(
+      's',
+      'd',
+      'a',
+      { estado: 'aprobado' },
+    ),
+  ).rejects.toMatchObject({ code, statusCode: 409 });
+});

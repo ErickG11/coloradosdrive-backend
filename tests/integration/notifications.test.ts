@@ -9,6 +9,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import type { NotificationRow } from '../../src/models/notification.model';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -41,11 +42,14 @@ describe('API de notificaciones del propietario', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     rpc.mockReset();
-    from.mockReturnValue(
-      createChain({
-        data: { activo: true, rol: 'instructor', debe_cambiar_password: false },
-        error: null,
-      }),
+    // Por tabla: el alumno también consulta sus matrículas pendientes (ver tests/helpers/authMocks.ts).
+    from.mockImplementation((table: string) =>
+      table === 'enrollments'
+        ? sinInscripcionPendiente()
+        : createChain({
+            data: { activo: true, rol: 'instructor', debe_cambiar_password: false },
+            error: null,
+          }),
     );
   });
   it.each(['estudiante', 'instructor'] as const)(

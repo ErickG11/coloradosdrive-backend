@@ -13,6 +13,7 @@ import { createApp } from '../../src/app';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedRpc = supabaseAdmin.rpc as jest.Mock;
@@ -56,14 +57,14 @@ describe('generador de práctica (admin)', () => {
         // antes de que RBAC llegue a rechazarlo (ver auth.middleware.ts).
         mockedFrom.mockReturnValueOnce(
           createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-        );
+        ).mockReturnValueOnce(sinInscripcionPendiente());
       }
       const res = await request(app)
         .post(`/admin/enrollments/${enrollmentId}/sugerir-practica`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, role)}`)
         .send(validBody);
       expect(res.status).toBe(403);
-      expect(mockedFrom).toHaveBeenCalledTimes(role === 'estudiante' ? 1 : 0);
+      expect(mockedFrom).toHaveBeenCalledTimes(role === 'estudiante' ? 2 : 0);
     });
   });
 

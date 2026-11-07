@@ -7,6 +7,7 @@ declare global {
       // Id de la solicitud de inscripción autenticada con el token
       // temporal (ver solicitudAuth.middleware.ts).
       solicitudId?: string;
+      solicitudScope?: 'edicion' | 'estado';
     }
   }
 }

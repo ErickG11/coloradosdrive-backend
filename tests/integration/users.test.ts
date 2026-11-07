@@ -14,6 +14,7 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
@@ -43,7 +44,7 @@ describe('GET /users', () => {
         if (callerRole === 'estudiante') {
           mockedFrom.mockReturnValueOnce(
             createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-          );
+          ).mockReturnValueOnce(sinInscripcionPendiente());
         }
         const res = await request(app)
           .get('/users')
@@ -52,7 +53,7 @@ describe('GET /users', () => {
         expect(res.status).toBe(403);
         // estudiante dispara la consulta de debe_cambiar_password en
         // auth.middleware.ts antes de llegar a RBAC; instructor no.
-        expect(mockedFrom).toHaveBeenCalledTimes(callerRole === 'estudiante' ? 1 : 0);
+        expect(mockedFrom).toHaveBeenCalledTimes(callerRole === 'estudiante' ? 2 : 0);
       },
     );
   });

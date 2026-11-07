@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { studentPaymentRouter } from './studentPayment.routes';
+import { studentScheduleRouter } from './studentSchedule.routes';
 import { body, query } from 'express-validator';
 import {
   studentPracticeEnrollments,
@@ -12,6 +14,8 @@ import { attendancePagination } from './practiceAttendance.validators';
 import { ratingPagination, ratingSubmissionValidators } from './practiceRating.validators';
 
 import { changePassword } from '../controllers/estudiante.controller';
+import { inscripcionIncompleta } from '../services/studentEnrollmentAccess';
+import { StudentEnrollmentStatusService } from '../services/studentEnrollmentStatus.service';
 import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
@@ -22,6 +26,17 @@ import { AppError } from '../utils/AppError';
 export const estudianteRouter = Router();
 
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
+estudianteRouter.use('/inscripcion/pagos', studentPaymentRouter);
+estudianteRouter.use('/inscripcion', studentScheduleRouter);
+// Solo lectura: el alumno con cuenta no sube documentos; los físicos se llevan a la escuela.
+const estadoInscripcion = new StudentEnrollmentStatusService(supabaseAdmin);
+estudianteRouter.get(
+  '/estado-inscripcion',
+  asyncHandler(async (req, res) => {
+    if (!req.user) throw new AppError('Authentication required', 401);
+    res.set('Cache-Control', 'no-store').json(await estadoInscripcion.get(req.user.id));
+  }),
+);
 estudianteRouter.get('/practice-history/enrollments', asyncHandler(studentPracticeEnrollments));
 estudianteRouter.get(
   '/practice-history',
@@ -61,7 +76,10 @@ estudianteRouter.get(
       .eq('id', req.user.id)
       .single();
     if (error) throw error;
-    res.json({ mustChangePassword: data.debe_cambiar_password });
+    res.json({
+      mustChangePassword: data.debe_cambiar_password,
+      inscripcionIncompleta: await inscripcionIncompleta(supabaseAdmin, req.user.id),
+    });
   }),
 );
 

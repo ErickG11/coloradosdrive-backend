@@ -8,6 +8,7 @@ import type { UserProfile } from '../models/user.model';
 import { AppError } from '../utils/AppError';
 import { isCupoExceededError, type CohortAssignmentService } from './cohortAssignment.service';
 import type { EmailService } from './email.service';
+import { logSafeError } from '../utils/safeLog';
 
 type CohortRow = Database['public']['Tables']['cohorts']['Row'];
 type EnrollmentRow = Database['public']['Tables']['enrollments']['Row'];
@@ -356,7 +357,7 @@ export class EnrollmentService {
     } catch (err) {
       // No se revierte la matrícula si falla el envío del correo: la
       // cuenta y la inscripción ya son válidas, el correo es best-effort.
-      console.error('No se pudo enviar el correo de bienvenida:', err);
+      logSafeError('welcome_email_failed', err);
     }
   }
 }
