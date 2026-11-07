@@ -1,3 +1,4 @@
+export {};
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 const previous = { ...process.env };
 afterEach(() => {
