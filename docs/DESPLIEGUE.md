@@ -2,7 +2,7 @@
 
 Para quien despliega por primera vez. Backend en **Railway**, frontend en **Vercel**, base de datos y autenticación en **Supabase** (ya existente). Sin dominio propio: se usan `*.up.railway.app` y `*.vercel.app`. Correo por la **API de Gmail** (Railway bloquea SMTP).
 
-Se despliega desde las ramas de trabajo, **sin fusionar a `main`**: backend `feat/inscripcion-en-linea`, frontend `feat/inscripcion-en-linea-ui`.
+Se despliega desde **`main`** en ambos repositorios (los PR de la inscripción ya están fusionados).
 
 > **Nunca pegues secretos en el repositorio, en chats ni en capturas.** Los valores de este documento son ejemplos falsos. Los reales se escriben solo en los paneles de Railway y Vercel.
 
@@ -30,7 +30,7 @@ Panel de Supabase → tu proyecto → **Authentication**.
 ## 3. Railway (backend)
 
 1. Entra a https://railway.com → **New Project** → **Deploy from GitHub repo** → elige `ErickG11/coloradosdrive-backend` (autoriza la app de GitHub si lo pide).
-2. Abre el servicio → **Settings** → **Source** → *Branch*: `feat/inscripcion-en-linea`. *Root Directory*: `/` (raíz del repositorio).
+2. Abre el servicio → **Settings** → **Source** → *Branch*: `main`. *Root Directory*: `/` (raíz del repositorio).
 3. El repositorio trae `railway.json`: construcción con `npm ci --include=dev && npm run build`, arranque con `npm start` (`node dist/index.js`) y ruta de salud `/health`. No hace falta cambiar nada en **Build/Deploy**. Node se toma de `engines` (22.x), igual que el CI.
 4. **Variables** (pestaña *Variables* → *New Variable* o *Raw Editor*). Escribe los valores reales solo aquí:
 
@@ -70,7 +70,7 @@ Notas:
 
 1. https://vercel.com → **Add New… → Project** → importa `ErickG11/coloradosdrive-frontend`.
 2. *Framework Preset*: Next.js (se detecta). *Root Directory*: la raíz. No hace falta `vercel.json`.
-3. **Production Branch**: tras crear el proyecto, **Settings → Git → Production Branch** = `feat/inscripcion-en-linea-ui`, para que esa rama sea el despliegue de producción.
+3. **Production Branch**: no hace falta cambiarla; Vercel usa `main` por defecto (puedes comprobarlo en **Settings → Git → Production Branch**).
 4. **Environment Variables** (antes de desplegar). Se incrustan al construir: si las cambias, **redespliega**.
 
 | Variable | Propósito | ¿Secreta? | De dónde sale | Ejemplo (falso) |
