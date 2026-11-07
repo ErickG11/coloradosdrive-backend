@@ -82,13 +82,6 @@ function buildSolicitud(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-const validDatos = {
-  cedula: VALID_CEDULA,
-  nombreCompleto: 'Ana Torres',
-  telefono: '0991234567',
-  fechaNacimiento: '1995-05-20',
-};
-
 describe('solicitudes de inscripción (público)', () => {
   const app = createApp();
 
@@ -197,29 +190,67 @@ describe('solicitudes de inscripción (público)', () => {
   });
 
   describe('PUT /solicitudes/:id/datos', () => {
-    it('exige token y valida cédula antes de acceder a los datos', async () => {
-      expect((await request(app).put(`/solicitudes/${solicitudId}/datos`).send(validDatos)).status).toBe(401);
-      const invalid = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send({ ...validDatos, cedula: '1710034064' });
+    // Contrato vigente: nombres, apellidos, nacionalidadTipo y tipoSangre separados; teléfono local.
+    const datos = {
+      nombres: 'Ana',
+      apellidos: 'Torres',
+      cedula: VALID_CEDULA,
+      fechaNacimiento: '1995-05-20',
+      telefono: '0991234567',
+      nacionalidadTipo: 'ecuatoriana',
+      tipoSangre: 'no_sabe',
+    };
+    const consentimientoVigente = () =>
+      createChain({
+        data: { id: 'consent', acepto_tratamiento: true, declara_veracidad: true, acepto_terminos: true },
+        error: null,
+      });
+    const curso = () => createChain({ data: { edad_minima: 18 }, error: null });
+
+    it('exige token y valida la cédula antes de guardar nada', async () => {
+      expect((await request(app).put(`/solicitudes/${solicitudId}/datos`).send(datos)).status).toBe(401);
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: buildSolicitud({ estado: 'borrador' }), error: null }))
+        .mockReturnValueOnce(consentimientoVigente())
+        .mockReturnValueOnce(curso());
+      const invalid = await request(app)
+        .put(`/solicitudes/${solicitudId}/datos`)
+        .set('Authorization', bearer())
+        .send({ ...datos, cedula: '1710034064' });
       expect(invalid.status).toBe(400);
-      expect(mockedFrom).not.toHaveBeenCalled();
+      expect(invalid.body.code).toBe('CEDULA_INVALIDA');
+      expect(supabaseAdmin.rpc).not.toHaveBeenCalledWith('guardar_datos_inscripcion', expect.anything());
     });
     it('rechaza ausencia de consentimiento', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud(), error: null }))
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: buildSolicitud({ estado: 'borrador' }), error: null }))
         .mockReturnValueOnce(createChain({ data: null, error: null }));
-      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(validDatos);
+      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(datos);
       expect(res.body.code).toBe('CONSENTIMIENTO_REQUERIDO');
     });
-    it('guarda datos y conserva la primera fecha sin reescribir created_at', async () => {
-      const saved = '2026-09-01T12:00:00Z';
-      const update = createChain({ data: { id: solicitudId }, error: null });
-      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ solicitada_at: saved }), error: null }))
-        .mockReturnValueOnce(createChain({ data: { id: 'consent', acepto_tratamiento: true, declara_veracidad: true }, error: null }))
-        .mockReturnValueOnce(createChain({ data: [], error: null })).mockReturnValueOnce(createChain({data:null,error:null})).mockReturnValueOnce(update);
-      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(validDatos);
+    it('rechaza con 409 una solicitud que ya no admite cambios', async () => {
+      mockedFrom.mockReturnValueOnce(createChain({ data: buildSolicitud({ estado: 'enviada' }), error: null }));
+      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(datos);
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('SOLICITUD_CERRADA');
+    });
+    it('guarda los datos por la RPC atómica con la lista explícita de campos', async () => {
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValueOnce({ data: { id: solicitudId }, error: null });
+      mockedFrom
+        .mockReturnValueOnce(createChain({ data: buildSolicitud({ estado: 'borrador' }), error: null }))
+        .mockReturnValueOnce(consentimientoVigente())
+        .mockReturnValueOnce(curso());
+      const res = await request(app).put(`/solicitudes/${solicitudId}/datos`).set('Authorization', bearer()).send(datos);
       expect(res.status).toBe(200);
-      expect(update.update.mock.calls[0][0]).toMatchObject({ solicitada_at: saved, cedula: VALID_CEDULA });
-      expect(update.update.mock.calls[0][0]).not.toHaveProperty('created_at');
-      expect(update.is).toHaveBeenCalledWith('reviewed_at', null);
+      expect(supabaseAdmin.rpc).toHaveBeenCalledWith(
+        'guardar_datos_inscripcion',
+        expect.objectContaining({
+          p_id: solicitudId,
+          p_datos: expect.objectContaining({ nombres: 'Ana', apellidos: 'Torres', cedula: VALID_CEDULA }),
+        }),
+      );
+      const enviado = (supabaseAdmin.rpc as jest.Mock).mock.calls[0][1] as { p_datos: object };
+      expect(enviado.p_datos).not.toHaveProperty('nombreCompleto');
     });
   });
 
