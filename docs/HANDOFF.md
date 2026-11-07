@@ -12,27 +12,27 @@ Dos repositorios públicos bajo ErickG11:
 - Backend (este): Express + TypeScript + Supabase (Postgres, Auth, Storage). Puerto local **3000**.
 - Frontend: Next.js 16 (`coloradosdrive-frontend`). Puerto local **3001**.
 
-Estado al 7 de noviembre de 2026:
+Estado actualizado tras fusionar a `main` los PR #45, #44 y #54 (7 de noviembre de 2026):
 
-- El flujo de **inscripción en línea** (solicitud pública, revisión del admin, aprobación, reserva de horario y pago) está implementado en backend y frontend y probado a mano con el modo de correo en consola.
+- El flujo de **inscripción en línea** (solicitud pública, revisión del admin, aprobación, reserva de horario y pago) está **fusionado en `main`** en backend y frontend y probado a mano con el modo de correo en consola.
 - Las migraciones **001 a 063 están todas aplicadas** en la base compartida.
-- **El CI de GitHub está en rojo** por pruebas heredadas que no compilan y otras sin arreglar. No se debe fusionar nada a `main` hasta ponerlo en verde.
-- Faltan: despliegue, correo por API de Gmail con credenciales reales, Turnstile (F43), certificación de Kushki y un recorrido de ensayo. Ver sección 7.
+- **El CI de `main` pasó en verde tras los merges**, incluidos los dos pasos de PostgreSQL aislado (`test:students-db` y `test:practice-attendance-db`). CircleCI aparece en rojo porque no tiene configuración: se ignora. Hay 26 pruebas saltadas con `TODO(F23)`, listadas en «Deuda de pruebas».
+- Siguiente paso: despliegue en Railway (backend) y Vercel (frontend) **desde `main`** (ver `docs/DESPLIEGUE.md`). Faltan además correo por API de Gmail con credenciales reales, Turnstile (F43), certificación de Kushki y un recorrido de ensayo. Ver sección 7.
 
 ## 2. Mapa de ramas y PR
 
-| Rama | PR | Qué contiene |
+| Rama | PR | Estado |
 | --- | --- | --- |
-| `main` | | Línea estable. No se empuja a mano. |
-| `fix/matricula-validaciones-backend` | #44 (borrador) | Validaciones de matrícula (fechas de nacimiento, mensajes y códigos). |
-| `feat/inscripcion-en-linea` | #45 (borrador) | Todo el flujo de inscripción en línea (punta de la historia). |
+| `main` | | Línea estable; incluye todo lo siguiente. No se empuja a mano. |
+| `feat/inscripcion-en-linea` | #45 | **Fusionado en `main`**. Flujo completo de inscripción en línea. Ya no hace falta; se conserva, no se borra. |
+| `fix/matricula-validaciones-backend` | #44 | **Fusionado en `main`**. Validaciones de matrícula manual (fechas de nacimiento, mensajes y códigos). Se conserva. |
+| `fix/ci-main-pruebas-matricula-manual` | #54 | **Fusionado en `main`**. Corrige una prueba de validaciones de matrícula manual. Se conserva. |
 | `worktree-agent-*`, `feature/*` antiguas | no se publican | Restos de trabajo local. No usar como base. |
 
 Reglas de partida:
 
-- Trabajo nuevo sobre la inscripción: crea tu rama **desde `feat/inscripcion-en-linea`**.
-- Trabajo ajeno a la inscripción: parte de `origin/main`.
-- #44 y #45 son independientes entre sí; ambos siguen en borrador. No los marques «listos» ni los fusiones sin que el CI esté en verde y el responsable lo apruebe.
+- Todo trabajo nuevo (inscripción o no) **parte de `main`**: `git checkout main && git pull`, y crear una rama nueva.
+- Ninguna de las ramas fusionadas debe usarse como base ni borrarse sin autorización del responsable.
 - `feat/instructores-agenda-simple` (frontend) pertenece a otra persona: no la toques.
 
 ## 3. Cómo correr en local
@@ -130,8 +130,8 @@ Detalle completo: `docs/operations/inscripcion-flujo-final.md` y `inscripcion-al
 
 ## 7. Pendientes por prioridad para la defensa del 14
 
-1. **Pruebas y CI en verde:** `npm run lint` hoy reporta errores en `src/utils/certificateFile.ts` y `tests/helpers/hostileFiles.ts` por tipos de `sharp` no resueltos en este equipo (verifica con `npm install`), y el lint también recorre `.claude/worktrees/` (conviene excluirlo). Hay pruebas heredadas que no compilan y otras sin arreglar. La deuda de pruebas está en `docs/operations/inscripcion-pruebas-pendientes*.md`.
-2. **Despliegue:** backend en Railway (`TRUST_PROXY_HOPS=1`, `NODE_ENV=production`) y frontend en Vercel; configurar Supabase Auth (registros públicos off, contraseña mínima 10, Site URL y redirects) y verificar con `npm run security:check-auth`.
+1. **Pruebas:** el CI de `main` está en verde. Queda reescribir las 26 pruebas saltadas (sección «Deuda de pruebas»). En local, `npm run lint` también recorre `.claude/worktrees/`: usa `--ignore-pattern ".claude/**"`. La deuda de pruebas de la inscripción está además en `docs/operations/inscripcion-pruebas-pendientes*.md`.
+2. **Despliegue** (ver `docs/DESPLIEGUE.md`): backend en Railway desde `main` (`TRUST_PROXY_HOPS=1`, `NODE_ENV=production`) y frontend en Vercel; configurar Supabase Auth (registros públicos off, contraseña mínima 10, Site URL y redirects) y verificar con `npm run security:check-auth`.
 3. **Correo por API de Gmail:** el proveedor `gmail_api` existe; faltan credenciales OAuth y variables en el entorno.
 4. **Turnstile (F43):** el backend ya valida; falta el widget en el frontend y las claves reales. Hasta entonces los límites por correo/IP y los topes son la única barrera contra bots.
 5. **Kushki:** certificación con el proveedor y webhook con HTTPS público (`POST /webhooks/kushki`). Ver `inscripcion-kushki-verificacion.md`.
@@ -160,7 +160,7 @@ La base compartida contiene datos ficticios de ensayo: solicitudes en distintos 
 
 ## Deuda de pruebas
 
-Estado local: `npx tsc --noEmit`, `npm run lint` (sin `.claude/`), `npm test` y `npm run build` pasan (100 suites; 1502 pruebas pasadas y 26 saltadas). Los pasos del CI `npm run test:students-db` y `npm run test:practice-attendance-db` requieren PostgreSQL aislado y **no se verificaron localmente**.
+`tsc`, lint, `npm test` y build pasan; hay 26 pruebas saltadas. Los pasos del CI `npm run test:students-db` y `npm run test:practice-attendance-db` requieren PostgreSQL aislado: no se pueden ejecutar en local, pero **están en verde en el CI de `main`**.
 
 Pruebas saltadas, todas con `TODO(F23)` (flujo antiguo retirado con el rediseño; hay que reescribirlas contra el contrato vigente):
 
@@ -174,3 +174,7 @@ Cambios de método de esta ronda: las suites que usan alumnos se apoyan en `test
 ## Despliegue
 
 Guía de despliegue en Railway y Vercel (modo demostración incluido): [`docs/DESPLIEGUE.md`](DESPLIEGUE.md).
+
+## Dependabot
+
+Dependabot abre PR automáticos de dependencias. Antes de la defensa **no se fusionan saltos de versión mayor** (por ejemplo TypeScript 7 o React). Los PR con el CI en rojo no se tocan. Solo se aceptan actualizaciones menores o de parche con el CI en verde y revisadas por el responsable.
