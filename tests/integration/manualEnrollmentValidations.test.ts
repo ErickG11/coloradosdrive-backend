@@ -12,6 +12,7 @@ jest.mock('../../src/config/mailer', () => ({ mailer: { sendMail: jest.fn() } })
 import { createApp } from '../../src/app';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { supabaseAdmin } from '../../src/config/supabase';
+import { alumnoActivo, sinInscripcionPendiente } from '../helpers/authMocks';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
 
@@ -52,7 +53,8 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
     it('exige token (401) y rol admin (403 para estudiante e instructor)', async () => {
       expect((await request(app).post(`${base}/duplicates`).send({ cedula: '1710034065' })).status)
         .toBe(401);
-      from.mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
+      // Alumno: el middleware consulta users y luego enrollments (ver tests/helpers/authMocks.ts).
+      from.mockReturnValueOnce(alumnoActivo()).mockReturnValueOnce(sinInscripcionPendiente());
       expect((await request(app).post(`${base}/duplicates`).set('Authorization', token('estudiante'))
         .send({ cedula: '1710034065' })).status).toBe(403);
       from.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true,
