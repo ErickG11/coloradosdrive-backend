@@ -17,11 +17,12 @@ const valid = {
   fechaNacimiento: '1990-05-06',
   nacionalidadTipo: 'ecuatoriana',
   tipoSangre: 'no_sabe',
+  telefono: '0991234567',
 };
 const parse = (input: unknown) => validateEnrollmentData(input, 18, now);
 
-test('datos separados derivan nombre y omiten teléfono vacío', () => {
-  expect(parse({ ...valid, nombres: '  Ana\tMari\u0301a ', telefono: '' })).toEqual({
+test('datos separados derivan el nombre completo', () => {
+  expect(parse({ ...valid, nombres: '  Ana\tMari\u0301a ' })).toEqual({
     ...valid,
     nombres: 'Ana María',
     nombreCompleto: 'Ana María Pérez O’Neill',
@@ -69,12 +70,20 @@ test.each(['0010034065', '2510034065', '1760034065', '1710034064', '171003406', 
 test.each([
   ['0991234567', '0991234567'],
   ['022345678', '022345678'],
-  ['+593991234567', '0991234567'],
-  ['+59322345678', '022345678'],
-])('normaliza teléfono %s', (telefono, expected) => {
+])('acepta teléfono local %s', (telefono, expected) => {
   expect(parse({ ...valid, telefono }).telefono).toBe(expected);
 });
-test.each(['081234567', '1234567890', '+5930991234567', '09 12345678', null])(
+test.each([
+  '081234567',
+  '1234567890',
+  '+5930991234567',
+  '+593991234567',
+  '+59322345678',
+  '09 12345678',
+  '',
+  undefined,
+  null,
+])(
   'teléfono inválido (%#)',
   (telefono) => {
     expect(() => parse({ ...valid, telefono })).toThrow(
@@ -143,9 +152,13 @@ test.each([
   'bachiller_reciente',
   'bachiller_exterior',
   'decimo_aprobado',
-  'cursando_bachillerato',
 ])('nivel admitido %s', (nivel) => {
   expect(validateEducationLevel(nivel)).toBe(nivel);
+});
+test('cursando_bachillerato ya no se admite en entradas nuevas (I17)', () => {
+  expect(() => validateEducationLevel('cursando_bachillerato')).toThrow(
+    expect.objectContaining({ code: 'NIVEL_ESTUDIOS_INVALIDO' }),
+  );
 });
 test('menos de décimo nunca pasa a persistencia y no acepta subtipos ajenos', () => {
   expect(() => parse({ ...valid, nivelEstudios: 'menos_de_decimo' })).toThrow(
