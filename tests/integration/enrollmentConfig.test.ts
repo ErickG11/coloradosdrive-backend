@@ -29,7 +29,9 @@ beforeEach(() => {
           ? [{ id: course, tipo: 'B', nombre: 'Curso', edad_minima: 18 }]
           : table === 'users'
             ? { activo: true, debe_cambiar_password: false, rol: 'instructor' }
-            : { inscripciones_abiertas: true },
+            : table === 'enrollments'
+              ? [] // alumno sin matrículas de solicitud pendientes
+              : { inscripciones_abiertas: true },
       error: null,
     }),
   );

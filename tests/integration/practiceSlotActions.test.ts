@@ -19,6 +19,7 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedRpc = supabaseAdmin.rpc as jest.Mock;
@@ -78,7 +79,12 @@ describe('practice-slots student actions', () => {
   });
 
   function authenticateStudent() {
-    mockedFrom.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
+    // Por tabla (válido también con peticiones concurrentes): cuenta activa y sin matrícula pendiente.
+    mockedFrom.mockImplementation((table: string) =>
+      table === 'enrollments'
+        ? sinInscripcionPendiente()
+        : createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+    );
     return `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`;
   }
 
@@ -247,13 +253,13 @@ describe('practice-slots student actions', () => {
     it('con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .patch(`/practice-slots/${slotId}/attendance`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send({ attended: true });
       expect(res.status).toBe(403);
-      expect(mockedFrom).toHaveBeenCalledTimes(1);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
 
     it('responde 404 si la franja no es del instructor autenticado', async () => {

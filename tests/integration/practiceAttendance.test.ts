@@ -8,6 +8,7 @@ import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -40,11 +41,14 @@ describe('Asistencia E4: contratos y permisos HTTP', () => {
     jest.clearAllMocks();
     rpc.mockReset();
     from.mockReset();
-    from.mockReturnValue(
-      createChain({
-        data: { rol: 'instructor', activo: true, debe_cambiar_password: false },
-        error: null,
-      }),
+    // Por tabla: el alumno también consulta sus matrículas pendientes (ver tests/helpers/authMocks.ts).
+    from.mockImplementation((table: string) =>
+      table === 'enrollments'
+        ? sinInscripcionPendiente()
+        : createChain({
+            data: { rol: 'instructor', activo: true, debe_cambiar_password: false },
+            error: null,
+          }),
     );
   });
   it('conserva ruta y respuesta de registro inicial, usando solo el actor autenticado', async () => {
@@ -283,6 +287,7 @@ describe('Asistencia E4: contratos y permisos HTTP', () => {
       .mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
       )
+      .mockReturnValueOnce(sinInscripcionPendiente())
       .mockReturnValueOnce(chain);
     const res = await request(app)
       .get('/estudiantes/practice-history/enrollments')

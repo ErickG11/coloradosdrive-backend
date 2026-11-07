@@ -14,6 +14,7 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
@@ -121,13 +122,13 @@ describe('exams endpoints', () => {
     it('POST /exams con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .post('/exams')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send(validExamBody);
       expect(res.status).toBe(403);
-      expect(mockedFrom).toHaveBeenCalledTimes(1);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
 
     it('GET /exams con rol instructor responde 403 (solo admin/estudiante)', async () => {
@@ -140,18 +141,18 @@ describe('exams endpoints', () => {
     it('GET /exams/:id (detalle completo) con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .get(`/exams/${examId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
       expect(res.status).toBe(403);
-      expect(mockedFrom).toHaveBeenCalledTimes(1);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
 
     it('DELETE /exams/:id con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .delete(`/exams/${examId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
@@ -232,6 +233,7 @@ describe('exams endpoints', () => {
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: [], error: null })); // sin enrollment activo
 
       const res = await request(app)
@@ -245,6 +247,7 @@ describe('exams endpoints', () => {
     it('estudiante con inscripción activa: solo ve examenes publicados de su curso', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null }))
         .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null }))
         .mockReturnValueOnce(
@@ -257,7 +260,7 @@ describe('exams endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
-      expect(mockedFrom).toHaveBeenCalledTimes(4);
+      expect(mockedFrom).toHaveBeenCalledTimes(5);
     });
   });
 
