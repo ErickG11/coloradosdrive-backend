@@ -4,6 +4,7 @@ import type { AccountService } from '../../src/services/account.service';
 import type { CohortAssignmentService } from '../../src/services/cohortAssignment.service';
 import type { EmailService } from '../../src/services/email.service';
 import { SolicitudService } from '../../src/services/solicitud.service';
+import { SolicitudAdminService } from '../../src/services/solicitudAdmin.service';
 import { createChain } from '../helpers/supabaseMock';
 function harness() {
   const chain = createChain({ data: [], error: null, count: 0 }),
@@ -45,22 +46,32 @@ it('el resumen devuelve conteos sin descargar expedientes ni documentos', async 
   expect(result).not.toHaveProperty('documentosPorRevisar');
   expect(h.from).not.toHaveBeenCalled();
 });
-it('ordena pendientes por envío y decididas por revisión, con id estable al paginar', async () => {
-  const h = harness();
-  await h.service.listarParaAdmin(undefined, 2, 20);
-  expect(h.from).toHaveBeenCalledWith('solicitudes_admin');
-  expect(h.chain.order.mock.calls).toEqual([
-    ['orden_grupo'],
-    ['pendiente_desde', { ascending: true, nullsFirst: false }],
-    ['decidida_at', { ascending: false, nullsFirst: false }],
-    ['id'],
-  ]);
-  expect(h.chain.range).toHaveBeenCalledWith(20, 39);
-  expect(h.chain.not).toHaveBeenCalledWith('enviada_at', 'is', null);
+// El orden de la lista (enviadas más antiguas, devueltas, decididas recientes, id estable) vive
+// ahora en la función SQL listar_solicitudes_admin; el servicio solo le pasa filtro y página.
+it('la lista delega en listar_solicitudes_admin con estado, búsqueda saneada y página', async () => {
+  const lista = { items: [], total: 0, page: 2, pageSize: 20 };
+  const rpc = jest.fn().mockResolvedValue({ data: lista, error: null });
+  const service = new SolicitudAdminService({ rpc } as unknown as SupabaseClient<Database>);
+  expect(await service.listar('enviada', '  Ana  ', 2, 20)).toBe(lista);
+  expect(rpc).toHaveBeenCalledWith('listar_solicitudes_admin', {
+    p_estado: 'enviada',
+    p_q: 'Ana',
+    p_page: 2,
+    p_size: 20,
+  });
 });
-it('filtra solo expedientes con documentos revisables', async () => {
-  const h = harness();
-  await h.service.listarParaAdmin('con_documentos_por_revisar');
-  expect(h.chain.gt).toHaveBeenCalledWith('documentos_por_revisar', 0);
-  expect(h.chain.in).toHaveBeenCalledWith('estado', ['pendiente_revision', 'aprobada']);
+it('sin filtro ni búsqueda envía nulos y falla con 503 si la consulta falla', async () => {
+  const rpc = jest
+    .fn()
+    .mockResolvedValueOnce({ data: { items: [] }, error: null })
+    .mockResolvedValueOnce({ data: null, error: { code: 'XX000' } });
+  const service = new SolicitudAdminService({ rpc } as unknown as SupabaseClient<Database>);
+  await service.listar(undefined, '', 1, 20);
+  expect(rpc).toHaveBeenLastCalledWith('listar_solicitudes_admin', {
+    p_estado: null,
+    p_q: null,
+    p_page: 1,
+    p_size: 20,
+  });
+  await expect(service.listar(undefined, '', 1, 20)).rejects.toMatchObject({ statusCode: 503 });
 });
