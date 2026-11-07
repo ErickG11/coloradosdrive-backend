@@ -63,9 +63,11 @@ it.each(['borrador', 'enviada', 'devuelta', 'aprobada', 'rechazada'])(
         },
         error: null,
       },
-      { data: null, error: null },
-      { data: [], error: null },
-      { data: null, error: null },
+      { data: null, error: null }, // consentimiento
+      { data: [], error: null }, // documentos
+      { data: null, error: null }, // curso
+      { data: null, error: null }, // última verificación de identidad
+      { data: null, error: null }, // última verificación de estudios
     ]);
     const result = await new SolicitudPrivacyService({
       from,
