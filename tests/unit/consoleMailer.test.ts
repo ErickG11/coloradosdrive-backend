@@ -69,7 +69,6 @@ describe('proveedor console con EmailService real', () => {
   });
 
   it.each([
-    'sendApplicationApprovedEmail',
     'sendWelcomeEmail',
     'sendInstructorCredentials',
   ] as const)(
@@ -87,6 +86,20 @@ describe('proveedor console con EmailService real', () => {
       expect(block).toContain('Persona Ficticia');
     },
   );
+
+  it('sendAccessLinkEmail imprime solo el enlace de un solo uso, sin contraseña', async () => {
+    await email.sendAccessLinkEmail({
+      to: 'alumna@example.invalid',
+      nombreCompleto: 'Persona Ficticia',
+      tokenHash: 'hash-ficticio',
+      type: 'recovery',
+      reenvio: false,
+    });
+    const block = output.mock.calls[0][0] as string;
+    expect(block).toContain('Destinatario: alumna@example.invalid');
+    expect(block).toContain('/crear-contrasena?token_hash=hash-ficticio&type=recovery');
+    expect(block).not.toMatch(/contraseña temporal/i);
+  });
 
   it('convierte HTML sin etiquetas, conservando enlaces, entidades y datos', async () => {
     await mailer.sendMail({
