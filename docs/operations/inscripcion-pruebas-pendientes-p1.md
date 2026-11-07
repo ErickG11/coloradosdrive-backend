@@ -1,0 +1,4 @@
+# Pruebas pendientes P1
+- F26: wizard (carga de config, error con reintento, cerrado con WhatsApp, foco al cambiar de paso), PasoRequisitos (curso obligatorio, 3 casillas, aviso de incumplimiento no avanza), pasoSegunProgreso (borrador por pasos, enviada/devuelta/estado -> 7), IndicadorPasos (aria-current, paso 7 completo).
+- F27: PasoCorreo (validación, INSCRIPCIONES_CERRADAS -> pantalla cerrada, no envía captchaToken), PasoCodigo (6 dígitos, ceros iniciales, pegar, cuenta regresiva 60 s, reintento de progreso tras código aceptado, errores por código), reanudación en el wizard.
+- F28: PasoConsentimiento (errores por casilla y foco a la primera, casilla de representante condicional, envío con versiones de config, AVISO_DESACTUALIZADO/TERMINOS_DESACTUALIZADOS recarga config y limpia casillas, ya aceptado permite continuar, sesión vencida -> irAPaso(1)), aviso «en revisión legal» visible.
