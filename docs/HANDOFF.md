@@ -157,3 +157,16 @@ La base compartida contiene datos ficticios de ensayo: solicitudes en distintos 
 ## Dónde leer más
 
 `docs/operations/inscripcion-flujo-final.md`, `inscripcion-orden-migraciones.md`, `inscripcion-alumno-runbook.md`, `inscripcion-pagos-proveedores.md`, `inscripcion-kushki-verificacion.md`, `inscripcion-brief.md`, y los ADR 014 a 019 en `docs/adr/`.
+
+## Deuda de pruebas
+
+Estado local: `npx tsc --noEmit`, `npm run lint` (sin `.claude/`), `npm test` y `npm run build` pasan (100 suites; 1502 pruebas pasadas y 26 saltadas). Los pasos del CI `npm run test:students-db` y `npm run test:practice-attendance-db` requieren PostgreSQL aislado y **no se verificaron localmente**.
+
+Pruebas saltadas, todas con `TODO(F23)` (flujo antiguo retirado con el rediseño; hay que reescribirlas contra el contrato vigente):
+
+| Archivo | Saltadas | Motivo |
+| --- | --- | --- |
+| `tests/integration/solicitudesAdmin.test.ts` (`describe.skip` ×2) | 25 | La revisión por documento (`PATCH /admin/solicitudes/:id/documentos/:docId`) y la decisión por `PATCH /admin/solicitudes/:id` se retiraron. Reescribir contra `POST /admin/solicitudes/:id/verificaciones` y `POST /admin/solicitudes/:id/decision`. |
+| `tests/integration/consoleEmail.test.ts` | 1 | Aprobar imprimía la contraseña temporal; ahora la aprobación es en dos pasos por RPC y envía un enlace de un solo uso. |
+
+Cambios de método de esta ronda: las suites que usan alumnos se apoyan en `tests/helpers/authMocks.ts` (el middleware consulta `users` y `enrollments` por petición); se retiraron las pruebas de `solicitudDeletion`, `studentDocuments` y `studentPendingDocuments` (servicios y rutas eliminados).
