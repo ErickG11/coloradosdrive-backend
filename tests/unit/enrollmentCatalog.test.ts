@@ -20,36 +20,26 @@ test('exactamente seis niveles y una sola clase de archivo según el nivel', () 
   expect(NIVELES_ESTUDIOS.bachiller_reciente.archivo).toBe('opcional');
   expect(NIVELES_ESTUDIOS.menos_de_decimo.permitido).toBe(false);
 });
+// Regla vigente: todos los métodos del catálogo (incluida revision_visual) habilitan la aprobación
+// en los niveles permitidos; la seguridad la aporta la revalidación atómica de las últimas
+// verificaciones vigentes, no el método. Un nivel bloqueado nunca habilita.
 test.each(Object.keys(NIVELES_ESTUDIOS) as NivelEstudios[])(
-  'revision_visual jamás aprueba %s',
+  'cualquier método habilita la aprobación solo si el nivel %s está permitido',
   (nivel) => {
-    expect(metodoHabilitaAprobacion('identidad', nivel, 'revision_visual')).toBe(false);
-    expect(metodoHabilitaAprobacion('estudios', nivel, 'revision_visual')).toBe(false);
+    for (const tipo of ['identidad', 'estudios'] as const)
+      for (const metodo of METODOS_VERIFICACION)
+        expect(metodoHabilitaAprobacion(tipo, nivel, metodo)).toBe(
+          NIVELES_ESTUDIOS[nivel].permitido,
+        );
   },
 );
-test.each(['bachiller', 'bachiller_reciente', 'bachiller_exterior'] as const)(
-  'bachiller %s requiere Ministerio',
-  (nivel) => {
-    for (const metodo of METODOS_VERIFICACION)
-      expect(metodoHabilitaAprobacion('estudios', nivel, metodo)).toBe(
-        metodo === 'ministerio_portal',
-      );
-  },
-);
-test.each(['decimo_aprobado', 'cursando_bachillerato'] as const)(
-  'certificado %s requiere fuente distinta de revisión visual',
-  (nivel) => {
-    for (const metodo of METODOS_VERIFICACION)
-      expect(metodoHabilitaAprobacion('estudios', nivel, metodo)).toBe(
-        ['codigo_qr_certificado', 'llamada_institucion', 'original_presencial'].includes(metodo),
-      );
-  },
-);
-test('identidad solo Registro Civil; web service está previsto pero no habilitado manualmente', () => {
-  for (const metodo of METODOS_VERIFICACION)
-    expect(metodoHabilitaAprobacion('identidad', 'bachiller', metodo)).toBe(
-      metodo.startsWith('registro_civil_'),
-    );
+test('revision_visual es un método válido que habilita la aprobación en un nivel permitido', () => {
+  expect(METODOS_VERIFICACION).toContain('revision_visual');
+  expect(metodoHabilitaAprobacion('estudios', 'bachiller', 'revision_visual')).toBe(true);
+  expect(metodoHabilitaAprobacion('identidad', 'decimo_aprobado', 'revision_visual')).toBe(true);
+});
+test('el web service del Registro Civil está previsto pero no se puede registrar manualmente', () => {
+  expect(METODOS_VERIFICACION).toContain('registro_civil_web_service');
   expect(METODOS_MANUALES_VERIFICACION).not.toContain('registro_civil_web_service');
 });
 test('spam e inconsistencias no envían correo; VENCIDA es interna', () => {

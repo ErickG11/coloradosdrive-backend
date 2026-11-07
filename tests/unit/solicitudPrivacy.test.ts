@@ -4,14 +4,24 @@ import {
   privacyNotice,
   SolicitudPrivacyService,
 } from '../../src/services/solicitudPrivacy.service';
+import { PRIVACY_NOTICE_VERSION, TERMS_VERSION } from '../../src/config/privacy';
 import { createSupabaseFromMock } from '../helpers/supabaseMock';
 it('publica versión y valores por defecto sin claves privadas', () => {
-  expect(privacyNotice()).toEqual({
-    version: '2026-10-v1',
+  const notice = privacyNotice();
+  expect(notice).toMatchObject({
+    version: PRIVACY_NOTICE_VERSION,
+    versionAviso: PRIVACY_NOTICE_VERSION,
+    versionTerminos: TERMS_VERSION,
     contactoDerechos: 'test-sender@test.local',
     retencionDias: 30,
+    enRevisionLegal: true,
   });
+  // El aviso nombra expresamente el dato de salud (tipo de sangre).
+  expect(JSON.stringify(notice.aviso)).toContain('dato de salud');
+  expect(JSON.stringify(notice)).not.toMatch(/SECRET|KEY/i);
 });
+// Orden de consultas de progress(): solicitud, consentimiento, documentos, curso y las dos
+// últimas verificaciones (identidad y estudios).
 it('reanuda datos propios verificados sin enlaces de documentos', async () => {
   const from = createSupabaseFromMock([
     {
@@ -26,11 +36,14 @@ it('reanuda datos propios verificados sin enlaces de documentos', async () => {
         cedula: '1710034065',
         solicitada_at: '2026-10-01',
         fecha_nacimiento: '2000-01-01',
+        telefono: '0991234567',
       },
       error: null,
     },
     { data: null, error: null },
     { data: [{ tipo_documento: 'certificado_estudios', estado: 'recibido' }], error: null },
+    { data: null, error: null },
+    { data: null, error: null },
     { data: null, error: null },
   ]);
   const result = await new SolicitudPrivacyService({
@@ -52,9 +65,11 @@ it('rechaza versión antigua y casillas falsas antes de escribir', async () => {
   ).rejects.toMatchObject({ code: 'AVISO_DESACTUALIZADO' });
   await expect(
     service.accept('s', {
-      versionAviso: '2026-10-v1',
+      versionAviso: PRIVACY_NOTICE_VERSION,
+      versionTerminos: TERMS_VERSION,
       aceptoTratamiento: false,
       declaraVeracidad: true,
+      aceptoTerminos: true,
     }),
   ).rejects.toMatchObject({ code: 'CONSENTIMIENTO_REQUERIDO' });
   expect(from).not.toHaveBeenCalled();
@@ -74,6 +89,8 @@ it('devuelve el motivo del documento rechazado para poder corregirlo sin exponer
       ],
       error: null,
     },
+    { data: null, error: null },
+    { data: null, error: null },
     { data: null, error: null },
   ]);
   const result = await new SolicitudPrivacyService({
