@@ -57,4 +57,29 @@ describe('abono inicial', () => {
     expect(() => validateInitialPayment(null, { modalidad: 'completo', descuento: 0,
       montoAbonado: 0 })).toThrow('solo se permite');
   });
+
+  it('con pago explícito, la modalidad Abono exige un abonado mayor que 0', () => {
+    const abono0 = { modalidad: 'abono' as const, descuento: 0, montoAbonado: 0 };
+    expect(() => validateInitialPayment(150, abono0, true)).toThrow(
+      expect.objectContaining({
+        message: 'Con la modalidad Abono, el monto abonado debe ser mayor que $0.00.',
+        field: 'pago.montoAbonado',
+        code: 'INVALID_FIELD',
+      }),
+    );
+    // Sin la bandera (pago omitido por el cliente) se conserva el abono inicial de 0.
+    expect(validateInitialPayment(150, abono0)).toBe(150);
+    expect(validateInitialPayment(150, { ...abono0, montoAbonado: 0.01 }, true)).toBe(150);
+    // Descuento total: el neto es 0 y se matricula como pago completo.
+    expect(validateInitialPayment(150, { modalidad: 'completo', descuento: 150,
+      montoAbonado: 0 }, true)).toBe(0);
+    // Sin cohorte el abono 0 sigue permitido (no hay precio con el que comparar).
+    expect(validateInitialPayment(null, abono0, true)).toBeNull();
+  });
+  it('los errores de pago indican el campo', () => {
+    expect(() => validateInitialPayment(150, { modalidad: 'abono', descuento: 151,
+      montoAbonado: 1 }, true)).toThrow(expect.objectContaining({ field: 'pago.descuento' }));
+    expect(() => validateInitialPayment(150, { modalidad: 'abono', descuento: 0,
+      montoAbonado: 151 }, true)).toThrow(expect.objectContaining({ field: 'pago.montoAbonado' }));
+  });
 });

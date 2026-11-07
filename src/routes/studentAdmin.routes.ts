@@ -1,4 +1,5 @@
 import { Router, type Request } from 'express';
+import { assertBirthDate, BIRTH_DATE_MESSAGES } from '../utils/birthDate';
 import { body, param, query } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
@@ -218,9 +219,9 @@ studentAdminRouter.patch(
       .isString()
       .bail()
       .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .withMessage(BIRTH_DATE_MESSAGES.invalida)
       .bail()
-      .isISO8601({ strict: true })
-      .custom((value: string) => !value.startsWith('0000-')),
+      .custom(assertBirthDate),
     ...Object.entries({
       telefono: 20,
       direccion: 500,

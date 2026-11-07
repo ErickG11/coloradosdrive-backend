@@ -79,6 +79,22 @@ describe('generador de práctica (admin)', () => {
       expect(mockedFrom).not.toHaveBeenCalled();
       expect(mockedRpc).not.toHaveBeenCalled();
     });
+    it.each(['sugerir-practica', 'confirmar-practica'])(
+      '%s limita horasPorDia a 1-6 con mensaje en español',
+      async (action) => {
+        for (const horasPorDia of [0, 7, 16]) {
+          const res = await request(app)
+            .post(`/admin/enrollments/${enrollmentId}/${action}`)
+            .set('Authorization', adminAuth())
+            .send({ ...validBody, horasPorDia, horaResuelta: '08:00',
+              instructorId: enrollmentId });
+          expect(res.status).toBe(400);
+          expect(res.body.message).toBe('Las horas por día deben ser un entero entre 1 y 6.');
+        }
+        expect(mockedFrom).not.toHaveBeenCalled();
+      },
+    );
+
     it('responde 400 si enrollmentId no es un UUID', async () => {
       const res = await request(app)
         .post('/admin/enrollments/no-es-un-uuid/sugerir-practica')

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { assertBirthDate } from '../utils/birthDate';
 import { body } from 'express-validator';
 import type { Meta } from 'express-validator';
 
@@ -45,7 +46,9 @@ const enrollValidators = [
   body('fechaNacimiento')
     .optional()
     .matches(/^\d{4}-\d{2}-\d{2}$/)
-    .withMessage('fechaNacimiento debe tener formato YYYY-MM-DD'),
+    .withMessage('fechaNacimiento debe tener formato YYYY-MM-DD')
+    .bail()
+    .custom(assertBirthDate),
   body('tipoSangre')
     .optional()
     .isString()
