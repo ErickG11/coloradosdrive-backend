@@ -1,7 +1,7 @@
 import request from 'supertest';
 
 jest.mock('../../src/config/supabase', () => ({
-  supabaseAdmin: { from: jest.fn() },
+  supabaseAdmin: { from: jest.fn(), rpc: jest.fn() },
   supabaseAnon: {},
 }));
 
@@ -21,6 +21,7 @@ import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
+const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
 const courseId = '22222222-2222-4222-8222-222222222222';
@@ -42,6 +43,9 @@ describe('POST /admin/cohort-assignment/preview', () => {
 
   beforeEach(() => {
     mockedFrom.mockReset();
+    mockedRpc.mockReset();
+    // Ocupación (matrículas activas y reservas vigentes) por RPC: sin ocupados por defecto.
+    mockedRpc.mockResolvedValue({ data: [], error: null });
     mockedVerifySupabaseJwt.mockReset();
   });
 
@@ -72,9 +76,7 @@ describe('POST /admin/cohort-assignment/preview', () => {
   });
 
   it('con una cohorte elegible, responde con cohortId, cohortNombre y warning', async () => {
-    mockedFrom
-      .mockReturnValueOnce(createChain({ data: [cohortRow], error: null })) // cohorts
-      .mockReturnValueOnce(createChain({ data: [], error: null })); // enrollments activos (0 ocupados)
+    mockedFrom.mockReturnValueOnce(createChain({ data: [cohortRow], error: null })); // cohorts
 
     const res = await request(app)
       .post('/admin/cohort-assignment/preview')
@@ -104,17 +106,17 @@ describe('POST /admin/cohort-assignment/preview', () => {
     });
   });
 
-  it('no crea ninguna inscripción (solo consulta cohorts y enrollments para contar ocupación)', async () => {
-    mockedFrom
-      .mockReturnValueOnce(createChain({ data: [cohortRow], error: null }))
-      .mockReturnValueOnce(createChain({ data: [], error: null }));
+  it('no crea ninguna inscripción (solo consulta cohorts y los cupos ocupados por RPC)', async () => {
+    mockedFrom.mockReturnValueOnce(createChain({ data: [cohortRow], error: null }));
 
     await request(app)
       .post('/admin/cohort-assignment/preview')
       .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`)
       .send({ courseId });
 
-    expect(mockedFrom).toHaveBeenCalledTimes(2);
+    expect(mockedFrom).toHaveBeenCalledTimes(1);
+    expect(mockedFrom).toHaveBeenCalledWith('cohorts');
+    expect(mockedRpc).toHaveBeenCalledWith('cohort_cupos_ocupados', { p_cohorts: [cohortRow.id] });
     expect(mockedFrom).not.toHaveBeenCalledWith('users');
   });
 });

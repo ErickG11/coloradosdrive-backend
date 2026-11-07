@@ -121,30 +121,33 @@ describe('solicitudes de inscripción (admin)', () => {
         expect((await request(app).get(`/admin/solicitudes?${query}`).set('Authorization', adminAuth())).status).toBe(400);
       }
     });
-    it('devuelve una página vacía con metadatos', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: [], error: null, count: 0 }));
+    it('devuelve una página vacía con metadatos (la lista sale de listar_solicitudes_admin)', async () => {
+      mockedRpc.mockResolvedValueOnce({ data: { items: [], total: 0, page: 1, pageSize: 20 }, error: null });
       const res = await request(app).get('/admin/solicitudes').set('Authorization', adminAuth());
+      expect(res.status).toBe(200);
       expect(res.body).toEqual({ items: [], total: 0, page: 1, pageSize: 20 });
       expect(mockedStorageFrom).not.toHaveBeenCalled();
     });
-    it('pagina, filtra y entrega checklist sin firmar documentos', async () => {
-      const list = createChain({ data: [buildSolicitud({ fecha_nacimiento: '1950-01-01' })], error: null, count: 21 });
-      mockedFrom.mockReturnValueOnce(list)
-        .mockReturnValueOnce(createChain({ data: [{ id: docId, solicitud_id: solicitudId, tipo_documento: 'cedula', estado: 'recibido', storage_path: 'privado' }], error: null }))
-        .mockReturnValueOnce(createChain({ data: [{ solicitud_id: solicitudId, version_aviso: '2026-10-v1', aceptado_at: '2026-10-01' }], error: null }))
-        .mockReturnValueOnce(createChain({ data: [], error: null }));
-      const res = await request(app).get('/admin/solicitudes?page=2&q=Ana&estado=pendiente_revision').set('Authorization', adminAuth());
+    it('pasa estado, búsqueda y paginación a la función SQL sin firmar documentos', async () => {
+      const lista = { items: [{ id: solicitudId, estado: 'enviada' }], total: 21, page: 2, pageSize: 20 };
+      mockedRpc.mockResolvedValueOnce({ data: lista, error: null });
+      const res = await request(app).get('/admin/solicitudes?page=2&q=Ana&estado=enviada').set('Authorization', adminAuth());
       expect(res.status).toBe(200);
-      expect(list.range).toHaveBeenCalledWith(20,39);
-      expect(list.eq).toHaveBeenCalledWith('estado', 'pendiente_revision');
-      expect(res.body.items[0].consentimiento.version).toBe('2026-10-v1');
-      expect(res.body.items[0].documentos[0].url).toBeNull();
-      expect(res.body.items[0].documentos[1].estado).toBe('no_aplica');
+      expect(mockedRpc).toHaveBeenCalledWith('listar_solicitudes_admin', {
+        p_estado: 'enviada',
+        p_q: 'Ana',
+        p_page: 2,
+        p_size: 20,
+      });
+      expect(res.body).toEqual(lista);
       expect(mockedStorageFrom).not.toHaveBeenCalled();
     });
   });
 
-  describe('PATCH /admin/solicitudes/:id/documentos/:docId', () => {
+  // TODO(F23): mock desfasado de solicitudAdmin; reescribir contra POST /admin/solicitudes/:id/verificaciones
+  // y POST /admin/solicitudes/:id/decision. La revisión por documento (PATCH .../documentos/:docId) y la
+  // decisión por PATCH /admin/solicitudes/:id se retiraron con el rediseño del flujo final.
+  describe.skip('PATCH /admin/solicitudes/:id/documentos/:docId', () => {
     const url = `/admin/solicitudes/${solicitudId}/documentos/${docId}`;
 
     it('responde 400 con un estado inválido', async () => {
@@ -242,7 +245,7 @@ describe('solicitudes de inscripción (admin)', () => {
     });
   });
 
-  describe('PATCH /admin/solicitudes/:id (decisión final)', () => {
+  describe.skip('PATCH /admin/solicitudes/:id (decisión final)', () => {
     const url = `/admin/solicitudes/${solicitudId}`;
     it.each(['aprobada','rechazada'])('un borrador no admite la decisión %s',async estado=>{
       mockedFrom.mockReturnValueOnce(createChain({data:buildSolicitud({enviada_at:null}),error:null}));

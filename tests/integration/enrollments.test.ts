@@ -3,6 +3,7 @@ import request from 'supertest';
 jest.mock('../../src/config/supabase', () => ({
   supabaseAdmin: {
     from: jest.fn(),
+    rpc: jest.fn(),
     auth: { admin: { createUser: jest.fn(), deleteUser: jest.fn() } },
   },
   supabaseAnon: {},
@@ -370,8 +371,9 @@ describe('POST /enrollments', () => {
         .mockReturnValueOnce(createChain({ data: null, error: null })) // assertCedulaAvailable
         .mockReturnValueOnce(createChain({ data: userRow, error: null })) // createUserRow
         .mockReturnValueOnce(createChain({ data: [cohortRow], error: null })) // CohortAssignmentService: cohorts
-        .mockReturnValueOnce(createChain({ data: [], error: null })) // CohortAssignmentService: ocupados
         .mockReturnValueOnce(createChain({ data: enrollmentRow, error: null })); // insertEnrollmentRow
+      // CohortAssignmentService: ocupados (matrículas activas y reservas vigentes) por RPC.
+      (supabaseAdmin.rpc as jest.Mock).mockResolvedValueOnce({ data: [], error: null });
 
       const res = await request(app)
         .post('/enrollments')
