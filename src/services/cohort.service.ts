@@ -66,6 +66,19 @@ const COHORT_CONSTRAINTS: Record<string, PostgresErrorOverride> = {
 };
 
 export function cohortError(error: unknown): unknown {
+  if (error && typeof error === 'object' && 'code' in error && error.code === 'IR413')
+    return new AppError(
+      'La cohorte tiene reservas vigentes. Conserva el curso, el precio y las fechas compatibles.',
+      409,
+      {
+        code: 'COHORT_CON_RESERVAS',
+      },
+    );
+  if (error && typeof error === 'object' && 'code' in error && error.code === 'IC409')
+    return new AppError('El cupo no puede ser menor que las matrículas y reservas vigentes.', 409, {
+      code: 'COHORT_CUPO_BELOW_ACTIVE',
+      field: 'cupoMaximo',
+    });
   return mapPostgresError(error, COHORT_CONSTRAINTS) ?? error;
 }
 
@@ -279,7 +292,7 @@ export class CohortService {
   }
 
   // Matrículas asociadas por estado (una sola consulta). `activos` usa el
-  // mismo criterio que enforce_cohort_cupo (status = 'activo').
+  // criterio administrativo (status = 'activo'); el cupo incluye además reservas vigentes.
   private async enrollmentRows(id: string): Promise<{ status: string; student_id: string }[]> {
     const { data, error } = await this.supabase
       .from('enrollments')
@@ -363,8 +376,11 @@ export class CohortService {
         });
       }
       // F-02: no bajar el cupo por debajo de los alumnos que ya lo ocupan.
-      if (cupoLowered && input.cupoMaximo !== undefined && input.cupoMaximo < alumnos.activos) {
-        throw new AppError(withCount(M.cupoBajoActivos, alumnos.activos), 409, {
+      const occupiedResult = await this.supabase.rpc('cohort_cupos_ocupados', { p_cohorts: [id] });
+      if (occupiedResult.error) throw occupiedResult.error;
+      const occupied = occupiedResult.data[0]?.ocupados ?? 0;
+      if (cupoLowered && input.cupoMaximo !== undefined && input.cupoMaximo < occupied) {
+        throw new AppError(withCount(M.cupoBajoActivos, occupied), 409, {
           code: 'COHORT_CUPO_BELOW_ACTIVE',
           field: 'cupoMaximo',
         });

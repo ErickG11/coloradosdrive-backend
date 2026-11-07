@@ -1,6 +1,5 @@
-import type { Transporter } from 'nodemailer';
-
 import { env } from '../config/env';
+import type { MailTransport } from '../config/mailTransport';
 import { formatEcuadorDateTime } from '../utils/formatEcuadorDateTime';
 
 export interface WelcomeEmailParams {
@@ -63,7 +62,18 @@ function escapeHtml(value: string): string {
 // Recibe el transporter por constructor (no usa el singleton de
 // config/mailer.ts directamente) para poder mockearlo en tests.
 export class EmailService {
-  constructor(private readonly transporter: Transporter) {}
+  constructor(private readonly transporter: MailTransport) {}
+
+  async sendPaymentWelcomeEmail(params: { to: string; nombreCompleto: string; paymentId: string }): Promise<void> {
+    const url = new URL('/student', env.FRONTEND_URL);
+    const intro = 'Tu pago fue confirmado y tu matrícula ya está activa. Puedes consultar tus prácticas, documentos y exámenes en la plataforma.';
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM, to: params.to, subject: 'Bienvenido a ColoradosDrive: tu matrícula está activa',
+      messageId: `<pago-bienvenida-${params.paymentId}@${url.hostname}>`,
+      text: [`Hola ${params.nombreCompleto},`, intro, `Ingresar: ${url.toString()}`, 'Recuerda llevar tus documentos físicos antes de tu primera práctica.'].join('\n'),
+      html: `<p>Hola ${escapeHtml(params.nombreCompleto)},</p><p>${intro}</p><p><a href="${escapeHtml(url.toString())}">Ingresar a la plataforma</a></p><p>Recuerda llevar tus documentos físicos antes de tu primera práctica.</p>`,
+    });
+  }
 
   async sendInstructorCredentials(params: WelcomeEmailParams): Promise<void> {
     const login = new URL('/login', env.FRONTEND_URL).toString();
@@ -263,32 +273,81 @@ export class EmailService {
     });
   }
 
-  // Se envía cuando el admin aprueba una solicitud y se crea la cuenta. La
-  // contraseña es temporal: el sistema obliga a cambiarla en el primer uso.
-  async sendApplicationApprovedEmail(params: WelcomeEmailParams): Promise<void> {
-    const { to, temporaryPassword } = params;
-    const nombre = escapeHtml(params.nombreCompleto);
-
+  // Acuse de recepción: sin datos personales ni archivos; solo orienta a consultar el estado.
+  async sendApplicationReceivedEmail(params: { to: string; reenvio: boolean }): Promise<void> {
+    const { to, reenvio } = params;
+    const url = `${env.FRONTEND_URL}/inscripcion`;
+    const intro = reenvio
+      ? 'Recibimos tu corrección. Tu solicitud de inscripción vuelve a estar pendiente de revisión.'
+      : 'Recibimos tu solicitud de inscripción. Está pendiente de revisión.';
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to,
-      subject: 'Tu solicitud de inscripción fue aprobada',
+      subject: 'Recibimos tu solicitud de inscripción',
       text: [
-        `Hola ${params.nombreCompleto},`,
+        intro,
         '',
-        'Tu solicitud de inscripción en ColoradosDrive fue aprobada. Estos son tus datos de acceso:',
-        '',
-        `Correo: ${to}`,
-        `Contraseña temporal: ${temporaryPassword}`,
-        '',
-        'Deberás cambiar esta contraseña la primera vez que ingreses a la plataforma.',
+        `Puedes ver el estado en ${url} con tu correo. Te avisaremos si necesitamos algo más.`,
       ].join('\n'),
       html: [
-        `<p>Hola ${nombre},</p>`,
-        '<p>Tu solicitud de inscripción en ColoradosDrive fue aprobada. Estos son tus datos de acceso:</p>',
-        `<p>Correo: ${escapeHtml(to)}<br>Contraseña temporal: <strong>${temporaryPassword}</strong></p>`,
-        '<p>Deberás cambiar esta contraseña la primera vez que ingreses a la plataforma.</p>',
+        `<p>${intro}</p>`,
+        `<p>Puedes ver el estado en <a href="${escapeHtml(url)}">${escapeHtml(url)}</a> con tu correo. Te avisaremos si necesitamos algo más.</p>`,
       ].join('\n'),
     });
   }
+
+  // Aprobación de solicitud (y reenvío del enlace): solo el origen de FRONTEND_URL y token_hash.
+  // Nunca contiene contraseña ni el action_link de Supabase.
+  async sendAccessLinkEmail(params: {
+    to: string;
+    nombreCompleto: string;
+    tokenHash: string;
+    type: string;
+    reenvio: boolean;
+  }): Promise<void> {
+    const link = new URL('/crear-contrasena', env.FRONTEND_URL);
+    link.searchParams.set('token_hash', params.tokenHash);
+    link.searchParams.set('type', params.type);
+    const url = link.toString();
+    const nombre = escapeHtml(params.nombreCompleto);
+    const intro = params.reenvio
+      ? 'Te enviamos un enlace nuevo para crear tu contraseña de ColoradosDrive.'
+      : 'Tu solicitud de inscripción en ColoradosDrive fue aprobada. Crea tu contraseña con este enlace.';
+    const aviso = 'El enlace es de un solo uso y vence pronto. Si no lo solicitaste, ignora este correo.';
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      subject: params.reenvio
+        ? 'Nuevo enlace para crear tu contraseña'
+        : 'Tu solicitud de inscripción fue aprobada',
+      text: [`Hola ${params.nombreCompleto},`, '', intro, url, '', aviso].join('\n'),
+      html: [
+        `<p>Hola ${nombre},</p>`,
+        `<p>${intro}</p>`,
+        `<p><a href="${escapeHtml(url)}">Crear mi contraseña</a></p>`,
+        `<p>${aviso}</p>`,
+      ].join('\n'),
+    });
+  }
+
+  // Devolución: texto fijo sin datos del postulante, del motivo ni de archivos.
+  async sendApplicationReturnedEmail(params: { to: string }): Promise<void> {
+    const url = `${env.FRONTEND_URL}/inscripcion`;
+    const intro = 'Tu solicitud necesita una corrección.';
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      subject: 'Tu solicitud necesita una corrección',
+      text: `${intro} Ingresa a ${url} con tu correo para verla.`,
+      html: `<p>${intro} Ingresa a <a href="${escapeHtml(url)}">${escapeHtml(url)}</a> con tu correo para verla.</p>`,
+    });
+  }
+
+  async sendApplicationRejectedEmail(params: { to: string; motivo: string }): Promise<void> {
+    await this.transporter.sendMail({ from: env.EMAIL_FROM, to: params.to,
+      subject: 'Revisión de tu solicitud de ColoradosDrive',
+      text: `Tu solicitud no fue aprobada. Motivo: ${params.motivo}\nPuedes contactar a la escuela para más información.`,
+    });
+  }
+
 }

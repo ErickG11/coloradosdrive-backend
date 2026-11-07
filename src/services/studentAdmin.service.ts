@@ -36,10 +36,19 @@ export interface StudentDetail {
   direccion: string | null;
   createdAt: string;
   updatedAt: string;
+  identidadPresencial: {
+    origenSolicitud: boolean;
+    confirmada: boolean;
+    confirmadaAt: string | null;
+    confirmadaPor: string | null;
+  };
   graduation: StudentGraduation;
   practiceSchedule: StudentSchedule;
   enrollments: (ManualEnrollmentDetails & {
     status: EnrollmentRow['status'];
+    origen: EnrollmentRow['origen'];
+    etapa: EnrollmentRow['etapa_inscripcion'];
+    reservaExpiraAt: string | null;
     courseId: string;
     courseType: 'A' | 'B';
     fechaInscripcion: string;
@@ -190,7 +199,14 @@ export class StudentAdminService {
           .eq('rol', 'instructor')
       : { data: [], error: null };
     if (instructors.error) throw databaseError(instructors.error);
+    const currentEnrollment = enrollments.length > 0 ? enrollments[0] : undefined;
     return {
+      identidadPresencial: {
+        origenSolicitud: currentEnrollment?.origen === 'solicitud',
+        confirmada: currentEnrollment?.identidad_presencial_at != null,
+        confirmadaAt: currentEnrollment?.identidad_presencial_at ?? null,
+        confirmadaPor: currentEnrollment?.identidad_presencial_por ?? null,
+      },
       graduation: studentGraduation(
         enrollments,
         documentsResult.data ?? [],
@@ -222,6 +238,9 @@ export class StudentAdminService {
           (documentsResult.data ?? []).filter((d) => d.enrollment_id === e.id),
         ),
         status: e.status,
+        origen: e.origen,
+        etapa: e.etapa_inscripcion,
+        reservaExpiraAt: e.reserva_expira_at,
         courseId: e.course_id,
         courseType: e.course_type,
         fechaInscripcion: e.fecha_inscripcion,

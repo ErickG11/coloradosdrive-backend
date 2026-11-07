@@ -15,6 +15,7 @@ import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const from = supabaseAdmin.from as jest.Mock;
@@ -60,8 +61,10 @@ describe('admin estudiantes A', () => {
       kind === 'list' ? request(app).get(path) : request(app).get(`${path}/${id}`);
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(
-      createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+    from.mockImplementation((table: string) =>
+      table === 'enrollments'
+        ? sinInscripcionPendiente()
+        : createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
     );
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
@@ -202,8 +205,10 @@ describe('admin estudiantes A', () => {
       request(app).patch(`${path}/${id}`).send({ updatedAt: version, nombreCompleto: 'Nuevo' });
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    from.mockReturnValue(
-      createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+    from.mockImplementation((table: string) =>
+      table === 'enrollments'
+        ? sinInscripcionPendiente()
+        : createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
     );
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();

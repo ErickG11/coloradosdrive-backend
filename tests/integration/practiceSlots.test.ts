@@ -1,7 +1,7 @@
 import request from 'supertest';
 
 jest.mock('../../src/config/supabase', () => ({
-  supabaseAdmin: { from: jest.fn() },
+  supabaseAdmin: { from: jest.fn(), rpc: jest.fn() },
   supabaseAnon: {},
 }));
 
@@ -14,9 +14,11 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
+const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
 const cohortId = '11111111-1111-4111-8111-111111111111';
@@ -67,6 +69,7 @@ describe('practice-slots endpoints', () => {
 
   beforeEach(() => {
     mockedFrom.mockReset();
+    mockedRpc.mockReset();
     mockedVerifySupabaseJwt.mockReset();
   });
 
@@ -79,13 +82,13 @@ describe('practice-slots endpoints', () => {
     it('POST con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .post('/practice-slots')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
         .send(validCreateBody);
       expect(res.status).toBe(403);
-      expect(mockedFrom).toHaveBeenCalledTimes(1);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
 
     it('PATCH con rol instructor responde 403', async () => {
@@ -99,7 +102,7 @@ describe('practice-slots endpoints', () => {
     it('DELETE con rol estudiante responde 403', async () => {
       mockedFrom.mockReturnValueOnce(
         createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      );
+      ).mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .delete(`/practice-slots/${slotId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
@@ -317,6 +320,7 @@ describe('practice-slots endpoints', () => {
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: [], error: null }));
 
       const res = await request(app)
@@ -340,6 +344,7 @@ describe('practice-slots endpoints', () => {
       });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(freeSlots)
         .mockReturnValueOnce(ownSlots);
@@ -377,6 +382,7 @@ describe('practice-slots endpoints', () => {
       const chain = createChain({ data: [releasedByStudentA], error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(chain)
         .mockReturnValueOnce(createChain({ data: [], error: null }));
@@ -401,6 +407,7 @@ describe('practice-slots endpoints', () => {
       ], error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(freeSlots)
         .mockReturnValueOnce(ownSlots);
@@ -423,6 +430,7 @@ describe('practice-slots endpoints', () => {
       ], error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente())
         .mockReturnValueOnce(createChain({ data: [{ cohort_id: cohortId }], error: null }))
         .mockReturnValueOnce(freeSlots)
         .mockReturnValueOnce(createChain({ data: [], error: null }));
@@ -452,6 +460,8 @@ describe('practice-slots endpoints', () => {
         ],
         error: null,
       });
+      // La agenda marca las franjas con identidad presencial pendiente por RPC (F19).
+      mockedRpc.mockResolvedValueOnce({ data: [], error: null });
       mockedFrom
         .mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true, debe_cambiar_password: false }, error: null }))
         .mockReturnValueOnce(chain);

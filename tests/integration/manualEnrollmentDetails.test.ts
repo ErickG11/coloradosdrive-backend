@@ -12,6 +12,7 @@ import { createApp } from '../../src/app';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const from = supabaseAdmin.from as jest.Mock;
@@ -37,7 +38,8 @@ describe('detalles administrativos de matrícula', () => {
   it.each(['get', 'patch'] as const)('%s exige token y rol admin', async (method) => {
     const call = () => method === 'get' ? request(app).get(path) : request(app).patch(path);
     expect((await call()).status).toBe(401);
-    from.mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
+    from.mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(sinInscripcionPendiente());
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
     from.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true,
       debe_cambiar_password: false }, error: null }));

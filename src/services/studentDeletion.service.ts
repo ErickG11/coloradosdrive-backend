@@ -143,6 +143,10 @@ export class StudentDeletionService {
         p_confirmation: confirmation ?? null,
       });
       if (r.error) {
+        if (r.error.code === 'IP423')
+          throw new AppError('El alumno tiene pagos pendientes o recibidos. Resuelve y conserva su historial financiero antes de eliminarlo.', 409, {
+            code: 'PAYMENTS_REQUIRE_REVIEW',
+          });
         if (r.error.code === 'CD031')
           throw new AppError('La cédula de confirmación no coincide', 400, {
             code: 'INVALID_CONFIRMATION',

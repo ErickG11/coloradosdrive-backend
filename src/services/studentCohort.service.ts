@@ -16,6 +16,11 @@ export function studentCohortError(error: unknown): AppError {
   if (error instanceof AppError) return error;
   const code = (error as { code?: string } | null)?.code;
   const known: Record<string, [number, string, string]> = {
+    IE403: [
+      403,
+      'INSCRIPCION_INCOMPLETA',
+      'El alumno debe reservar su horario y pagar antes de asignar cohorte',
+    ],
     CD001: [409, 'COHORT_FULL', 'La cohorte ya no tiene cupo'],
     CD030: [409, 'DELETION_PENDING', 'El alumno tiene una eliminación pendiente'],
     CD403: [403, 'ACCOUNT_INACTIVE', 'Reactiva al alumno antes de asignar cohorte'],
@@ -72,6 +77,8 @@ export class StudentCohortService {
       .maybeSingle();
     if (result.error) throw result.error;
     if (!result.data) throw studentCohortError({ code: 'CD040' });
+    if (result.data.origen === 'solicitud' && result.data.etapa_inscripcion !== 'activa')
+      throw studentCohortError({ code: 'IE403' });
     return result.data;
   }
 

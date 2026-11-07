@@ -5,6 +5,12 @@ import { verifySupabaseJwt } from '../config/jwks';
 import { supabaseAdmin } from '../config/supabase';
 import { isRole, type AuthenticatedUser } from '../models/user.model';
 import { AppError } from '../utils/AppError';
+import {
+  inscripcionIncompleta,
+  permiteInscripcionIncompleta,
+  MENSAJE_INSCRIPCION_INCOMPLETA,
+} from '../services/studentEnrollmentAccess';
+import { markGuard } from '../utils/routeGuards';
 
 // Las excepciones de contraseña NO eximen de comprobar perfil y activo.
 // Se compara baseUrl+path para cubrir los routers montados.
@@ -97,6 +103,11 @@ export async function authenticate(
 
     if (user.role === 'estudiante') {
       await assertPasswordNotPendingChange(req, user.id);
+      if (
+        !permiteInscripcionIncompleta(req.method, `${req.baseUrl}${req.path}`) &&
+        (await inscripcionIncompleta(supabaseAdmin, user.id))
+      )
+        throw new AppError(MENSAJE_INSCRIPCION_INCOMPLETA, 403, { code: 'INSCRIPCION_INCOMPLETA' });
     }
 
     req.user = user;
@@ -109,3 +120,5 @@ export async function authenticate(
     next(new AppError('Invalid or expired token', 401));
   }
 }
+
+markGuard(authenticate, 'authenticate');

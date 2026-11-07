@@ -174,6 +174,11 @@ export class PracticeSlotGenerationService {
   // Algoritmo de fechas/horas
   // -----------------------------------------------------------------
 
+  // I06 reutiliza exactamente el calendario del wizard manual; no duplica fechas/modalidad.
+  sessionDates(input: GenerarPracticaBaseInput): string[] {
+    return this.buildSessionPlan(input).fechasISO;
+  }
+
   private buildSessionPlan(input: GenerarPracticaBaseInput): SessionPlan {
     if ((input.fechaFin === undefined) === (input.numeroSesiones === undefined)) {
       throw new AppError('Debes indicar exactamente uno de fechaFin o numeroSesiones', 400);

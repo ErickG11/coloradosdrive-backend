@@ -2,7 +2,7 @@ import express from 'express';
 import request from 'supertest';
 
 import { errorHandler } from '../../src/middlewares/errorHandler';
-import { buildRateLimiter } from '../../src/middlewares/rateLimit';
+import { correoRateKey, buildRateLimiter } from '../../src/middlewares/rateLimit';
 
 function buildApp(max: number): express.Express {
   const app = express();
@@ -34,4 +34,18 @@ describe('buildRateLimiter', () => {
     expect((await request(app).post('/accion')).status).toBe(200);
     expect((await request(app).post('/accion')).status).toBe(200);
   });
+});
+
+// No se conserva el correo en las claves del store.
+it('normaliza y resume el correo sin compartir su valor en el store', () => {
+  const req = (correo: string) => ({ body: { correo } }) as express.Request;
+  expect(correoRateKey(req(' Ana@Example.com '))).toBe(correoRateKey(req('ana@example.com')));
+  expect(correoRateKey(req('ana@example.com'))).toMatch(/^[a-f0-9]{64}$/);
+});
+it('Railway confía solo en el salto configurado y no en toda la cadena', async () => {
+  const app = express();
+  app.set('trust proxy', 1);
+  app.get('/', (req, res) => res.json({ ip: req.ip }));
+  const response = await request(app).get('/').set('X-Forwarded-For', '198.51.100.1, 203.0.113.2');
+  expect(response.body.ip).toBe('203.0.113.2');
 });

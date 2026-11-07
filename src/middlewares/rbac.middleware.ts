@@ -3,6 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import type { Role } from '../models/user.model';
 import { supabaseAdmin } from '../config/supabase';
 import { AppError } from '../utils/AppError';
+import { markGuard } from '../utils/routeGuards';
 
 const INSTRUCTOR_PASSWORD_ROUTES = new Set([
   'GET /instructores/account-status',
@@ -33,7 +34,7 @@ export async function assertInstructorAccess(req: Request, instructorId: string)
 export function requireRole(
   ...allowedRoles: Role[]
 ): (req: Request, res: Response, next: NextFunction) => void {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return markGuard((req: Request, _res: Response, next: NextFunction): void => {
     if (!req.user) {
       next(new AppError('Authentication required', 401));
       return;
@@ -49,5 +50,5 @@ export function requireRole(
       return;
     }
     next();
-  };
+  }, 'requireRole');
 }

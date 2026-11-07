@@ -1,4 +1,9 @@
 import { config as loadDotenv } from 'dotenv';
+import { loadPaymentConfig } from './paymentConfig';
+import { loadStudentScheduleConfig } from './studentScheduleConfig';
+import { loadEnrollmentConfig } from './enrollmentConfig';
+import { validateCaptchaConfiguration } from './captcha';
+import { parseCorsOrigins } from './cors';
 
 loadDotenv();
 
@@ -15,23 +20,109 @@ function optionalEnv(name: string, fallback: string): string {
   return value && value.trim() !== '' ? value : fallback;
 }
 
+const nodeEnv = optionalEnv('NODE_ENV', 'development');
+const demoRaw = optionalEnv('DEMO_MODE', 'false');
+if (demoRaw !== 'true' && demoRaw !== 'false') {
+  throw new Error('DEMO_MODE debe ser true o false');
+}
+const demoMode = demoRaw === 'true';
+const emailProvider = optionalEnv('EMAIL_PROVIDER', 'smtp');
+if (emailProvider !== 'smtp' && emailProvider !== 'console' && emailProvider !== 'gmail_api') {
+  throw new Error('EMAIL_PROVIDER debe ser smtp o console, o gmail_api (HTTPS)');
+}
+if (
+  emailProvider === 'console' &&
+  (nodeEnv === 'production' || process.env.RAILWAY_ENVIRONMENT !== undefined)
+) {
+  throw new Error(
+    'EMAIL_PROVIDER=console está prohibido en production o con RAILWAY_ENVIRONMENT presente',
+  );
+}
+function requireSmtpEnv(name: string): string {
+  if (emailProvider === 'console') return optionalEnv(name, '');
+  if (!process.env[name]?.trim()) {
+    throw new Error(`EMAIL_PROVIDER=smtp requiere ${name}`);
+  }
+  return requireEnv(name);
+}
+// gmail_api (HTTPS): el remitente sigue siendo EMAIL_USER; no usa contraseña SMTP.
+function requireGmailApiEnv(name: string): string {
+  if (emailProvider !== 'gmail_api') return optionalEnv(name, '');
+  if (!process.env[name]?.trim()) {
+    throw new Error(`EMAIL_PROVIDER=gmail_api requiere ${name}`);
+  }
+  return requireEnv(name);
+}
+const emailUser =
+  emailProvider === 'gmail_api' ? requireGmailApiEnv('EMAIL_USER') : requireSmtpEnv('EMAIL_USER');
+const emailPassword =
+  emailProvider === 'gmail_api' ? optionalEnv('EMAIL_APP_PASSWORD', '') : requireSmtpEnv('EMAIL_APP_PASSWORD');
+const gmailClientId = requireGmailApiEnv('GMAIL_CLIENT_ID');
+const gmailClientSecret = requireGmailApiEnv('GMAIL_CLIENT_SECRET');
+const gmailRefreshToken = requireGmailApiEnv('GMAIL_REFRESH_TOKEN');
+
 export const env = {
-  NODE_ENV: optionalEnv('NODE_ENV', 'development'),
+  NODE_ENV: nodeEnv,
+  DEMO_MODE: demoMode,
+  EMAIL_PROVIDER: emailProvider,
+  APPROVAL_CLAIM_TTL_MINUTES: Number(optionalEnv('APPROVAL_CLAIM_TTL_MINUTES', '10')),
+  SOLICITUD_RETENCION_DIAS: Number(optionalEnv('SOLICITUD_RETENCION_DIAS', '30')),
+  PRIVACY_CONTACT_EMAIL: optionalEnv(
+    'PRIVACY_CONTACT_EMAIL',
+    emailUser || 'privacidad@example.invalid',
+  ),
+  TRUST_PROXY_HOPS: Number(optionalEnv('TRUST_PROXY_HOPS', nodeEnv === 'production' ? '1' : '0')),
   PORT: Number(optionalEnv('PORT', '3000')),
   FRONTEND_URL: requireEnv('FRONTEND_URL'),
+  // Orígenes adicionales de CORS (por ejemplo, vistas previas); opcional.
+  CORS_ORIGINS: parseCorsOrigins(optionalEnv('CORS_ORIGINS', '')),
   SUPABASE_URL: requireEnv('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
-  EMAIL_USER: requireEnv('EMAIL_USER'),
-  EMAIL_APP_PASSWORD: requireEnv('EMAIL_APP_PASSWORD'),
+  EMAIL_USER: emailUser,
+  EMAIL_APP_PASSWORD: emailPassword,
   // Gmail reescribe el remitente a la cuenta autenticada, así que el
   // "from" es siempre EMAIL_USER.
-  EMAIL_FROM: requireEnv('EMAIL_USER'),
+  EMAIL_FROM: emailUser || 'pruebas@example.invalid',
   SOLICITUD_TOKEN_SECRET: requireEnv('SOLICITUD_TOKEN_SECRET'),
+  ...loadEnrollmentConfig(process.env),
+  ...loadStudentScheduleConfig(process.env),
+  ...loadPaymentConfig(process.env),
+  // B3 (F42): credenciales OAuth de la API de Gmail; vacías salvo EMAIL_PROVIDER=gmail_api.
+  GMAIL_CLIENT_ID: gmailClientId,
+  GMAIL_CLIENT_SECRET: gmailClientSecret,
+  GMAIL_REFRESH_TOKEN: gmailRefreshToken,
 };
 
 if (env.SOLICITUD_TOKEN_SECRET.length < 32) {
   throw new Error('SOLICITUD_TOKEN_SECRET must be at least 32 characters long');
 }
+validateCaptchaConfiguration(env);
 
 export const isProduction = env.NODE_ENV === 'production';
+
+if (
+  !Number.isInteger(env.TRUST_PROXY_HOPS) ||
+  env.TRUST_PROXY_HOPS < 0 ||
+  env.TRUST_PROXY_HOPS > 2
+) {
+  throw new Error('TRUST_PROXY_HOPS debe ser 0, 1 o 2');
+}
+
+if (!Number.isInteger(env.SOLICITUD_RETENCION_DIAS) || env.SOLICITUD_RETENCION_DIAS < 1) {
+  throw new Error('SOLICITUD_RETENCION_DIAS debe ser un entero positivo');
+}
+
+if (env.DEMO_MODE) {
+  console.warn(
+    'MODO DEMOSTRACIÓN ACTIVO: captcha y pago simulados; no usar con datos reales',
+  );
+}
+
+if (env.EMAIL_PROVIDER === 'console') {
+  console.warn('Correo en modo consola: los mensajes NO se envían, se imprimen aquí');
+}
+
+if (!Number.isInteger(env.APPROVAL_CLAIM_TTL_MINUTES) || env.APPROVAL_CLAIM_TTL_MINUTES < 1 || env.APPROVAL_CLAIM_TTL_MINUTES > 1440) {
+  throw new Error('APPROVAL_CLAIM_TTL_MINUTES debe ser un entero entre1 y1440');
+}
