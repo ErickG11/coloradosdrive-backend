@@ -170,3 +170,7 @@ Pruebas saltadas, todas con `TODO(F23)` (flujo antiguo retirado con el rediseño
 | `tests/integration/consoleEmail.test.ts` | 1 | Aprobar imprimía la contraseña temporal; ahora la aprobación es en dos pasos por RPC y envía un enlace de un solo uso. |
 
 Cambios de método de esta ronda: las suites que usan alumnos se apoyan en `tests/helpers/authMocks.ts` (el middleware consulta `users` y `enrollments` por petición); se retiraron las pruebas de `solicitudDeletion`, `studentDocuments` y `studentPendingDocuments` (servicios y rutas eliminados).
+
+## Despliegue
+
+Guía de despliegue en Railway y Vercel (modo demostración incluido): [`docs/DESPLIEGUE.md`](DESPLIEGUE.md).
