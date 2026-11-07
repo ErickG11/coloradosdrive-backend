@@ -51,6 +51,8 @@ describe('Plan civil compartido con el wizard por HTTP', () => {
     { fechaInicio: '2026-02-30' },
     { horasPorDia: 1.5 },
     { horasPorDia: 0 },
+    { horasPorDia: 7 },
+    { horasPorDia: 16 },
     { horaDeseada: '21:01' },
   ])('rechaza plan inválido %j', (override) => {
     expect(() => manualPracticePlan({ ...base, ...override })).toThrow();
@@ -60,5 +62,39 @@ describe('Plan civil compartido con el wizard por HTTP', () => {
     expect(p.fechaFinElegida).toBe('2029-01-01');
     expect(p.semanas).toBe(1);
     expect(p.dias).toBeGreaterThan(500);
+  });
+  it('horas por día: 1 y 6 válidas; 7 rechazada con field y mensaje en español', () => {
+    expect(manualPracticePlan({ ...base, horasPorDia: 1 }).bloques).toBe(5);
+    expect(manualPracticePlan({ ...base, horasPorDia: 6 }).bloques).toBe(30);
+    expect(() => manualPracticePlan({ ...base, horasPorDia: 7 })).toThrow(
+      expect.objectContaining({
+        message: 'Las horas por día deben ser un entero entre 1 y 6.',
+        field: 'practice.horasPorDia',
+        code: 'INVALID_FIELD',
+      }),
+    );
+  });
+  it('hora fuera de 06:00-22:00 o que no cabe: mensajes con field', () => {
+    expect(() => manualPracticePlan({ ...base, horaDeseada: '05:59' })).toThrow(
+      expect.objectContaining({ field: 'practice.horaDeseada',
+        message: 'La hora deseada debe estar entre 06:00 y 22:00.' }),
+    );
+    expect(() => manualPracticePlan({ ...base, horaDeseada: '17:00', horasPorDia: 6 })).toThrow(
+      expect.objectContaining({ field: 'practice.horaDeseada' }),
+    );
+    expect(manualPracticePlan({ ...base, horaDeseada: '16:00', horasPorDia: 6 }).dias).toBe(5);
+  });
+  it('fecha final anterior al inicio y fecha inexistente indican su campo', () => {
+    expect(() => manualPracticePlan({ ...base, fechaFin: '2026-09-29' })).toThrow(
+      expect.objectContaining({ field: 'practice.fechaFin',
+        message: 'La fecha final no puede ser anterior al inicio.' }),
+    );
+    expect(() => manualPracticePlan({ ...base, fechaInicio: '2026-02-30' })).toThrow(
+      expect.objectContaining({ field: 'practice.fechaInicio' }),
+    );
+  });
+  it('una fecha de inicio pasada NO se rechaza (decisión del dueño: el admin elige libremente)', () => {
+    expect(manualPracticePlan({ ...base, fechaInicio: '2020-01-06' }).dias).toBe(5);
+    expect(manualPracticePlan({ ...base, fechaInicio: '2000-03-01' }).primerDiaEfectivo).toBe('2000-03-01');
   });
 });

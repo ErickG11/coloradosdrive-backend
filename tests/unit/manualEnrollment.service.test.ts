@@ -1,7 +1,7 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import type { Database, ManualOperation } from '../../src/config/database.types';
 import type { ManualEnrollmentInput } from '../../src/models/manualEnrollment.model';
-import { ManualEnrollmentService } from '../../src/services/manualEnrollment.service';
+import { ManualEnrollmentService, manualEnrollmentError } from '../../src/services/manualEnrollment.service';
 import type { EmailService } from '../../src/services/email.service';
 import { createChain } from '../helpers/supabaseMock';
 
@@ -241,5 +241,126 @@ describe('Idempotencia y estado recuperable de confirmación', () => {
       }),
     ).rejects.toMatchObject({ statusCode: 503 });
     expect(deleteUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('Errores de confirmación con field y code (paso 5 vuelve al paso afectado)', () => {
+  const request = {
+    ...input,
+    student: {
+      mode: 'new' as const,
+      cedula: '1710034065',
+      nombreCompleto: 'Sintético',
+      correo: 'sintetico@example.test',
+    },
+  };
+  function build(profile: unknown, createUser: jest.Mock) {
+    const rpc = jest.fn((name: string) =>
+      Promise.resolve(
+        name === 'reserve_manual_enrollment'
+          ? { data: { ...op, phase: 'processing', claimed: true }, error: null }
+          : { data: { ...op, phase: 'failed' }, error: null },
+      ),
+    );
+    const from = jest.fn((table: string) =>
+      table === 'manual_course_catalog'
+        ? createChain({ data: [{ tipo: 'A', course_id: 'a' }], error: null })
+        : table === 'cohorts'
+          ? createChain({ data: [], error: null })
+          : createChain({ data: profile, error: null }),
+    );
+    const deleteUser = jest.fn();
+    const db = { rpc, from, auth: { admin: { createUser, deleteUser } } } as unknown as
+      SupabaseClient<Database>;
+    return { service: new ManualEnrollmentService(db, {} as EmailService), createUser, deleteUser };
+  }
+
+  it('cédula ya registrada: 409 DUPLICATE_CEDULA en student.cedula y no crea la cuenta', async () => {
+    const { service, createUser } = build({ id: 'otro' }, jest.fn());
+    await expect(service.confirm('admin', 'op', request)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_CEDULA',
+      field: 'student.cedula',
+      message: 'La cédula ya existe. Busca y selecciona el estudiante existente.',
+    });
+    expect(createUser).not.toHaveBeenCalled();
+  });
+
+  it('correo ya registrado en Auth: 409 DUPLICATE_EMAIL en student.correo', async () => {
+    const createUser = jest.fn().mockResolvedValue({
+      data: null,
+      error: { status: 422, code: 'email_exists', message: 'exists' },
+    });
+    const { service, deleteUser } = build(null, createUser);
+    await expect(service.confirm('admin', 'op', request)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'DUPLICATE_EMAIL',
+      field: 'student.correo',
+      message: 'El correo ya existe. Busca y selecciona el estudiante existente.',
+    });
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('carrera de dos administradores (23505): cédula única -> DUPLICATE_CEDULA; otra restricción -> 409 general', () => {
+    expect(manualEnrollmentError({ code: '23505',
+      message: 'duplicate key value violates unique constraint "users_cedula_unique"' } as PostgrestError))
+      .toMatchObject({ statusCode: 409, code: 'DUPLICATE_CEDULA', field: 'student.cedula' });
+    const general = manualEnrollmentError({ code: '23505', message: 'otra restricción' } as PostgrestError);
+    expect(general).toMatchObject({ statusCode: 409 });
+    expect(general).not.toHaveProperty('code', 'DUPLICATE_CEDULA');
+  });
+
+  it('cupo agotado detectado por la base (CD001): 409 COHORT_FULL en cohortId', () => {
+    expect(
+      manualEnrollmentError({ code: 'CD001', message: 'x' } as PostgrestError),
+    ).toMatchObject({
+      statusCode: 409,
+      code: 'COHORT_FULL',
+      field: 'cohortId',
+      message: 'La cohorte ya no tiene cupo disponible.',
+    });
+  });
+
+  it('cohorte inexistente, de otro curso y con matrícula cerrada indican cohortId', async () => {
+    const today = '2026-10-21';
+    const cohort = (over: object) => ({
+      id: 'c', course_id: 'course', precio: '100',
+      fecha_inicio_matricula: today, fecha_fin_matricula: today, ...over,
+    });
+    const run = async (cohortRow: unknown, courseTipo: string) => {
+      const from = jest.fn((table: string) =>
+        table === 'manual_course_catalog'
+          ? createChain({ data: [{ tipo: 'A', course_id: 'a' }], error: null })
+          : table === 'cohorts'
+            ? createChain({ data: cohortRow, error: null })
+            : createChain({ data: { tipo: courseTipo }, error: null }),
+      );
+      const service = new ManualEnrollmentService({ from } as unknown as SupabaseClient<Database>,
+        {} as EmailService);
+      return service.practicePreview({ ...input, automatic: false, cohortId: 'c' });
+    };
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-21T15:00:00Z'));
+    try {
+      await expect(run(null, 'A')).rejects.toMatchObject({
+        statusCode: 404, code: 'COHORT_NOT_FOUND', field: 'cohortId' });
+      await expect(run(cohort({}), 'B')).rejects.toMatchObject({
+        statusCode: 400, code: 'COHORT_COURSE_MISMATCH', field: 'cohortId',
+        message: 'La cohorte seleccionada no corresponde al curso elegido.' });
+      await expect(run(cohort({ fecha_fin_matricula: '2026-10-20' }), 'A')).rejects.toMatchObject({
+        statusCode: 409, code: 'COHORT_ENROLLMENT_CLOSED', field: 'cohortId',
+        message: 'La matrícula de la cohorte no está abierta.' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('sin instructor y con cohorte, indica practice.instructorId', () => {
+    const { service } = build(null, jest.fn());
+    // El plan con cohorte exige instructor antes de crear nada.
+    expect(() => (service as unknown as {
+      requireInstructor: (p: object) => string }).requireInstructor(input.practice)).toThrow(
+      expect.objectContaining({ field: 'practice.instructorId',
+        message: 'Selecciona un instructor antes de confirmar.' }),
+    );
   });
 });

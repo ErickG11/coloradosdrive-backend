@@ -46,23 +46,40 @@ function validMoney(value: number): boolean {
     Math.abs(value * 100 - Math.round(value * 100)) < 1e-8;
 }
 
-export function validateInitialPayment(price: number | null, payment: InitialPayment): number | null {
-  if (!['abono', 'completo'].includes(payment.modalidad) ||
-      !validMoney(payment.descuento) || !validMoney(payment.montoAbonado))
-    throw new AppError('El pago inicial debe indicar modalidad y montos válidos con hasta dos decimales', 400);
+function paymentError(message: string, field: string): AppError {
+  return new AppError(message, 400, { code: 'INVALID_FIELD', field });
+}
+
+// `requirePositiveAbono`: en la matrícula nueva con pago explícito, la
+// modalidad Abono exige un abonado mayor que 0 (si el cliente omite `pago`
+// se mantiene el abono inicial de 0 por compatibilidad).
+export function validateInitialPayment(price: number | null, payment: InitialPayment,
+  requirePositiveAbono = false): number | null {
+  if (!['abono', 'completo'].includes(payment.modalidad))
+    throw paymentError('Selecciona la modalidad de pago.', 'pago.modalidad');
+  if (!validMoney(payment.descuento))
+    throw paymentError(
+      'El descuento debe ser un monto de 0 en adelante con hasta dos decimales.', 'pago.descuento');
+  if (!validMoney(payment.montoAbonado))
+    throw paymentError(
+      'El monto abonado debe ser un monto de 0 en adelante con hasta dos decimales.',
+      'pago.montoAbonado');
   if (price === null) {
     if (payment.descuento !== 0 || payment.modalidad !== 'abono')
-      throw new AppError('Sin cohorte solo se permite un abono y descuento cero', 400);
+      throw paymentError('Sin cohorte solo se permite un abono y descuento cero', 'pago.modalidad');
     return null;
   }
   if (payment.descuento > price)
-    throw new AppError('El descuento no puede superar el precio de la cohorte', 400);
+    throw paymentError('El descuento no puede superar el precio de la cohorte', 'pago.descuento');
   const net = Math.round((price - payment.descuento) * 100) / 100;
   if (payment.montoAbonado > net)
-    throw new AppError('El abono no puede superar el monto total neto', 400);
+    throw paymentError('El abono no puede superar el monto total neto', 'pago.montoAbonado');
   if (payment.modalidad === 'completo' && payment.montoAbonado !== net)
-    throw new AppError('El pago completo debe igualar el monto total neto', 400);
+    throw paymentError('El pago completo debe igualar el monto total neto', 'pago.montoAbonado');
   if (payment.modalidad === 'abono' && payment.montoAbonado === net && net > 0)
-    throw new AppError('Un pago del monto total debe indicarse como completo', 400);
+    throw paymentError('Un pago del monto total debe indicarse como completo', 'pago.modalidad');
+  if (requirePositiveAbono && payment.modalidad === 'abono' && payment.montoAbonado <= 0)
+    throw paymentError(
+      'Con la modalidad Abono, el monto abonado debe ser mayor que $0.00.', 'pago.montoAbonado');
   return net;
 }

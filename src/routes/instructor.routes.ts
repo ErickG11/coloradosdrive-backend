@@ -12,6 +12,7 @@ import { UserService } from '../services/user.service';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { isValidCedulaEcuatoriana } from '../utils/cedula';
+import { isValidPhone } from '../utils/phone';
 
 export const instructorAdminRouter = Router();
 export const instructorSelfRouter = Router();
@@ -34,8 +35,7 @@ const id = param('id').isUUID().withMessage('id debe ser un UUID válido');
 const name = (): ReturnType<typeof body> =>
   body('nombreCompleto').isString().trim().isLength({ min: 1, max: 200 });
 const phone = (): ReturnType<typeof body> =>
-  body('telefono').isString().trim().matches(/^\+?[0-9() -]{7,20}$/)
-    .custom((value: string) => value.replace(/\D/g, '').length >= 7);
+  body('telefono').isString().trim().custom((value: string) => isValidPhone(value));
 
 instructorAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
 
