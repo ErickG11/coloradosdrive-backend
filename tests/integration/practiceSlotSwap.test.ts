@@ -10,6 +10,7 @@ import { createApp } from '../../src/app';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
+import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -24,7 +25,12 @@ describe('E2: rutas de cupos para el alumno', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     rpc.mockReset();
-    from.mockReturnValue(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }));
+    // Por tabla: cuenta activa y sin matrícula de solicitud pendiente (ver tests/helpers/authMocks.ts).
+    from.mockImplementation((table: string) =>
+      table === 'enrollments'
+        ? sinInscripcionPendiente()
+        : createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+    );
   });
   const auth = () => `Bearer ${mockAuthToken(verify, 'estudiante')}`;
 

@@ -27,6 +27,7 @@ export interface SupabaseChainMock {
   gt: jest.Mock;
   order: jest.Mock;
   range: jest.Mock;
+  limit: jest.Mock;
   overrideTypes: jest.Mock;
   single: jest.Mock;
   maybeSingle: jest.Mock;
@@ -56,6 +57,7 @@ export function createChain(result: ChainResult): SupabaseChainMock {
   chain.gt = jest.fn().mockReturnValue(chain);
   chain.order = jest.fn().mockReturnValue(chain);
   chain.range = jest.fn().mockReturnValue(chain);
+  chain.limit = jest.fn().mockReturnValue(chain);
   // No-op en el mock (solo re-tipa en tiempo de compilación, no cambia
   // nada en runtime) - ver PracticeSlotService, único caller hasta ahora.
   chain.overrideTypes = jest.fn().mockReturnValue(chain);
