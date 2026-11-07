@@ -2,6 +2,7 @@ import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
 
+import { allowedCorsOrigins } from './config/cors';
 import { env } from './config/env';
 import {
   ENROLLMENT_JSON_LIMIT,
@@ -11,16 +12,6 @@ import {
 } from './config/serverHardening';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler';
 import { apiRouter } from './routes';
-
-// CORS compara el origen exacto (esquema + host + puerto): una FRONTEND_URL con
-// barra final o ruta no debe romper ni ampliar el origen permitido.
-function frontendOrigin(url: string): string {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return url;
-  }
-}
 
 export function createApp(): Express {
   const app = express();
@@ -39,7 +30,9 @@ export function createApp(): Express {
   );
   app.use(
     cors({
-      origin: frontendOrigin(env.FRONTEND_URL),
+      // CORS compara el origen exacto (esquema + host + puerto): FRONTEND_URL y, si existe, la
+      // lista CORS_ORIGINS (vistas previas). Una FRONTEND_URL con barra final o ruta no amplía nada.
+      origin: allowedCorsOrigins(env.FRONTEND_URL, env.CORS_ORIGINS),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
       maxAge: 600,
