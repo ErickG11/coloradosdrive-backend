@@ -156,6 +156,7 @@ export class EnrollmentLimitsService {
     umbralBachillerReciente: number;
     documentosFisicos: typeof DOCUMENTOS_FISICOS;
     captcha: { provider: 'turnstile' | 'off'; siteKey: string | null };
+    demo?: true;
   }> {
     const settings = await this.settings();
     const courses = await this.db
@@ -188,6 +189,8 @@ export class EnrollmentLimitsService {
             ? this.config.NEXT_PUBLIC_TURNSTILE_SITE_KEY
             : null,
       },
+      // Solo aparece con DEMO_MODE=true: nada más se revela del modo.
+      ...(this.config.DEMO_MODE ? { demo: true as const } : {}),
     };
   }
   async summary(): Promise<EnrollmentSummary> {

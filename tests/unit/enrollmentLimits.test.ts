@@ -98,6 +98,20 @@ test('configuración pública lista columnas explícitas y nunca exporta secreto
   expect(value).not.toHaveProperty('TURNSTILE_SECRET_KEY');
   expect(courses.select).toHaveBeenCalledWith('id,tipo,nombre,edad_minima');
 });
+test.each([true, false])('configuración pública con DEMO_MODE=%s expone demo solo cuando está activo', async (demo) => {
+  const rpc = jest.fn(),
+    from = jest
+      .fn()
+      .mockReturnValueOnce(createChain({ data: { inscripciones_abiertas: true }, error: null }))
+      .mockReturnValueOnce(createChain({ data: [], error: null }));
+  const service = new EnrollmentLimitsService(
+    { rpc, from } as unknown as SupabaseClient<Database>,
+    { ...env, DEMO_MODE: demo },
+  );
+  const value = await service.publicConfig();
+  if (demo) expect(value.demo).toBe(true);
+  else expect(value).not.toHaveProperty('demo');
+});
 test('actualización solo admite booleano y actor del servidor', async () => {
   const h = setup({ inscripcionesAbiertas: false });
   await h.service.updateSettings('admin', { inscripcionesAbiertas: false });

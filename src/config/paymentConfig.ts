@@ -21,7 +21,8 @@ export function loadPaymentConfig(source: NodeJS.ProcessEnv): PaymentConfig {
   );
   if (provider !== 'simulado' && provider !== 'manual' && provider !== 'kushki')
     throw new Error('PAYMENT_PROVIDER debe ser simulado, manual o kushki');
-  if (provider === 'simulado' && source.NODE_ENV === 'production')
+  // Solo el modo demostración explícito permite el pago simulado en producción.
+  if (provider === 'simulado' && source.NODE_ENV === 'production' && source.DEMO_MODE !== 'true')
     throw new Error('PAYMENT_PROVIDER=simulado está prohibido en NODE_ENV=production');
   const raw = text('PAYMENT_SURCHARGE_CENTS', '0');
   const surcharge = Number(raw);

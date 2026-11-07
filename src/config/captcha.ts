@@ -3,9 +3,11 @@ export interface CaptchaConfig {
   CAPTCHA_PROVIDER: 'turnstile' | 'off';
   TURNSTILE_SECRET_KEY: string;
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: string;
+  // Modo demostración explícito (DEMO_MODE=true): permite captcha off aun en producción.
+  DEMO_MODE?: boolean;
 }
 export function validateCaptchaConfiguration(config: CaptchaConfig): void {
-  if (config.NODE_ENV === 'production' && config.CAPTCHA_PROVIDER === 'off')
+  if (config.NODE_ENV === 'production' && config.CAPTCHA_PROVIDER === 'off' && config.DEMO_MODE !== true)
     throw new Error('CAPTCHA_PROVIDER=off está prohibido en production');
   if (config.CAPTCHA_PROVIDER === 'turnstile') {
     if (!config.TURNSTILE_SECRET_KEY.trim())

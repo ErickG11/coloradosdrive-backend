@@ -3,6 +3,7 @@ import { loadPaymentConfig } from './paymentConfig';
 import { loadStudentScheduleConfig } from './studentScheduleConfig';
 import { loadEnrollmentConfig } from './enrollmentConfig';
 import { validateCaptchaConfiguration } from './captcha';
+import { parseCorsOrigins } from './cors';
 
 loadDotenv();
 
@@ -20,6 +21,11 @@ function optionalEnv(name: string, fallback: string): string {
 }
 
 const nodeEnv = optionalEnv('NODE_ENV', 'development');
+const demoRaw = optionalEnv('DEMO_MODE', 'false');
+if (demoRaw !== 'true' && demoRaw !== 'false') {
+  throw new Error('DEMO_MODE debe ser true o false');
+}
+const demoMode = demoRaw === 'true';
 const emailProvider = optionalEnv('EMAIL_PROVIDER', 'smtp');
 if (emailProvider !== 'smtp' && emailProvider !== 'console' && emailProvider !== 'gmail_api') {
   throw new Error('EMAIL_PROVIDER debe ser smtp o console, o gmail_api (HTTPS)');
@@ -57,6 +63,7 @@ const gmailRefreshToken = requireGmailApiEnv('GMAIL_REFRESH_TOKEN');
 
 export const env = {
   NODE_ENV: nodeEnv,
+  DEMO_MODE: demoMode,
   EMAIL_PROVIDER: emailProvider,
   APPROVAL_CLAIM_TTL_MINUTES: Number(optionalEnv('APPROVAL_CLAIM_TTL_MINUTES', '10')),
   SOLICITUD_RETENCION_DIAS: Number(optionalEnv('SOLICITUD_RETENCION_DIAS', '30')),
@@ -67,6 +74,8 @@ export const env = {
   TRUST_PROXY_HOPS: Number(optionalEnv('TRUST_PROXY_HOPS', nodeEnv === 'production' ? '1' : '0')),
   PORT: Number(optionalEnv('PORT', '3000')),
   FRONTEND_URL: requireEnv('FRONTEND_URL'),
+  // Orígenes adicionales de CORS (por ejemplo, vistas previas); opcional.
+  CORS_ORIGINS: parseCorsOrigins(optionalEnv('CORS_ORIGINS', '')),
   SUPABASE_URL: requireEnv('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   SUPABASE_ANON_KEY: requireEnv('SUPABASE_ANON_KEY'),
@@ -102,6 +111,12 @@ if (
 
 if (!Number.isInteger(env.SOLICITUD_RETENCION_DIAS) || env.SOLICITUD_RETENCION_DIAS < 1) {
   throw new Error('SOLICITUD_RETENCION_DIAS debe ser un entero positivo');
+}
+
+if (env.DEMO_MODE) {
+  console.warn(
+    'MODO DEMOSTRACIÓN ACTIVO: captcha y pago simulados; no usar con datos reales',
+  );
 }
 
 if (env.EMAIL_PROVIDER === 'console') {
