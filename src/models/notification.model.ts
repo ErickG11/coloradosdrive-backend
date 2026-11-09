@@ -8,6 +8,9 @@ export const NOTIFICATION_TYPES = [
   'encuesta_practica',
   'documento_aprobado',
   'documento_rechazado',
+  'contenido_habilitado',
+  'examen_habilitado',
+  'intento_extra',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export type NotificationEmailStatus = 'pendiente' | 'enviado' | 'fallido' | null;

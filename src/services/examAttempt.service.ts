@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
@@ -13,7 +14,13 @@ import type {
 import { AppError } from '../utils/AppError';
 import type { EmailService } from './email.service';
 import { gradeOpenTextAnswer } from './grading.service';
-import { activeCourseIds } from './studentEnrollmentScope';
+import {
+  ContentService,
+  checkContentResult,
+  translateContentDatabaseError,
+  contentError,
+} from './content.service';
+import type { ContentData, ContentValue } from '../models/content.model';
 import { logSafeError } from '../utils/safeLog';
 
 type ExamRow = Database['public']['Tables']['exams']['Row'];
@@ -40,6 +47,10 @@ function toQuestionOptionForStudent(row: QuestionOptionRow): Omit<QuestionOption
 // se omiten correct_answer_text, synonyms e is_correct de cada opción.
 function toExamForStudent(examRow: ExamRow, questions: QuestionWithOptions[]): ExamForStudent {
   return {
+    maxAttemptsDefault: examRow.max_attempts_default,
+    shuffleQuestions: examRow.shuffle_questions,
+    shuffleOptions: examRow.shuffle_options,
+    description: examRow.description,
     id: examRow.id,
     courseId: examRow.course_id,
     title: examRow.title,
@@ -69,6 +80,10 @@ function toExamForStudent(examRow: ExamRow, questions: QuestionWithOptions[]): E
 
 function toExamAttempt(row: ExamAttemptRow): ExamAttempt {
   return {
+    attemptNumber: row.attempt_number,
+    deadlineAt: row.deadline_at,
+    maxAttemptsAplicado: row.max_attempts_aplicado,
+    minutosAplicados: row.minutos_aplicados,
     id: row.id,
     examId: row.exam_id,
     studentId: row.student_id,
@@ -80,12 +95,13 @@ function toExamAttempt(row: ExamAttemptRow): ExamAttempt {
   };
 }
 
-// Autoridad del tiempo: el backend decide si un intento ya expiro
-// comparando started_at + time_limit_minutes contra la hora real del
-// servidor, nunca contra lo que reporte el cliente (ver docs/adr/005).
-function isAttemptExpired(startedAt: string, timeLimitMinutes: number): boolean {
-  const deadline = new Date(startedAt).getTime() + timeLimitMinutes * 60_000;
-  return Date.now() > deadline;
+// Orden estable por intento; reindexar evita restaurar el orden original en el cliente.
+function shuffled<T extends { id: string }>(values: T[], seed: string): T[] {
+  const hash = (id: string): string =>
+    createHash('sha256')
+      .update(seed + ':' + id)
+      .digest('hex');
+  return values.slice().sort((a, b) => hash(a.id).localeCompare(hash(b.id)));
 }
 
 // Recibe el cliente de Supabase y el EmailService por constructor para
@@ -97,26 +113,14 @@ export class ExamAttemptService {
   ) {}
 
   async startAttempt(examId: string, studentId: string): Promise<StartAttemptResult> {
-    const examRow = await this.getPublishedExamOrThrow(examId);
-    await this.assertStudentEnrolledInCourse(studentId, examRow.course_id);
-
-    const inProgress = await this.getInProgressAttempt(examId, studentId);
-    if (inProgress) {
-      if (!isAttemptExpired(inProgress.started_at, examRow.time_limit_minutes)) {
-        return this.buildStartAttemptResult(inProgress, examRow);
-      }
-      await this.finalizeExpiredAttempt(inProgress, examRow);
-    }
-
-    if (examRow.type === 'definitivo') {
-      const hasAnyAttempt = await this.hasAnyAttempt(examId, studentId);
-      if (hasAnyAttempt) {
-        throw new AppError('Este examen es definitivo: ya se usó el único intento permitido', 409);
-      }
-    }
-
-    const attemptRow = await this.insertAttempt(examId, studentId);
-    return this.buildStartAttemptResult(attemptRow, examRow);
+    const { data, error } = await this.supabase.rpc('content_start_attempt', {
+      p_student: studentId,
+      p_exam: examId,
+    });
+    if (error) throw translateContentDatabaseError(error);
+    await this.notifyExpiredResults(data);
+    const attempt = checkContentResult(data) as unknown as ExamAttemptRow;
+    return this.buildStartAttemptResult(attempt, await this.getExamRowOrThrow(examId));
   }
 
   async submitAttempt(
@@ -124,32 +128,37 @@ export class ExamAttemptService {
     studentId: string,
     input: SubmitAttemptInput,
   ): Promise<AttemptResult> {
-    const attemptRow = await this.getOwnAttemptOrThrow(attemptId, studentId);
-    if (attemptRow.status === 'completado') {
-      throw new AppError('Este intento ya fue calificado', 409);
-    }
-
+    const { data, error } = await this.supabase.rpc('content_attempt_state', {
+      p_student: studentId,
+      p_attempt: attemptId,
+    });
+    if (error) throw translateContentDatabaseError(error);
+    await this.notifyExpiredResults(data);
+    if ((data as ContentData)._just_expired) throw contentError('ATTEMPT_EXPIRED');
+    const attemptRow = checkContentResult(data) as unknown as ExamAttemptRow;
+    if (attemptRow.status === 'completado') throw contentError('ATTEMPT_COMPLETED');
     const examRow = await this.getExamRowOrThrow(attemptRow.exam_id);
-
-    if (isAttemptExpired(attemptRow.started_at, examRow.time_limit_minutes)) {
-      await this.finalizeExpiredAttempt(attemptRow, examRow);
-      throw new AppError(
-        'El tiempo límite de este examen ya expiró; el intento se calificó con las respuestas que alcanzaste a registrar',
-        409,
-      );
-    }
-
     const questions = await this.getQuestionsWithOptions(examRow.id);
     return this.gradeAndComplete(attemptRow, examRow, questions, input);
   }
 
+  async getState(attemptId: string, studentId: string): Promise<ExamAttempt> {
+    const { data, error } = await this.supabase.rpc('content_attempt_state', {
+      p_student: studentId,
+      p_attempt: attemptId,
+    });
+    if (error) throw translateContentDatabaseError(error);
+    return toExamAttempt(checkContentResult(data) as unknown as ExamAttemptRow);
+  }
+
   // RF-02, salida "actualización del historial académico del estudiante":
   // sus propios intentos sobre este examen (para saber si ya aprobó, si
-  // agotó su intento único de un definitivo, o para revisar un resultado
+  // agotó los intentos de un definitivo, o para revisar un resultado
   // pasado). Nunca recibe un studentId del cliente - siempre el de su
   // propio JWT (ver examAttempt.controller.ts), así que no hay forma de
   // consultar los intentos de otro estudiante a través de este endpoint.
   async listMyAttempts(examId: string, studentId: string): Promise<ExamAttempt[]> {
+    await new ContentService(this.supabase).examAccess(studentId, examId);
     const { data, error } = await this.supabase
       .from('exam_attempts')
       .select()
@@ -213,7 +222,6 @@ export class ExamAttemptService {
         prompt: meta?.prompt ?? '',
         selectedOptionId: row.selected_option_id,
         textAnswer: row.text_answer,
-        isCorrect: row.is_correct,
       };
 
       const existing = result.get(row.attempt_id);
@@ -240,38 +248,25 @@ export class ExamAttemptService {
     examRow: ExamRow,
   ): Promise<StartAttemptResult> {
     const questions = await this.getQuestionsWithOptions(examRow.id);
+    const exam = toExamForStudent(examRow, questions);
+    if (examRow.shuffle_questions) exam.questions = shuffled(exam.questions, attemptRow.id);
+    exam.questions.forEach((q, index) => {
+      q.orderIndex = index;
+      if (examRow.shuffle_options) q.options = shuffled(q.options, attemptRow.id + ':' + q.id);
+      q.options.forEach((option, optionIndex) => {
+        option.orderIndex = optionIndex;
+      });
+    });
     return {
       attemptId: attemptRow.id,
       status: attemptRow.status,
       startedAt: attemptRow.started_at,
-      exam: toExamForStudent(examRow, questions),
+      deadlineAt: attemptRow.deadline_at,
+      attemptNumber: attemptRow.attempt_number,
+      maxAttemptsAplicado: attemptRow.max_attempts_aplicado,
+      minutosAplicados: attemptRow.minutos_aplicados,
+      exam,
     };
-  }
-
-  // Se llama cuando se descubre un intento en_progreso cuyo tiempo ya
-  // expiro (al iniciar uno nuevo, o al intentar enviar respuestas tarde):
-  // se califica con las respuestas ya guardadas hasta ese momento (las
-  // preguntas sin responder cuentan como incorrectas) y se cierra.
-  private async finalizeExpiredAttempt(
-    attemptRow: ExamAttemptRow,
-    examRow: ExamRow,
-  ): Promise<void> {
-    const questions = await this.getQuestionsWithOptions(examRow.id);
-    const { data: existingAnswers, error } = await this.supabase
-      .from('attempt_answers')
-      .select()
-      .eq('attempt_id', attemptRow.id);
-    if (error) {
-      throw error;
-    }
-
-    const pointsByQuestionId = new Map(questions.map((q) => [q.row.id, Number(q.row.points)]));
-    const totalPoints = questions.reduce((sum, q) => sum + Number(q.row.points), 0);
-    const earnedPoints = existingAnswers
-      .filter((a) => a.is_correct)
-      .reduce((sum, a) => sum + (pointsByQuestionId.get(a.question_id) ?? 0), 0);
-
-    await this.completeAttempt(attemptRow, examRow, totalPoints, earnedPoints);
   }
 
   private async gradeAndComplete(
@@ -281,49 +276,51 @@ export class ExamAttemptService {
     input: SubmitAttemptInput,
   ): Promise<AttemptResult> {
     const answerByQuestionId = new Map(input.answers.map((a) => [a.questionId, a]));
+    if (
+      answerByQuestionId.size !== input.answers.length ||
+      input.answers.some((a) => !questions.some((q) => q.row.id === a.questionId))
+    )
+      throw contentError('INVALID_ANSWER', 400);
 
     const answersToInsert: AttemptAnswerInsert[] = [];
     const details: AttemptAnswerDetail[] = [];
-    let totalPoints = 0;
-    let earnedPoints = 0;
 
     for (const { row: question, options } of questions) {
       const pointsPossible = Number(question.points);
-      totalPoints += pointsPossible;
 
       const submitted = answerByQuestionId.get(question.id);
       const graded = this.gradeQuestion(question, options, submitted);
 
       const pointsEarned = graded.isCorrect ? pointsPossible : 0;
-      earnedPoints += pointsEarned;
 
-      answersToInsert.push({
-        attempt_id: attemptRow.id,
-        question_id: question.id,
-        selected_option_id: graded.selectedOptionId,
-        text_answer: graded.textAnswer,
-        is_correct: graded.isCorrect,
-        similarity_score: graded.similarityScore,
-      });
+      if (graded.selectedOptionId !== null || graded.textAnswer !== null)
+        answersToInsert.push({
+          attempt_id: attemptRow.id,
+          question_id: question.id,
+          selected_option_id: graded.selectedOptionId,
+          text_answer: graded.textAnswer,
+          is_correct: graded.isCorrect,
+          similarity_score: graded.similarityScore,
+        });
 
       details.push({
         questionId: question.id,
         prompt: question.prompt,
-        isCorrect: graded.isCorrect,
         pointsEarned,
         pointsPossible,
         similarityScore: graded.similarityScore,
       });
     }
 
-    if (answersToInsert.length > 0) {
-      const { error } = await this.supabase.from('attempt_answers').insert(answersToInsert);
-      if (error) {
-        throw error;
-      }
-    }
-
-    const completedRow = await this.completeAttempt(attemptRow, examRow, totalPoints, earnedPoints);
+    const { data, error } = await this.supabase.rpc('content_finish_attempt', {
+      p_student: attemptRow.student_id,
+      p_attempt: attemptRow.id,
+      p_answers: answersToInsert as unknown as ContentValue,
+    });
+    if (error) throw translateContentDatabaseError(error);
+    await this.notifyExpiredResults(data);
+    const completedRow = checkContentResult(data) as unknown as ExamAttemptRow;
+    if (examRow.type === 'definitivo') await this.sendResultEmailSafely(completedRow, examRow);
 
     return {
       attemptId: completedRow.id,
@@ -348,6 +345,11 @@ export class ExamAttemptService {
     similarityScore: number | null;
   } {
     if (question.type === 'opcion_multiple') {
+      if (
+        submitted &&
+        (!submitted.selectedOptionId || !options.some((o) => o.id === submitted.selectedOptionId))
+      )
+        throw contentError('INVALID_ANSWER', 400);
       const selectedOption = submitted?.selectedOptionId
         ? options.find((o) => o.id === submitted.selectedOptionId)
         : undefined;
@@ -359,6 +361,7 @@ export class ExamAttemptService {
       };
     }
 
+    if (submitted?.selectedOptionId) throw contentError('INVALID_ANSWER', 400);
     const textAnswer = submitted?.textAnswer ?? '';
     if (!submitted?.textAnswer) {
       return { isCorrect: false, selectedOptionId: null, textAnswer: null, similarityScore: null };
@@ -375,38 +378,6 @@ export class ExamAttemptService {
       textAnswer,
       similarityScore: graded.similarityScore,
     };
-  }
-
-  private async completeAttempt(
-    attemptRow: ExamAttemptRow,
-    examRow: ExamRow,
-    totalPoints: number,
-    earnedPoints: number,
-  ): Promise<ExamAttemptRow> {
-    const scorePercent = totalPoints > 0 ? (earnedPoints / totalPoints) * 100 : 0;
-    const passed = scorePercent >= Number(examRow.passing_score_percent);
-
-    const { data, error } = await this.supabase
-      .from('exam_attempts')
-      .update({
-        status: 'completado',
-        score_percent: scorePercent,
-        passed,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', attemptRow.id)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    if (examRow.type === 'definitivo') {
-      await this.sendResultEmailSafely(data, examRow);
-    }
-
-    return data;
   }
 
   // RF-02: notificacion de resultado, solo para examenes definitivos
@@ -449,12 +420,21 @@ export class ExamAttemptService {
     }
   }
 
-  private async getPublishedExamOrThrow(examId: string): Promise<ExamRow> {
-    const examRow = await this.getExamRowOrThrow(examId);
-    if (!examRow.is_published) {
-      throw new AppError('Examen no encontrado', 404);
+  // Mantener el correo preexistente al cerrar por inicio/envío. Los metadatos
+  // internos enumeran solo filas que esta llamada cerró; nunca llegan a HTTP.
+  private async notifyExpiredResults(value: ContentValue): Promise<void> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const expired = value._expired_attempts;
+    if (!Array.isArray(expired)) return;
+    for (const raw of expired) {
+      const attempt = raw as unknown as ExamAttemptRow;
+      try {
+        const exam = await this.getExamRowOrThrow(attempt.exam_id);
+        if (exam.type === 'definitivo') await this.sendResultEmailSafely(attempt, exam);
+      } catch (error) {
+        logSafeError('exam_result_email_failed', error);
+      }
     }
-    return examRow;
   }
 
   private async getExamRowOrThrow(examId: string): Promise<ExamRow> {
@@ -499,72 +479,5 @@ export class ExamAttemptService {
       row,
       options: optionRows.filter((o) => o.question_id === row.id),
     }));
-  }
-
-  private async getInProgressAttempt(
-    examId: string,
-    studentId: string,
-  ): Promise<ExamAttemptRow | null> {
-    const { data, error } = await this.supabase
-      .from('exam_attempts')
-      .select()
-      .eq('exam_id', examId)
-      .eq('student_id', studentId)
-      .eq('status', 'en_progreso')
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    return data;
-  }
-
-  private async hasAnyAttempt(examId: string, studentId: string): Promise<boolean> {
-    const { count, error } = await this.supabase
-      .from('exam_attempts')
-      .select('id', { count: 'exact', head: true })
-      .eq('exam_id', examId)
-      .eq('student_id', studentId);
-    if (error) {
-      throw error;
-    }
-    return (count ?? 0) > 0;
-  }
-
-  private async insertAttempt(examId: string, studentId: string): Promise<ExamAttemptRow> {
-    const { data, error } = await this.supabase
-      .from('exam_attempts')
-      .insert({ exam_id: examId, student_id: studentId })
-      .select()
-      .single();
-    if (error) {
-      throw error;
-    }
-    return data;
-  }
-
-  private async getOwnAttemptOrThrow(
-    attemptId: string,
-    studentId: string,
-  ): Promise<ExamAttemptRow> {
-    const { data, error } = await this.supabase
-      .from('exam_attempts')
-      .select()
-      .eq('id', attemptId)
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    if (data?.student_id !== studentId) {
-      throw new AppError('Intento no encontrado', 404);
-    }
-    return data;
-  }
-
-  // Verifica todos los cursos activos del propio sujeto, sin ampliar acceso
-  // a otros estudiantes ni a matrículas pendientes o terminales.
-  private async assertStudentEnrolledInCourse(studentId: string, courseId: string): Promise<void> {
-    if (!(await activeCourseIds(this.supabase, studentId)).includes(courseId)) {
-      throw new AppError('No tienes una inscripción activa en el curso de este examen', 403);
-    }
   }
 }

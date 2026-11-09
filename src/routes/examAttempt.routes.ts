@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body, param } from 'express-validator';
 
-import { submitAttempt } from '../controllers/examAttempt.controller';
+import { submitAttempt, getAttemptState } from '../controllers/examAttempt.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
@@ -10,6 +10,13 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const attemptRouter = Router();
 
 attemptRouter.use(asyncHandler(authenticate));
+attemptRouter.get(
+  '/:id',
+  requireRole('estudiante'),
+  param('id').isUUID(),
+  validate,
+  asyncHandler(getAttemptState),
+);
 
 // Cada respuesta trae exactamente uno de selectedOptionId/textAnswer; una
 // pregunta que no aparece en el arreglo se califica como no respondida

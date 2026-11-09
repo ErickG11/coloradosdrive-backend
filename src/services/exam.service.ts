@@ -12,7 +12,8 @@ import type {
   UpdateQuestionInput,
 } from '../models/exam.model';
 import { AppError } from '../utils/AppError';
-import { activeCourseIds } from './studentEnrollmentScope';
+import { ContentService, translateContentDatabaseError } from './content.service';
+import type { ContentData } from '../models/content.model';
 
 type ExamRow = Database['public']['Tables']['exams']['Row'];
 type QuestionRow = Database['public']['Tables']['questions']['Row'];
@@ -23,6 +24,10 @@ const POSTGRES_FOREIGN_KEY_VIOLATION = '23503';
 
 function toExam(row: ExamRow): Exam {
   return {
+    maxAttemptsDefault: row.max_attempts_default,
+    shuffleQuestions: row.shuffle_questions,
+    shuffleOptions: row.shuffle_options,
+    description: row.description,
     id: row.id,
     courseId: row.course_id,
     title: row.title,
@@ -103,7 +108,7 @@ export class ExamService {
 
     const { data, error } = await query;
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
 
     return data.map(toExam);
@@ -112,20 +117,27 @@ export class ExamService {
   // RF-02/RBAC: el estudiante solo ve examenes publicados del curso de su
   // inscripcion activa (nunca los de otros cursos, nunca los no publicados).
   async listExamsForStudent(studentId: string): Promise<Exam[]> {
-    const courseIds = await activeCourseIds(this.supabase, studentId);
-    if (!courseIds.length) {
-      return [];
-    }
+    const catalog = (await new ContentService(this.supabase).student(
+      studentId,
+      'catalog',
+    )) as ContentData;
+    const subjects = catalog.materias as ContentData[];
+    const examIds = subjects.flatMap((subject) =>
+      (subject.items as ContentData[])
+        .filter((item) => item.kind === 'examen')
+        .flatMap((item) => (typeof item.exam_id === 'string' ? [item.exam_id] : [])),
+    );
+    if (!examIds.length) return [];
 
     const { data, error } = await this.supabase
       .from('exams')
       .select()
-      .in('course_id', courseIds)
+      .in('id', examIds)
       .eq('is_published', true)
       .order('created_at', { ascending: false });
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
 
     return data.map(toExam);
@@ -156,6 +168,12 @@ export class ExamService {
 
   async updateExam(id: string, input: UpdateExamInput): Promise<Exam> {
     const updatePayload: Database['public']['Tables']['exams']['Update'] = {};
+    if (input.maxAttemptsDefault !== undefined)
+      updatePayload.max_attempts_default = input.maxAttemptsDefault;
+    if (input.shuffleQuestions !== undefined)
+      updatePayload.shuffle_questions = input.shuffleQuestions;
+    if (input.shuffleOptions !== undefined) updatePayload.shuffle_options = input.shuffleOptions;
+    if (input.description !== undefined) updatePayload.description = input.description;
     if (input.title !== undefined) updatePayload.title = input.title;
     if (input.timeLimitMinutes !== undefined)
       updatePayload.time_limit_minutes = input.timeLimitMinutes;
@@ -171,9 +189,7 @@ export class ExamService {
       .select()
       .maybeSingle();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw translateContentDatabaseError(error);
     if (!data) {
       throw new AppError('Examen no encontrado', 404);
     }
@@ -190,7 +206,7 @@ export class ExamService {
     if (error) {
       throw this.translateForeignKeyViolation(
         error,
-        'No se puede eliminar el examen: ya tiene intentos registrados',
+        'No se puede eliminar el examen: tiene elementos vinculados o intentos; despublícalo',
       );
     }
     if (!count) {
@@ -226,7 +242,7 @@ export class ExamService {
         .select()
         .single();
       if (error) {
-        throw error;
+        throw translateContentDatabaseError(error);
       }
       updatedRow = data;
     }
@@ -234,6 +250,19 @@ export class ExamService {
     let optionRows = await this.getOptionsForQuestions([questionId]);
     if (input.options !== undefined) {
       optionRows = await this.replaceQuestionOptions(questionId, input.options);
+    }
+    if (input.optionTexts !== undefined) {
+      for (const option of input.optionTexts) {
+        if (!optionRows.some((row) => row.id === option.id))
+          throw new AppError('Opción no encontrada', 404);
+        const result = await this.supabase
+          .from('question_options')
+          .update({ option_text: option.optionText })
+          .eq('id', option.id)
+          .eq('question_id', questionId);
+        if (result.error) throw translateContentDatabaseError(result.error);
+      }
+      optionRows = await this.getOptionsForQuestions([questionId]);
     }
 
     return toQuestion(updatedRow, optionRows);
@@ -264,7 +293,7 @@ export class ExamService {
       .maybeSingle();
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
     if (!data) {
       throw new AppError('El curso indicado no existe', 404);
@@ -275,6 +304,15 @@ export class ExamService {
     const { data, error } = await this.supabase
       .from('exams')
       .insert({
+        max_attempts_default:
+          input.maxAttemptsDefault === undefined
+            ? input.type === 'definitivo'
+              ? 1
+              : null
+            : input.maxAttemptsDefault,
+        shuffle_questions: input.shuffleQuestions ?? false,
+        shuffle_options: input.shuffleOptions ?? false,
+        description: input.description ?? null,
         course_id: input.courseId,
         title: input.title,
         type: input.type,
@@ -285,7 +323,7 @@ export class ExamService {
       .single();
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
     return data;
   }
@@ -310,7 +348,7 @@ export class ExamService {
       .select();
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
 
     const rowByOrderIndex = new Map(questionRows.map((row) => [row.order_index, row]));
@@ -382,7 +420,7 @@ export class ExamService {
       .select();
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
     return data;
   }
@@ -398,7 +436,7 @@ export class ExamService {
       .in('question_id', questionIds);
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
     return data;
   }
@@ -407,7 +445,7 @@ export class ExamService {
     const { data, error } = await this.supabase.from('exams').select().eq('id', id).maybeSingle();
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
     if (!data) {
       throw new AppError('Examen no encontrado', 404);
@@ -423,7 +461,7 @@ export class ExamService {
       .maybeSingle();
 
     if (error) {
-      throw error;
+      throw translateContentDatabaseError(error);
     }
     if (!data) {
       throw new AppError('Pregunta no encontrada', 404);
@@ -435,6 +473,6 @@ export class ExamService {
     if (error.code === POSTGRES_FOREIGN_KEY_VIOLATION) {
       return new AppError(message, 409);
     }
-    return error;
+    return translateContentDatabaseError(error);
   }
 }
