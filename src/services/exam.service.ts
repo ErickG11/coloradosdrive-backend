@@ -117,10 +117,18 @@ export class ExamService {
   // RF-02/RBAC: el estudiante solo ve examenes publicados del curso de su
   // inscripcion activa (nunca los de otros cursos, nunca los no publicados).
   async listExamsForStudent(studentId: string): Promise<Exam[]> {
-    const catalog = (await new ContentService(this.supabase).student(
-      studentId,
-      'catalog',
-    )) as ContentData;
+    let catalog: ContentData;
+    try {
+      catalog = (await new ContentService(this.supabase).student(
+        studentId,
+        'catalog',
+      )) as ContentData;
+    } catch (error) {
+      // Sin matrícula activa el catálogo responde ITEM_NOT_FOUND: para este listado
+      // legado significa "no hay exámenes". Cualquier otro error se propaga tal cual.
+      if (error instanceof AppError && error.code === 'ITEM_NOT_FOUND') return [];
+      throw error;
+    }
     const subjects = catalog.materias as ContentData[];
     const examIds = subjects.flatMap((subject) =>
       (subject.items as ContentData[])
