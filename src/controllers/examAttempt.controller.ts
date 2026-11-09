@@ -42,3 +42,7 @@ export async function submitAttempt(req: Request, res: Response<AttemptResult>):
   );
   res.status(200).json(result);
 }
+
+export async function getAttemptState(req: Request, res: Response<ExamAttempt>): Promise<void> {
+  res.json(await examAttemptService.getState(req.params.id, requireStudentId(req)));
+}

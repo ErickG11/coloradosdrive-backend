@@ -9,6 +9,7 @@
 // para poder embeber instructor/estudiante tipado en el listado, en vez
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
+import type { ContentData, ContentValue, ContentTable, CourseSubjectRow, CourseMaterialRow, SubjectItemRow, ItemAccessRuleRow, MaterialProgressRow, ContentAccessAuditRow } from '../models/content.model';
 import type { StudentPayment, PaymentRow } from '../models/studentPayment.model';
 import type { StudentScheduleReservation } from '../models/studentSchedule.model';
 import type { StudentListResult } from '../models/studentAdmin.model';
@@ -73,6 +74,12 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      content_admin: { Args: { p_actor: string; p_action: string; p_data: ContentData }; Returns: ContentValue };
+      content_student: { Args: { p_student: string; p_action: string; p_data: ContentData }; Returns: ContentValue };
+      content_start_attempt: { Args: { p_student: string; p_exam: string }; Returns: ContentValue };
+      content_attempt_state: { Args: { p_student: string; p_attempt: string }; Returns: ContentValue };
+      content_exam_access: { Args: { p_student: string; p_exam: string }; Returns: ContentValue };
+      content_finish_attempt: { Args: { p_student: string; p_attempt: string; p_answers: ContentValue }; Returns: ContentValue };
       begin_student_payment: {
         Args: { p_student: string; p_reserva: string; p_proveedor: string; p_attempt: string;
           p_recargo: number; p_gracia: number; p_actor?: string; p_comprobante?: string };
@@ -418,6 +425,12 @@ export interface Database {
       };
     };
     Tables: {
+      course_subjects: ContentTable<CourseSubjectRow, 'course_id' | 'title'>;
+      course_materials: ContentTable<CourseMaterialRow, 'title' | 'kind'>;
+      subject_items: ContentTable<SubjectItemRow, 'subject_id' | 'kind'>;
+      item_access_rules: ContentTable<ItemAccessRuleRow, 'item_id' | 'target_type'>;
+      material_progress: ContentTable<MaterialProgressRow, 'student_id' | 'material_id'>;
+      content_access_audit: ContentTable<ContentAccessAuditRow, 'actor_id' | 'action' | 'item_id' | 'target_type' | 'target_id' | 'snapshot'>;
       payments: { Row: PaymentRow; Insert: never; Update: never; Relationships: [] };
       payment_mail_outbox: {
         Row: { payment_id: string; estado: 'pendiente' | 'enviando' | 'enviado' | 'fallido';
@@ -765,6 +778,10 @@ export interface Database {
       };
       exams: {
         Row: {
+          max_attempts_default: number | null;
+          shuffle_questions: boolean;
+          shuffle_options: boolean;
+          description: string | null;
           id: string;
           course_id: string;
           title: string;
@@ -776,6 +793,10 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
+          max_attempts_default?: number | null;
+          shuffle_questions?: boolean;
+          shuffle_options?: boolean;
+          description?: string | null;
           id?: string;
           course_id: string;
           title: string;
@@ -785,6 +806,10 @@ export interface Database {
           is_published?: boolean;
         };
         Update: Partial<{
+          max_attempts_default: number | null;
+          shuffle_questions: boolean;
+          shuffle_options: boolean;
+          description: string | null;
           title: string;
           time_limit_minutes: number;
           passing_score_percent: number;
@@ -848,6 +873,10 @@ export interface Database {
       };
       exam_attempts: {
         Row: {
+          attempt_number: number;
+          deadline_at: string;
+          max_attempts_aplicado: number | null;
+          minutos_aplicados: number;
           id: string;
           exam_id: string;
           student_id: string;
@@ -858,6 +887,10 @@ export interface Database {
           completed_at: string | null;
         };
         Insert: {
+          attempt_number: number;
+          deadline_at: string;
+          minutos_aplicados: number;
+          max_attempts_aplicado?: number | null;
           id?: string;
           exam_id: string;
           student_id: string;

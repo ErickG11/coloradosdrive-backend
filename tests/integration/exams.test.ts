@@ -1,7 +1,7 @@
 import request from 'supertest';
 
 jest.mock('../../src/config/supabase', () => ({
-  supabaseAdmin: { from: jest.fn() },
+  supabaseAdmin: { from: jest.fn(), rpc: jest.fn() },
   supabaseAnon: {},
 }));
 
@@ -14,10 +14,11 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
-import { sinInscripcionPendiente } from '../helpers/authMocks';
+import { alumnoActivo, sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
 
 const mockedFrom = supabaseAdmin.from as jest.Mock;
+const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedVerifySupabaseJwt = verifySupabaseJwt as unknown as jest.Mock;
 
 const courseId = '11111111-1111-4111-8111-111111111111';
@@ -230,11 +231,14 @@ describe('exams endpoints', () => {
       expect(mockedFrom).toHaveBeenCalledTimes(1);
     });
 
+    const catalogWithExam = {
+      course_id: courseId,
+      materias: [{ items: [{ kind: 'examen', exam_id: examId }, { kind: 'material' }] }],
+    };
+
     it('estudiante sin inscripción activa: responde una lista vacía', async () => {
-      mockedFrom
-        .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
-        .mockReturnValueOnce(sinInscripcionPendiente())
-        .mockReturnValueOnce(createChain({ data: [], error: null })); // sin enrollment activo
+      mockedFrom.mockReturnValueOnce(alumnoActivo()).mockReturnValueOnce(sinInscripcionPendiente());
+      mockedRpc.mockResolvedValueOnce({ data: { error: 'ITEM_NOT_FOUND' }, error: null });
 
       const res = await request(app)
         .get('/exams')
@@ -245,14 +249,12 @@ describe('exams endpoints', () => {
     });
 
     it('estudiante con inscripción activa: solo ve examenes publicados de su curso', async () => {
+      const examsChain = createChain({ data: [{ ...examRow, is_published: true }], error: null });
       mockedFrom
-        .mockReturnValueOnce(createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }))
+        .mockReturnValueOnce(alumnoActivo())
         .mockReturnValueOnce(sinInscripcionPendiente())
-        .mockReturnValueOnce(createChain({ data: [{ cohort_id: 'cohort-1' }], error: null }))
-        .mockReturnValueOnce(createChain({ data: [{ course_id: courseId }], error: null }))
-        .mockReturnValueOnce(
-          createChain({ data: [{ ...examRow, is_published: true }], error: null }),
-        );
+        .mockReturnValueOnce(examsChain);
+      mockedRpc.mockResolvedValueOnce({ data: catalogWithExam, error: null });
 
       const res = await request(app)
         .get('/exams')
@@ -260,12 +262,68 @@ describe('exams endpoints', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
-      expect(mockedFrom).toHaveBeenCalledTimes(5);
+      // El curso lo determina la función del catálogo con la matrícula activa del propio alumno.
+      expect(mockedRpc).toHaveBeenCalledWith('content_student', {
+        p_student: 'test-user-id',
+        p_action: 'catalog',
+        p_data: {},
+      });
+      // Solo exámenes de ese catálogo y publicados.
+      expect(examsChain.in).toHaveBeenCalledWith('id', [examId]);
+      expect(examsChain.eq).toHaveBeenCalledWith('is_published', true);
+      expect(mockedFrom).toHaveBeenCalledTimes(3);
+    });
+
+    it('un error de base distinto de ITEM_NOT_FOUND en el catálogo se propaga (no se oculta como lista vacía)', async () => {
+      mockedFrom.mockReturnValueOnce(alumnoActivo()).mockReturnValueOnce(sinInscripcionPendiente());
+      mockedRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'CF409', message: 'CONTENT_DUPLICATE' },
+      });
+
+      const res = await request(app)
+        .get('/exams')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('CONTENT_DUPLICATE');
+    });
+
+    it('un fallo inesperado del catálogo responde 503 y no una lista vacía', async () => {
+      mockedFrom.mockReturnValueOnce(alumnoActivo()).mockReturnValueOnce(sinInscripcionPendiente());
+      mockedRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: '08006', message: 'connection failure' },
+      });
+
+      const res = await request(app)
+        .get('/exams')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe('CONTENT_UNAVAILABLE');
+    });
+
+    it('estudiante con catálogo sin exámenes: lista vacía sin consultar la tabla de exámenes', async () => {
+      mockedFrom.mockReturnValueOnce(alumnoActivo()).mockReturnValueOnce(sinInscripcionPendiente());
+      mockedRpc.mockResolvedValueOnce({
+        data: { course_id: courseId, materias: [{ items: [{ kind: 'material' }] }] },
+        error: null,
+      });
+
+      const res = await request(app)
+        .get('/exams')
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual([]);
+      expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('DELETE /exams/:id (admin)', () => {
     it('responde 409 si el examen ya tiene intentos registrados', async () => {
+      // Ruta de la restricción de clave foránea (23503): mensaje nuevo, sin código de contenido.
       mockedFrom.mockReturnValueOnce(
         createChain({ data: null, error: { code: '23503', message: 'foreign key violation' } }),
       );
@@ -276,8 +334,27 @@ describe('exams endpoints', () => {
 
       expect(res.status).toBe(409);
       expect(res.body.message).toBe(
-        'No se puede eliminar el examen: ya tiene intentos registrados',
+        'No se puede eliminar el examen: tiene elementos vinculados o intentos; despublícalo',
       );
+      expect(res.body.code).toBeUndefined();
+    });
+
+    it('responde 409 EXAM_HAS_ATTEMPTS_UNPUBLISH cuando el trigger de la base bloquea borrar un examen con intentos', async () => {
+      // Ruta real con intentos desde la migración 065: el trigger lanza CF409.
+      mockedFrom.mockReturnValueOnce(
+        createChain({
+          data: null,
+          error: { code: 'CF409', message: 'EXAM_HAS_ATTEMPTS_UNPUBLISH' },
+        }),
+      );
+
+      const res = await request(app)
+        .delete(`/exams/${examId}`)
+        .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'admin')}`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('EXAM_HAS_ATTEMPTS_UNPUBLISH');
+      expect(res.body.message).toBe('El examen tiene intentos: despublícalo');
     });
 
     it('elimina el examen y responde 204', async () => {

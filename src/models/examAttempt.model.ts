@@ -5,7 +5,7 @@ export type AttemptStatus = (typeof ATTEMPT_STATUSES)[number];
 
 // RF-02, salida "detalle de respuestas" del historial (GET
 // /exams/:id/attempts/me): la pregunta, la respuesta propia del
-// estudiante, y si acertó. Nunca la respuesta correcta ni la opción/
+// estudiante. Nunca indicadores de corrección, respuesta correcta ni la opción/
 // texto correcto - mismo criterio que AttemptAnswerDetail (la respuesta
 // inmediata de submit), por consistencia y para no exponer el banco de
 // respuestas de examenes reutilizables (ver docs/adr/006).
@@ -14,10 +14,13 @@ export interface AttemptOwnAnswer {
   prompt: string;
   selectedOptionId: string | null;
   textAnswer: string | null;
-  isCorrect: boolean;
 }
 
 export interface ExamAttempt {
+  attemptNumber: number;
+  deadlineAt: string;
+  maxAttemptsAplicado: number | null;
+  minutosAplicados: number;
   id: string;
   examId: string;
   studentId: string;
@@ -56,7 +59,6 @@ export interface SubmitAttemptInput {
 export interface AttemptAnswerDetail {
   questionId: string;
   prompt: string;
-  isCorrect: boolean;
   pointsEarned: number;
   pointsPossible: number;
   similarityScore: number | null;
@@ -78,6 +80,10 @@ export interface AttemptResult {
 // del intento para que el frontend pueda mostrar un cronometro - el
 // backend sigue siendo la autoridad real del tiempo (ver docs/adr/005).
 export interface StartAttemptResult {
+  deadlineAt: string;
+  attemptNumber: number;
+  maxAttemptsAplicado: number | null;
+  minutosAplicados: number;
   attemptId: string;
   status: AttemptStatus;
   startedAt: string;

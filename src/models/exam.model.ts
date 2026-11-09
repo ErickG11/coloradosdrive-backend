@@ -34,6 +34,10 @@ export type QuestionForStudent = Omit<Question, 'correctAnswerText' | 'synonyms'
 };
 
 export interface Exam {
+  maxAttemptsDefault: number | null;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  description: string | null;
   id: string;
   courseId: string;
   title: string;
@@ -72,6 +76,10 @@ export interface CreateQuestionInput {
 // RF-02: el administrador crea el examen con su banco de preguntas en una
 // sola operación (mismo patrón que EnrollmentService en Sprint 2).
 export interface CreateExamInput {
+  maxAttemptsDefault?: number | null;
+  shuffleQuestions?: boolean;
+  shuffleOptions?: boolean;
+  description?: string | null;
   courseId: string;
   title: string;
   type: ExamType;
@@ -81,6 +89,10 @@ export interface CreateExamInput {
 }
 
 export type UpdateExamInput = Partial<{
+  maxAttemptsDefault: number | null;
+  shuffleQuestions: boolean;
+  shuffleOptions: boolean;
+  description: string | null;
   title: string;
   timeLimitMinutes: number;
   passingScorePercent: number;
@@ -92,4 +104,5 @@ export type UpdateExamInput = Partial<{
 // estado inconsistente con questions_open_text_has_answer (migracion 004).
 export type UpdateQuestionInput = Partial<Omit<CreateQuestionInput, 'options' | 'type'>> & {
   options?: CreateQuestionOptionInput[];
+  optionTexts?: { id: string; optionText: string }[];
 };
