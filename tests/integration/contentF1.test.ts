@@ -708,3 +708,27 @@ test('F1.1 limpieza por prefijo revierte por defecto y conserva exámenes y cont
     await cleanupDb.close();
   }
 }, 30000);
+test('pregunta sin responder cuenta como incorrecta en el puntaje; examen despublicado no inicia', async () => {
+  await rule({});
+  // Estructura editable solo mientras el examen está despublicado y sin intentos.
+  await db.query('update public.exams set is_published=false where id=$1', [id(100)]);
+  await db.query(
+    "insert into public.questions(id,exam_id,type,prompt,order_index,points,correct_answer_text) values($1,$2,'texto_abierto','Pregunta 2',1,1,'otra')",
+    [id(102), id(100)],
+  );
+  await db.query('update public.exams set is_published=true where id=$1', [id(100)]);
+  const a = await start();
+  // El backend solo envía las respuestas dadas: la pregunta sin responder no aporta puntos.
+  const result = await rpc('public.content_finish_attempt', [
+    id(2),
+    a.id,
+    [{ question_id: id(101), text_answer: 'respuesta', is_correct: true, similarity_score: 1 }],
+  ]);
+  expect(Number(result.score_percent)).toBe(50);
+  expect(result.passed).toBe(false); // 50 < 70
+  expect(result.status).toBe('completado');
+  // Despublicar con intentos es válido y retira el examen del alumno: no se puede iniciar otro.
+  await db.query('update public.exams set is_published=false where id=$1', [id(100)]);
+  await rule({ target_type: 'estudiante', target_id: id(2), max_attempts: 5 });
+  expect((await start()).error).toBe('EXAM_NOT_PUBLISHED');
+});
