@@ -117,6 +117,10 @@ function validateQuestionsArray(value: unknown): boolean {
 }
 
 const createExamValidators = [
+  body('maxAttemptsDefault').optional({ nullable: true }).isInt({ min: 1, max: 20 }).toInt(),
+  body('shuffleQuestions').optional().isBoolean().toBoolean(),
+  body('shuffleOptions').optional().isBoolean().toBoolean(),
+  body('description').optional({ nullable: true }).isString().isLength({ max: 20000 }),
   body('courseId').isUUID().withMessage('courseId debe ser un UUID válido'),
   body('title').isString().trim().notEmpty().withMessage('title es obligatorio'),
   body('type').isIn(['practica', 'definitivo']).withMessage('type debe ser practica o definitivo'),
@@ -136,6 +140,10 @@ const listExamsValidators = [
 const idParamValidator = param('id').isUUID().withMessage('id debe ser un UUID válido');
 
 const updateExamValidators = [
+  body('maxAttemptsDefault').optional({ nullable: true }).isInt({ min: 1, max: 20 }).toInt(),
+  body('shuffleQuestions').optional().isBoolean().toBoolean(),
+  body('shuffleOptions').optional().isBoolean().toBoolean(),
+  body('description').optional({ nullable: true }).isString().isLength({ max: 20000 }),
   idParamValidator,
   body('title').optional().isString().trim().notEmpty().withMessage('title no puede estar vacío'),
   body('timeLimitMinutes')
@@ -152,6 +160,9 @@ const updateExamValidators = [
 const addQuestionValidators = [idParamValidator, body().custom(validateQuestionShape)];
 
 const updateQuestionValidators = [
+  body('optionTexts').optional().isArray({ min: 1, max: 100 }),
+  body('optionTexts.*.id').isUUID(),
+  body('optionTexts.*.optionText').isString().trim().notEmpty(),
   idParamValidator,
   body('prompt').optional().isString().trim().notEmpty().withMessage('prompt no puede estar vacío'),
   body('orderIndex').optional().isInt().withMessage('orderIndex debe ser un entero'),
