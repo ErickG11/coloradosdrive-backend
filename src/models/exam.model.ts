@@ -17,7 +17,13 @@ export interface QuestionOption {
 // ve la respuesta correcta antes de responder).
 export type QuestionOptionForStudent = Omit<QuestionOption, 'isCorrect'>;
 
+export interface QuestionImage {
+  url: string;
+  alt: string | null;
+}
+
 export interface Question {
+  image: QuestionImage | null;
   id: string;
   examId: string;
   type: QuestionType;

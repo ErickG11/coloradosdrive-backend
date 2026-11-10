@@ -24,6 +24,7 @@ function requireStudentId(req: Request): string {
 export async function startAttempt(req: Request, res: Response<StartAttemptResult>): Promise<void> {
   const studentId = requireStudentId(req);
   const result = await examAttemptService.startAttempt(req.params.id, studentId);
+  res.set('Cache-Control', 'no-store');
   res.status(201).json(result);
 }
 
@@ -45,4 +46,9 @@ export async function submitAttempt(req: Request, res: Response<AttemptResult>):
 
 export async function getAttemptState(req: Request, res: Response<ExamAttempt>): Promise<void> {
   res.json(await examAttemptService.getState(req.params.id, requireStudentId(req)));
+}
+
+export async function getAttemptImages(req: Request, res: Response): Promise<void> {
+  res.set('Cache-Control', 'no-store');
+  res.json(await examAttemptService.getImages(req.params.id, requireStudentId(req)));
 }

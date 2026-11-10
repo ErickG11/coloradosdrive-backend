@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { body, param } from 'express-validator';
 
-import { submitAttempt, getAttemptState } from '../controllers/examAttempt.controller';
+import {
+  submitAttempt,
+  getAttemptState,
+  getAttemptImages,
+} from '../controllers/examAttempt.controller';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
 import { validate } from '../middlewares/validate';
@@ -10,6 +14,13 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const attemptRouter = Router();
 
 attemptRouter.use(asyncHandler(authenticate));
+attemptRouter.get(
+  '/:id/images',
+  requireRole('estudiante'),
+  param('id').isUUID(),
+  validate,
+  asyncHandler(getAttemptImages),
+);
 attemptRouter.get(
   '/:id',
   requireRole('estudiante'),
