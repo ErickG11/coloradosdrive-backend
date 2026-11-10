@@ -164,6 +164,19 @@ beforeAll(async () => {
   } finally {
     await rollbackDb.close();
   }
+  await db.exec(enrollmentSql('docs/operations/examenes-067-preflight.sql'));
+  await db.exec(enrollmentSql('migrations/067_examenes_imagenes_preguntas.sql'));
+  await db.exec(enrollmentSql('docs/operations/examenes-067-verificacion.sql'));
+  // Repetir la migracion es seguro; el preflight de instalacion detecta que ya existe.
+  await db.exec(enrollmentSql('migrations/067_examenes_imagenes_preguntas.sql'));
+  const rollbackImages = new EmbeddedPostgres({ btreeGist: true, snapshot: await db.snapshot() });
+  try {
+    await rollbackImages.exec(enrollmentSql('docs/operations/examenes-067-rollback.sql'));
+    await rollbackImages.exec(enrollmentSql('docs/operations/examenes-067-preflight.sql'));
+    await rollbackImages.exec(enrollmentSql('docs/operations/examenes-066b-verificacion.sql'));
+  } finally {
+    await rollbackImages.close();
+  }
   for (const [n, role] of [
     [1, 'admin'],
     [2, 'estudiante'],
@@ -731,4 +744,149 @@ test('pregunta sin responder cuenta como incorrecta en el puntaje; examen despub
   await db.query('update public.exams set is_published=false where id=$1', [id(100)]);
   await rule({ target_type: 'estudiante', target_id: id(2), max_attempts: 5 });
   expect((await start()).error).toBe('EXAM_NOT_PUBLISHED');
+});
+
+test('067: despues del intento imagen congelada (agregar/cambiar/quitar), prompt y alt editables', async () => {
+  const imagePath = `exams/${id(100)}/${id(801)}.png`;
+  await db.query('update public.exams set is_published=false where id=$1', [id(100)]);
+  await rpc('public.exam_question_image', [
+    id(1),
+    id(100),
+    id(101),
+    'set',
+    { expected_path: null, path: imagePath, alt: 'Señal' },
+  ]);
+  await db.query('update public.exams set is_published=true where id=$1', [id(100)]);
+  await rule({});
+  await start();
+  await db.query('update public.exams set is_published=false where id=$1', [id(100)]);
+  await rpc('public.exam_question_image', [
+    id(1),
+    id(100),
+    id(101),
+    'alt',
+    { alt: 'Texto corregido' },
+  ]);
+  await db.query('update public.questions set prompt=$1 where id=$2', [
+    'Enunciado corregido',
+    id(101),
+  ]);
+  expect(
+    await one('select image_path,image_alt,prompt from public.questions where id=$1', [id(101)]),
+  ).toEqual({ image_path: imagePath, image_alt: 'Texto corregido', prompt: 'Enunciado corregido' });
+  for (const value of [null, `exams/${id(100)}/${id(802)}.webp`]) {
+    await db.exec('savepoint image_guard');
+    await expect(
+      db.query('update public.questions set image_path=$1 where id=$2', [value, id(101)]),
+    ).rejects.toThrow('EXAM_STRUCTURE_FROZEN');
+    await db.exec('rollback to image_guard');
+  }
+  await db.exec('savepoint image_guard');
+  await expect(
+    rpc('public.exam_question_image', [
+      id(1),
+      id(100),
+      id(101),
+      'clear',
+      { expected_path: imagePath },
+    ]),
+  ).rejects.toThrow('EXAM_STRUCTURE_FROZEN');
+  await db.exec('rollback to image_guard');
+  // Un intento anterior tambien impide agregar una imagen donde no habia ninguna.
+  await db.query(
+    "insert into public.exams(id,course_id,title,type,time_limit_minutes,passing_score_percent) values($1,$2,'Sin imagen','practica',30,70)",
+    [id(810), id(10)],
+  );
+  await db.query(
+    "insert into public.questions(id,exam_id,type,prompt,order_index,points,correct_answer_text) values($1,$2,'texto_abierto','Sin imagen',0,1,'respuesta')",
+    [id(811), id(810)],
+  );
+  await db.query(
+    "insert into public.exam_attempts(exam_id,student_id,attempt_number,deadline_at,minutos_aplicados) values($1,$2,1,now()+interval '30 minutes',30)",
+    [id(810), id(2)],
+  );
+  await db.exec('savepoint image_add');
+  await expect(
+    db.query('update public.questions set image_path=$1 where id=$2', [
+      `exams/${id(810)}/${id(812)}.jpg`,
+      id(811),
+    ]),
+  ).rejects.toThrow('EXAM_STRUCTURE_FROZEN');
+  await db.exec('rollback to image_add');
+});
+
+test('067: cuota diaria compartida, CAS, ruta/alt y borrado atomico que captura imagenes', async () => {
+  await db.query('update public.exams set is_published=false where id=$1', [id(100)]);
+  const path = `exams/${id(100)}/${id(820)}.webp`;
+  await rpc('public.exam_question_image', [
+    id(1),
+    id(100),
+    id(101),
+    'set',
+    { expected_path: null, path, alt: 'a'.repeat(300) },
+  ]);
+  for (const [patch, error] of [
+    ["image_alt=repeat('a',301)", 'questions_image_alt_length'],
+    ["image_path='exams/otro/archivo.svg'", 'questions_image_path_format'],
+  ]) {
+    await db.exec('savepoint image_constraint');
+    await expect(
+      db.query(`update public.questions set ${patch} where id=$1`, [id(101)]),
+    ).rejects.toThrow(error);
+    await db.exec('rollback to image_constraint');
+  }
+  await db.exec('savepoint image_cas');
+  await expect(
+    rpc('public.exam_question_image', [
+      id(1),
+      id(100),
+      id(101),
+      'set',
+      { expected_path: null, path },
+    ]),
+  ).rejects.toThrow('IMAGE_CONFLICT');
+  await db.exec('rollback to image_cas');
+  for (let n = 1; n <= 50; n++)
+    expect((await rpc('public.content_admin', [id(1), 'upload.reserve', {}])).used).toBe(n);
+  await db.exec('savepoint image_quota');
+  await expect(rpc('public.content_admin', [id(1), 'upload.reserve', {}])).rejects.toThrow(
+    'UPLOAD_DAILY_LIMIT',
+  );
+  await db.exec('rollback to image_quota');
+  await db.query('delete from public.subject_items where exam_id=$1', [id(100)]);
+  const deleted = await rpc('public.exam_question_image', [
+    id(1),
+    id(100),
+    null,
+    'delete_exam',
+    {},
+  ]);
+  expect(deleted.paths).toEqual([path]);
+  expect(
+    (await one('select count(*)::int n from public.questions where exam_id=$1', [id(100)])).n,
+  ).toBe(0);
+});
+
+test('067: politica restrictiva impide leer el bucket aun con una politica permisiva ajena', async () => {
+  await db.exec(
+    'grant usage on schema storage to anon; grant select on storage.objects to anon; create policy fixture_images_permissive on storage.objects for select to anon using(true)',
+  );
+  await db.query(
+    "insert into storage.objects(bucket_id,name) values('exam-question-images','fixture'),('otro-bucket','fixture')",
+  );
+  await db.exec('savepoint image_read; set local role anon');
+  try {
+    expect(
+      (
+        await one(
+          "select count(*)::int n from storage.objects where bucket_id='exam-question-images'",
+        )
+      ).n,
+    ).toBe(0);
+    expect(
+      (await one("select count(*)::int n from storage.objects where bucket_id='otro-bucket'")).n,
+    ).toBe(1);
+  } finally {
+    await db.exec('rollback to image_read');
+  }
 });
