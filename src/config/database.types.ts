@@ -74,6 +74,7 @@ export interface Database {
   public: {
     Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
     Functions: {
+      exam_question_image: { Args: { p_actor: string; p_exam: string; p_question: string | null; p_action: string; p_data: ContentData }; Returns: ContentValue };
       content_admin: { Args: { p_actor: string; p_action: string; p_data: ContentData }; Returns: ContentValue };
       content_student: { Args: { p_student: string; p_action: string; p_data: ContentData }; Returns: ContentValue };
       content_start_attempt: { Args: { p_student: string; p_exam: string }; Returns: ContentValue };
@@ -819,6 +820,8 @@ export interface Database {
       };
       questions: {
         Row: {
+          image_path: string | null;
+          image_alt: string | null;
           id: string;
           exam_id: string;
           type: QuestionType;
@@ -830,6 +833,8 @@ export interface Database {
           created_at: string;
         };
         Insert: {
+          image_path?: string | null;
+          image_alt?: string | null;
           id?: string;
           exam_id: string;
           type: QuestionType;
@@ -840,6 +845,8 @@ export interface Database {
           synonyms?: string[] | null;
         };
         Update: Partial<{
+          image_path: string | null;
+          image_alt: string | null;
           type: QuestionType;
           prompt: string;
           order_index: number;

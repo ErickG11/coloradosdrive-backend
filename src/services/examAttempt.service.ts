@@ -1,3 +1,5 @@
+import { attemptImageSeconds, signQuestionImages } from './questionImageStorage.service';
+import type { QuestionImage } from '../models/exam.model';
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -64,6 +66,7 @@ function toExamForStudent(examRow: ExamRow, questions: QuestionWithOptions[]): E
       .slice()
       .sort((a, b) => a.row.order_index - b.row.order_index)
       .map(({ row, options }) => ({
+        image: null,
         id: row.id,
         examId: row.exam_id,
         type: row.type,
@@ -140,6 +143,41 @@ export class ExamAttemptService {
     const examRow = await this.getExamRowOrThrow(attemptRow.exam_id);
     const questions = await this.getQuestionsWithOptions(examRow.id);
     return this.gradeAndComplete(attemptRow, examRow, questions, input);
+  }
+
+  async getImages(
+    attemptId: string,
+    studentId: string,
+  ): Promise<({ questionId: string } & QuestionImage)[]> {
+    const { data, error } = await this.supabase.rpc('content_attempt_state', {
+      p_student: studentId,
+      p_attempt: attemptId,
+    });
+    if (error) throw translateContentDatabaseError(error);
+    const attempt = checkContentResult(data) as unknown as ExamAttemptRow;
+    // La RPC verifica propietario/elegibilidad y finaliza vencidos antes de firmar.
+    const deadline = Date.parse(attempt.deadline_at);
+    if (!Number.isFinite(deadline) || deadline <= Date.now())
+      throw contentError('ATTEMPT_EXPIRED', 409);
+    if (attempt.status !== 'en_progreso') throw contentError('ITEM_NOT_FOUND', 404);
+    const result = await this.supabase
+      .from('questions')
+      .select('id,image_path,image_alt')
+      .eq('exam_id', attempt.exam_id)
+      .not('image_path', 'is', null);
+    if (result.error) throw translateContentDatabaseError(result.error);
+    if (deadline <= Date.now()) {
+      await this.getState(attemptId, studentId);
+      throw contentError('ATTEMPT_EXPIRED', 409);
+    }
+    const signed = await signQuestionImages(this.supabase, result.data, () => attemptImageSeconds(attempt.deadline_at));
+    const images = result.data.map((row, index) => {
+      const image = signed[index];
+      return image ? { questionId: row.id, ...image } : null;
+    });
+    return images.filter(
+      (image): image is { questionId: string } & QuestionImage => image !== null,
+    );
   }
 
   async getState(attemptId: string, studentId: string): Promise<ExamAttempt> {
@@ -249,6 +287,15 @@ export class ExamAttemptService {
   ): Promise<StartAttemptResult> {
     const questions = await this.getQuestionsWithOptions(examRow.id);
     const exam = toExamForStudent(examRow, questions);
+    const images = await signQuestionImages(
+      this.supabase,
+      questions.map((question) => question.row),
+      () => attemptImageSeconds(attemptRow.deadline_at),
+    );
+    const byId = new Map(questions.map((question, index) => [question.row.id, images[index]]));
+    exam.questions.forEach((question) => {
+      question.image = byId.get(question.id) ?? null;
+    });
     if (examRow.shuffle_questions) exam.questions = shuffled(exam.questions, attemptRow.id);
     exam.questions.forEach((q, index) => {
       q.orderIndex = index;
