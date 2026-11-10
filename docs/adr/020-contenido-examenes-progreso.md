@@ -1,6 +1,6 @@
 # ADR 020: Materias, habilitaciones y progreso del curso
 
-Estado: aceptado. 065 aplicada en la base real; 066a/066b pendientes de ejecución manual.
+Estado: aceptado. 065, 066a y 066b aplicadas en la base real según confirmación de Erick. 067 pendiente de ejecución manual.
 
 ## Contexto y control de cambios de la tesis
 
@@ -100,7 +100,31 @@ nunca se aplicó, se puede revertir solo 066a. Las diez funciones y las dos limp
 de borrado conservan sus cuerpos de F1.1; este cambio es de empaquetado y permisos
 del estado intermedio, sin modificación de acceso, notas, progreso, avisos ni limpieza.
 
-## Fuera de alcance
+## Extensión 067: imágenes opcionales de preguntas
+
+La imagen pertenece a `public.questions` y no a sus opciones. Se actualiza por ID
+y los guardados de metadatos/preguntas conservan las columnas de imagen omitidas.
+Tras el primer intento, `image_path` queda congelado; `prompt` e `image_alt`
+admiten correcciones de texto, despublicando primero para editar imagen/alt.
+
+El bucket privado `exam-question-images` admite PNG/JPEG/WebP de hasta 3 MiB,
+verificados por bytes mágicos y con nombre aleatorio. Comparte las 50 reservas
+de subida por admin/día de Guayaquil con Contenido. El reemplazo confirma su
+referencia en SQL mediante comparación de la ruta anterior antes de borrar el
+objeto anterior; la limpieza de Storage es best effort y se revisan huérfanos.
+
+El detalle admin y su preview firman por una hora. Inicio/reanudación incluye
+`image: {url,alt} | null` en cada pregunta sanitizada. GET del estado del intento
+conserva su contrato; el alumno dueño usa GET `/attempts/:id/images` mientras
+está en progreso y no vencido. Las firmas llegan hasta deadline + cinco minutos,
+con máximo de cuatro horas; ese margen no amplía el tiempo del examen. Un fallo
+de firma no rompe el intento ni revela rutas o claves.
+
+El contrato, aplicación/reversa 067, límites de limpieza y script de revisión
+de huérfanos están en `docs/operations/examenes-imagenes.md`. No se aplicó SQL
+contra la base real durante esta entrega.
+
+## Fuera de alcance original de F1
 
 Frontend, gestión por instructores, secuenciación, bancos aleatorios, correos de
 contenido, emisión de certificado y cambios al flujo de pagos. Los exámenes
