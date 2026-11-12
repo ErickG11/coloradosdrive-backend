@@ -64,6 +64,10 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | MATRICULA_REPETICION_ESTADO_INVALIDO | No hay un curso finalizado que permita esta excepción. | 409 | No hay un curso finalizado que permita esta excepción. | No hay un curso finalizado que permita esta excepción. | Revisar las matrículas finalizadas del mismo tipo. |
 | MATRICULA_ROLLBACK_CONVIVENCIA | Hay inscripciones A y B vigentes que deben resolverse antes de desactivar. | 409 | Hay inscripciones A y B vigentes que deben resolverse antes de desactivar. | Hay inscripciones A y B vigentes que deben resolverse antes de desactivar. | No borrar datos: decidir el rollback compatible para los casos exportados. |
 | PAGO_MONTO_NO_COINCIDE | El importe recibido requiere revisión. No pagues nuevamente. | 409 | El importe recibido requiere revisión. No pagues nuevamente. | El importe recibido requiere revisión. No pagues nuevamente. | Conciliar importe y moneda con la instantánea de la reserva. |
+| ESPERA_CUENTA_NO_HABILITADA | Tu cuenta no está habilitada para solicitar este aviso. | 403 | Tu cuenta no está habilitada para solicitar este aviso. | Tu cuenta no está habilitada para solicitar este aviso. | Revisar el estado de la cuenta. |
+| ESPERA_REGLAS_INACTIVAS | Los avisos de apertura todavía no están habilitados. | 409 | Los avisos de apertura todavía no están habilitados. | Los avisos de apertura todavía no están habilitados. | Revisar el indicador y sus dependencias. |
+| ESPERA_ENTRADA_INVALIDA | Revisa el tipo de curso y el horario preferido. | 400 | Revisa el tipo de curso y el horario preferido. | Revisa el tipo de curso y el horario preferido. | Usar tipo A/B y preferencias estructuradas válidas. |
+| ESPERA_PREVIEW_NO_DISPONIBLE | No se pudo comprobar el aviso de disponibilidad. | 503 | No se pudo comprobar el aviso de disponibilidad. | No se pudo comprobar el aviso de disponibilidad. | La cohorte puede estar guardada: recargar y comprobar disponibilidad antes de notificar. |
 
 ## Alertas implementadas (L3)
 
@@ -77,3 +81,5 @@ Reproducción manual y restablecimiento: [guía L3](cohortes-lote3.md). Las aler
 L4: CAPACIDAD_HORAS_SOBRE_LIMITE (alta, manage_cohorts_prices), una notificación abierta por usuario/código/configuración; al corregir flota se cierra. Reproducción y restablecimiento de los códigos nuevos: [QA L4](cohortes-lote4.md). El nombre duplicado se identifica solo en la respuesta administrativa.
 
 L5: reproducción de todos los rechazos nuevos y restablecimiento en [QA de matrículas](cohortes-lote5.md). Los históricos sin guard conservan el comportamiento anterior hasta aprobar evidencia.
+
+L6: ESPERA_CORREO_FALLIDO (alta, manage_cohorts_prices): clave usuario/código/notificación, enfriamiento de un día, cierre tras entrega. Reintento con motivo en Alumnos conserva el evento. Reproducción de códigos y alerta: [QA L6](cohortes-lote6.md).

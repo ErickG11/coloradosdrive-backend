@@ -10,8 +10,8 @@ Ramas: feat/cohortes-reglas-inscripcion en ambos repositorios. Sin push ni bases
 | 3 | Completo; integración final pendiente en 11 | 10 escenarios nativos OK, tipos ambos OK, F45 001–072 sin errores; rollback/reaplicación OK. |
 | 4 | Completo | 6 escenarios SQL OK, manifiesto limpio 073 y rollback/reaplicación OK; tipos ambos OK. |
 | 5 | Completo | 6 escenarios nativos OK, tipos ambos OK, instalación y rollback/reaplicación 074 OK. |
-| 6 | En preparación | Espera y avisos |
-| 7 | Pendiente | Cambios y reasignaciones |
+| 6 | Completo | 4 escenarios SQL OK, tipos ambos OK; instalación limpia 075, recuperación de correo y rollback/reaplicación OK. |
+| 7 | En preparación | Cambios y reasignaciones |
 | 8 | Pendiente | Facturación cola/manual |
 | 9 | Pendiente | Solicitudes, archivo y revocación |
 | 10 | Pendiente | Documento por tipo/número |
@@ -21,3 +21,11 @@ Los 14 indicadores enabled=false por defecto y al cierre. implemented solo cambi
 Precios y admins iniciales: plantillas sin valores reales. Vehículos: global no configurado hasta carga explícita.
 Recuento real de instructores desconocido: prohibido consultar datos reales; no se usa un contador de fixtures.
 Pruebas: solo obligatorias por lote y tipos; lint/build completos en 11.
+
+## Integración pendiente (lote 11, antes de activar)
+
+- Conectar matrícula manual/caja y su última sesión parcial al constructor único de 15 horas; usar precio por tipo cuando los indicadores nuevos estén activos.
+- Revisar horizonte del calendario contra todas las fechas candidatas y mostrar precio antes de reservar.
+- Auditar todas las rutas heredadas de acceso y eliminar nombres/códigos de cohorte de respuestas de alumno.
+- Aplicar permisos separados a rutas heredadas, dependencias de activación, observación de leases/latidos y las alertas restantes; no afirmar que estén operativas todavía.
+- Ejecutar catálogo consistente, checks finales, lint/build y guías QA consolidadas; mantener todos los indicadores apagados.

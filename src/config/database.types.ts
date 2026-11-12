@@ -114,6 +114,41 @@ export interface Database {
       };
     };
     Functions: {
+      retry_waitlist_emails_v2: {
+        Args: { p_actor: string; p_type: 'A' | 'B'; p_reason: string };
+        Returns: number;
+      };
+      set_enrollment_waitlist_v2: {
+        Args: {
+          p_student: string;
+          p_type: 'A' | 'B';
+          p_preference: Record<string, unknown> | null;
+          p_remove: boolean;
+        };
+        Returns: { registered: boolean; registeredAt?: string };
+      };
+      get_enrollment_waitlist_v2: {
+        Args: { p_student: string };
+        Returns: {
+          active: boolean;
+          types: Partial<Record<'A' | 'B', { registeredAt: string }>>;
+          enrollments?: { id: string; type: 'A' | 'B' }[];
+        };
+      };
+      preview_waitlist_event_v2: {
+        Args: { p_actor: string; p_cohort: string };
+        Returns: { count: number; type?: 'A' | 'B'; day?: string };
+      };
+      enqueue_waitlist_event_v2: { Args: { p_actor: string; p_cohort: string }; Returns: number };
+      admin_waitlist_counts_v2: {
+        Args: { p_actor: string };
+        Returns: { active: boolean; A: number; B: number };
+      };
+      list_admin_waitlist_students_v2: {
+        Args: { p_actor: string; p_type: 'A' | 'B'; p_filters: Record<string, unknown> };
+        Returns: StudentListResult;
+      };
+
       admin_enrollment_access_v2: {
         Args: { p_actor: string; p_student: string };
         Returns: IndividualEnrollmentAccess;
