@@ -1,6 +1,23 @@
 -- L12b: marca por tipo sin preferencias; notificación manual, agrupada y acotada.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.waitlist_email_delivered_v2()','d62024895dfad57e0f4a0353fc0a73a8'),
+  ('public.claim_notification_email()','fc50682ebc9b52557599bc551aa103de'),
+  ('public.enqueue_waitlist_event_v2(uuid,uuid)','a17328f031853e4540e2260ac0b7b454'),
+  ('public.get_enrollment_waitlist_v2(uuid)','ed9b8e591bf7b8871d121b7ec133eab1'),
+  ('public.preview_waitlist_event_v2(uuid,uuid)','77a6b299b2b42c3f83e4d8162b9507ad'),
+  ('public.set_enrollment_waitlist_v2(uuid,public.course_type,jsonb,boolean)','a10eb6271ed280588aeb3c03d621f130'),
+  ('public.student_schedule_calendar_v2(uuid,uuid,date,text,integer)','a3f879d2f06120512f0e515525e7e0a1')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_083: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter table public.app_settings add column if not exists waitlist_expiry_days integer not null default 60 check(waitlist_expiry_days between 1 and 365), add column if not exists waitlist_daily_limit integer not null default 400 check(waitlist_daily_limit between 1 and 400);
 alter table public.notifications add column if not exists waitlist_payload jsonb, add column if not exists waitlist_dispatch_day date;
 -- Los avisos antiguos sin rangos demostrables no se envían como si fueran nuevos.
@@ -162,12 +179,14 @@ create or replace function public.schedule_unavailable_v12(p_student uuid,p_enro
  'mensaje',case when opened=0 then 'No hay cursos abiertos.' when not fits then 'Tus fechas no caben en el curso.'||case when last_start is null then '' else ' Última fecha de inicio posible: '||last_start::text||'.' end else 'No hay horas libres en esas fechas.' end,'primeraFechaPosible',null,'ultimaFechaInicioPosible',last_start);
 end $$;
 -- Completar motivos por día sin cambiar la decisión de disponibilidad.
-do $$declare definition text;begin
+do $$declare definition text;patched text;begin
  definition:=pg_get_functiondef('public.student_schedule_calendar_v2(uuid,uuid,date,text,integer)'::regprocedure);
- definition:=replace(definition,'conflict jsonb;begin','conflict jsonb;diagnostic jsonb;begin');
- definition:=replace(definition,'rows:=rows||jsonb_build_array', $body$diagnostic:=null;if not ok and conflict is null then diagnostic:=public.schedule_unavailable_v12(p_student,p_enrollment,jsonb_build_object('fechaInicio',d,'modalidad',p_mode,'horasPorDia',p_hours,'horaInicio',6));end if;
+ patched:=replace(definition,'conflict jsonb;begin','conflict jsonb;diagnostic jsonb;begin');
+ patched:=replace(patched,'rows:=rows||jsonb_build_array', $body$diagnostic:=null;if not ok and conflict is null then diagnostic:=public.schedule_unavailable_v12(p_student,p_enrollment,jsonb_build_object('fechaInicio',d,'modalidad',p_mode,'horasPorDia',p_hours,'horaInicio',6));end if;
  rows:=rows||jsonb_build_array$body$);
- definition:=replace(definition,"conflict->>'message'","coalesce(conflict->>'message',diagnostic->>'mensaje')");execute definition;
+ patched:=replace(patched,$old$conflict->>'message'$old$,$new$coalesce(conflict->>'message',diagnostic->>'mensaje')$new$);
+ if patched=definition or position($chk$diagnostic->>'mensaje'$chk$ in patched)=0 then raise exception 'PARCHE_083_NO_APLICABLE: student_schedule_calendar_v2';end if;
+ execute patched;
 end $$;
 revoke all on function public.schedule_unavailable_v12(uuid,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.schedule_unavailable_v12(uuid,uuid,jsonb) to service_role;

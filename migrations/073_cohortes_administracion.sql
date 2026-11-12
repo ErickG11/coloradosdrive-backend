@@ -1,6 +1,18 @@
 -- L4: administración compatible. Aplicación manual; indicadores apagados.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('public.guard_cohort_reserved_capacity()','438c1e8f67bf5d6f1cfb5918185e89f6'),
+  ('public.guard_cohort_schedule_reservations()','3f910a4c6de29f0609f543cb70f736bb')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_073: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 create or replace function private.cohort_name_key(p_name text) returns text language sql immutable security invoker set search_path='' as $$
  select regexp_replace(normalize(lower(btrim(p_name)),NFD),U&'[\0300-\036f]','','g')
 $$;

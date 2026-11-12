@@ -1,6 +1,22 @@
 -- L3. Capacidad única por instructor y vehículos globales; reservas por tipo.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('public.enforce_cohort_cupo()','fb206807a6af638c97ae8af4491f81e8'),
+  ('public.expire_student_reservations(uuid)','dee7f7a6bd097bd1b62b49467981e3db'),
+  ('public.guard_practice_schedule_holds()','93b17173fdbacc1de16e0e47fd788862'),
+  ('public.manage_student_reservation(uuid,text,uuid,integer,integer,integer)','e5c6872eb70629565ff7fe838ae74109'),
+  ('public.release_inactive_student_reservations()','43f99de5401a3cb42c634546f96dc185'),
+  ('public.reserve_student_schedule(uuid,uuid,timestamp with time zone[],text,date,integer,integer,integer,integer)','520896c23a6fdb334f072af836011bde')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_071: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter table public.app_settings add column if not exists vehiculos_disponibles integer check(vehiculos_disponibles>=0),
  add column if not exists reserva_ttl_minutos integer not null default 15 check(reserva_ttl_minutos>0),
  add column if not exists reservas_expiradas_dia integer not null default 3 check(reservas_expiradas_dia>0),

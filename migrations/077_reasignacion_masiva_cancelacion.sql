@@ -1,6 +1,17 @@
 -- L7: previsualización transaccional y reasignación todo o nada; sin sobrecupo.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.enrollment_access_activation()','7e83d3314364e6989a3f63ac12f507ba')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_077: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 create or replace function public.assert_reassignment_permission_v2(p_actor uuid) returns void language sql volatile security invoker set search_path='' as $$select private.require_enrollment_permission(p_actor,'reassign_schedules')$$;
 create or replace function public.reserve_admin_plan_change_v2(p_actor uuid,p_enrollment uuid,p_input jsonb,p_reason text,p_target uuid default null)
 returns jsonb language plpgsql security invoker set search_path='' as $$ declare student uuid;begin

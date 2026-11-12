@@ -1,6 +1,23 @@
 -- L10. Identificación por tipo y número en las tablas existentes. Sin identidades inventadas.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('public.commit_manual_enrollment(uuid,uuid,uuid,jsonb,uuid,uuid,jsonb,timestamp with time zone[],uuid,jsonb,jsonb)','aa1e88f45ef7afd43c167de9f2d46a67'),
+  ('public.enviar_solicitud_inscripcion(uuid,text,text,text)','cc6d506c0eb22af1d579e37369026618'),
+  ('public.guardar_datos_inscripcion(uuid,jsonb,text,text)','c23429eae2e4f50488d43fc74046485e'),
+  ('public.legacy079_finalizar_aprobacion_inscripcion(uuid,uuid,timestamp with time zone,uuid,uuid,text,numeric)','60f35dec8eea6de946e62f2a13bc6f7e'),
+  ('public.list_admin_students(uuid,text,boolean,uuid,uuid,boolean,boolean,boolean,integer,integer)','f39b3a7c2edb5cd76cf188d314f99e3d'),
+  ('public.listar_solicitudes_admin(text,text,integer,integer)','49b574075fbeb4b3da9f71409144d3c3'),
+  ('public.validar_aprobacion_inscripcion(uuid,uuid,uuid,text,text)','caaeb20071166ed56a1f9ff14c0f482e')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_080: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter table public.users add column if not exists identity_document_type text not null default 'cedula',add column if not exists identity_document_number text;
 alter table public.solicitudes_inscripcion add column if not exists identity_document_type text not null default 'cedula',add column if not exists identity_document_number text;
 alter table public.solicitud_consentimientos add column if not exists representante_document_type text not null default 'cedula',add column if not exists representante_document_number text;

@@ -2,6 +2,26 @@
 -- Aplicación manual después de 081; no activa indicadores ni modifica datos.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.change_calendar_v2(uuid,uuid,date,text,integer,uuid,uuid)','bec8d2ba7edf6c08f4095c6e80167f08'),
+  ('private.eligible_free_slots_for_enrollment(uuid,uuid)','7f9c8b64852a307d87e823c6ce1a8445'),
+  ('private.integrated_manual_commit_v2(uuid,uuid,uuid,jsonb,uuid,uuid,jsonb,timestamp with time zone[],uuid,jsonb,jsonb)','ad43dd6573761ee2e2b10a507316197a'),
+  ('private.student_slot_guard_l11()','d8a207032b2a6384e7d55290914f416e'),
+  ('public.bulk_reassign_enrollments_v2(uuid,jsonb,text,boolean)','45d98b4177a3cbfbe366817ea9954328'),
+  ('public.commit_manual_enrollment(uuid,uuid,uuid,jsonb,uuid,uuid,jsonb,timestamp with time zone[],uuid,jsonb,jsonb)','254839b2ec24189f189db0e64070fa2b'),
+  ('public.manual_plan_preview_v2(uuid,public.course_type,jsonb,uuid)','d9defadf393526c107960fff0f2d1f04'),
+  ('public.released_practice_slots_for_student(uuid)','bddd943824556472e48fa8d762a8aaf4'),
+  ('public.student_schedule_calendar_v2(uuid,uuid,date,text,integer)','ada84afff309d48ee076ad7a511494ca'),
+  ('public.student_schedule_preview_v2(uuid,uuid,jsonb)','86168626216cfd23e5e7369d00b504b5')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_082: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 -- Conservar definiciones y ACL actuales para rollback sin perder datos.
 do $backup$ declare r record;definition text;backup text;begin
  for r in select p.oid,p.proname,n.nspname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where
@@ -162,8 +182,8 @@ create or replace function public.student_schedule_preview_v2(p_student uuid,p_e
  result:=public.base081_schedule_preview(p_student,p_enrollment,p_input);plan:=private.enrollment_plan_v2(p_input);
  select array_agg(value::timestamptz) into slots from jsonb_array_elements_text(plan->'franjas');conflict:=private.own_schedule_conflict_v12(p_student,slots);
  if conflict is not null then
- select coalesce(jsonb_agg(distinct day),'[]'::jsonb) into failed from (
- select value #>> '{}' day from jsonb_array_elements(coalesce(result->'diasFallan','[]'::jsonb))
+ select coalesce(jsonb_agg(distinct failed_day),'[]'::jsonb) into failed from (
+ select value #>> '{}' as failed_day from jsonb_array_elements(coalesce(result->'diasFallan','[]'::jsonb))
  union select to_char(t at time zone 'America/Guayaquil','YYYY-MM-DD') from unnest(slots) t where private.own_schedule_conflict_v12(p_student,array[t]) is not null) days;
  result:=result||jsonb_build_object('factible',false,'conflict',conflict,'diasFallan',failed);end if;return result;end $$;
 commit;

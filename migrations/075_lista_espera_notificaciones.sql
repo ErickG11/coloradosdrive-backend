@@ -1,6 +1,17 @@
 -- L6. Marca por alumno/tipo y outbox en notifications existente; ninguna tabla nueva.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('public.list_admin_students(uuid,text,boolean,uuid,uuid,boolean,boolean,boolean,integer,integer)','3ed6c97552c91eec1b7bad345c8e3525')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_075: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter table public.users add column if not exists enrollment_waitlist jsonb not null default '{}'::jsonb;
 alter table public.notifications add column if not exists waitlist_type public.course_type,
  add column if not exists waitlist_event_day date,add column if not exists waitlist_registered_at timestamptz,add column if not exists waitlist_registration_id uuid;

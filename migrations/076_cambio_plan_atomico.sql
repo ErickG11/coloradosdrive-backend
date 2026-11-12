@@ -1,6 +1,21 @@
 -- L7. Un segundo plan retenido en las MISMAS reservas; el original sigue activo.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.reservation_json_v2(uuid)','a119d2f5de65126e4967c1cab4ca0cfe'),
+  ('private.vehicle_occupation_v2(timestamp with time zone,uuid,uuid)','3f49452648fcd08150e4b0c90549d7a8'),
+  ('public.begin_student_payment(uuid,uuid,text,uuid,integer,integer,uuid,text)','cfd4ecf5a8be62db7792232696704666'),
+  ('public.expire_student_reservations(uuid)','17f30340195b89179a34cd84b4a7e1fe'),
+  ('public.manage_student_reservation(uuid,text,uuid,integer,integer,integer)','8e7cad50762dcc196c936e3decdc32ee')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_076: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter table public.app_settings add column if not exists cambios_plan_gratis integer not null default 1 check(cambios_plan_gratis>=0),
  add column if not exists cambio_plan_anticipacion_horas integer not null default 48 check(cambio_plan_anticipacion_horas>=48);
 alter table public.student_schedule_reservations add column if not exists replacement_enrollment_id uuid references public.enrollments(id) on delete cascade,
