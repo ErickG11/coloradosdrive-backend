@@ -843,5 +843,22 @@ export function translateCohortSqlError(error: unknown): AppError | null {
     !(value.message in COHORT_ERRORS)
   )
     return null;
+  if (
+    value.message === 'RESERVA_SOLAPE_PROPIO' &&
+    'details' in error &&
+    typeof error.details === 'string'
+  ) {
+    try {
+      const d = JSON.parse(error.details) as { course?: unknown; date?: unknown; hour?: unknown };
+      if (typeof d.course === 'string' && typeof d.date === 'string' && typeof d.hour === 'string')
+        return new AppError(
+          `Se solapa con tu práctica de ${d.course} del ${d.date} a las ${d.hour}. Elige otra hora.`,
+          409,
+          { code: 'RESERVA_SOLAPE_PROPIO' },
+        );
+    } catch {
+      /* Mensaje estático seguro si detalle inválido. */
+    }
+  }
   return cohortError(value.message as CohortErrorCode);
 }

@@ -1,3 +1,5 @@
+> Contrato vigente D3 (12/11/2026): los vehículos no limitan. Las referencias a límites físicos en resultados históricos describen versiones anteriores; no se activan ni se configuran. La capacidad actual son los instructores libres compartidos entre A y B.
+
 # Lote 4 — administración de cohortes y configuración (073)
 
 Cambios: `073_cohortes_administracion.sql`, sus tres scripts operativos, tipos, servicio/controlador/rutas existentes de cohortes y formulario existente. No hay módulo nuevo. Indicador `cohort_admin` implementado y apagado; no se activó ningún flujo ni se publicaron ramas.

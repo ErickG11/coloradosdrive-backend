@@ -1,37 +1,15 @@
--- CARGA EXPLÍCITA OPCIONAL, MANUAL y separada de migraciones/F45.
--- Completar las cinco variables y revisar el diff antes de ejecutar en una copia.
--- Los precios se expresan en CENTAVOS, no desde 064 ni desde cohortes.
+-- Carga explícita D7/D8. Revisar y aplicar MANUALMENTE tras 081. Nunca 064.
 begin;
-do $$
-declare
-  precio_a_centavos bigint := null; -- PRECIO A pendiente
-  precio_b_centavos bigint := null; -- PRECIO B pendiente
-  admin_1 uuid := null; -- ADMIN 1 pendiente
-  admin_2 uuid := null; -- ADMIN 2 pendiente
-  actor uuid := null; -- administrador que autoriza esta carga
-  razon text := 'Carga inicial revisada del lote 1';
-  a uuid; permiso text; antiguo jsonb;
-begin
- if precio_a_centavos is null or precio_b_centavos is null or admin_1 is null or admin_2 is null or actor is null then
-   raise exception 'Completar precios A/B, ADMIN 1, ADMIN 2 y actor; ningún dato fue cargado';end if;
- if admin_1=admin_2 then raise exception 'Los dos administradores deben ser distintos';end if;
- if exists(select 1 from unnest(array[admin_1,admin_2,actor]) as candidates(candidate_id)
-   where not exists(select 1 from public.users u where u.id=candidates.candidate_id and u.rol='admin' and u.activo)) then
-   raise exception 'Identidades administrativas no válidas o inactivas';end if;
- if exists(select 1 from public.course_type_prices) then raise exception 'Precios ya configurados: usar cambio auditado, no recargar';end if;
- insert into public.course_type_prices(tipo,precio_centavos,updated_by,motivo)
- values('A',precio_a_centavos,actor,razon),('B',precio_b_centavos,actor,razon);
- insert into public.enrollment_domain_audit(actor_id,action,entity_type,entity_id,new_value,reason)
- select actor,'initial_price','course_type',tipo::text,jsonb_build_object('centavos',precio_centavos,'moneda',moneda),razon
- from public.course_type_prices;
- foreach a in array array[admin_1,admin_2] loop
-   foreach permiso in array array['verify_identity','manage_cohorts_prices','reassign_schedules','view_payments_invoices'] loop
-     select to_jsonb(p) into antiguo from public.enrollment_admin_permissions p where admin_id=a and permission=permiso;
-     if antiguo is not null then raise exception 'Permiso inicial ya existente: revisar sin sobrescribir';end if;
-     insert into public.enrollment_admin_permissions(admin_id,permission,granted_by,reason) values(a,permiso,actor,razon);
-     insert into public.enrollment_domain_audit(actor_id,action,entity_type,entity_id,new_value,reason)
-     values(actor,'grant_permission','admin',a::text,jsonb_build_object('permission',permiso),razon);
-   end loop;
+do $$declare actor uuid;r record;before jsonb;begin
+ select id into actor from public.users where rol='admin' and activo order by created_at,id limit 1;
+ if actor is null then raise exception 'Se requiere un administrador activo para registrar la carga de precios';end if;
+ for r in select * from(values('A'::public.course_type,15000::bigint),('B'::public.course_type,20000::bigint)) x(tipo,centavos) loop
+ select to_jsonb(p) into before from public.course_type_prices p where tipo=r.tipo;
+ insert into public.course_type_prices(tipo,precio_centavos,updated_by,motivo) values(r.tipo,r.centavos,actor,'D7: precio explícito aprobado por el dueño') on conflict(tipo) do update set precio_centavos=excluded.precio_centavos,updated_by=excluded.updated_by,motivo=excluded.motivo,updated_at=clock_timestamp();
+ insert into public.enrollment_domain_audit(actor_id,action,entity_type,entity_id,old_value,new_value,reason) values(actor,'price_data_D7','course_type',r.tipo::text,before,jsonb_build_object('centavos',r.centavos),'D7: carga explícita A=150 USD, B=200 USD');
  end loop;
+ insert into public.enrollment_admin_permissions(admin_id,permission,granted_by,reason)
+ select a.value::uuid,p,actor,'D8: snapshot de administradores existentes al aplicar 081' from public.enrollment_domain_audit e cross join lateral jsonb_array_elements_text(e.new_value->'admins') a cross join unnest(array['verify_identity','manage_cohorts_prices','reassign_schedules','view_payments_invoices']) p
+ where e.action='admin_snapshot_081' and e.entity_id='081' on conflict(admin_id,permission) do nothing;
 end $$;
 commit;

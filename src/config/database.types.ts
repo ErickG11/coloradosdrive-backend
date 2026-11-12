@@ -476,6 +476,7 @@ export interface Database {
           };
         };
         Returns: {
+          conflict?: { course: string; date: string; hour: string; message: string };
           factible: boolean;
           diasFallan: string[];
           serverNow: string;
@@ -1134,6 +1135,7 @@ export interface Database {
       };
       app_settings: {
         Row: {
+          practicas_hora_fin: number;
           id: boolean;
           inscripciones_abiertas: boolean;
           updated_by: string | null;

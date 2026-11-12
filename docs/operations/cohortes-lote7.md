@@ -1,3 +1,5 @@
+> Contrato vigente D3 (12/11/2026): los vehículos no limitan. Las referencias a límites físicos en resultados históricos describen versiones anteriores; no se activan ni se configuran. La capacidad actual son los instructores libres compartidos entre A y B.
+
 # Lote 7 — cambios y reasignación atómicos (076–077)
 
 Se conserva el plan original mientras se retiene la propuesta durante 15 minutos. Confirmar intercambia todas las sesiones, sin cobro y sin modificar pagos ni facturas. El historial queda en la misma reserva (instantánea del original, actor, motivo, confirmación); no hay tabla paralela. Alumno y administrador respetan 48 horas antes del instante de primera práctica, Guayaquil. La reasignación administrativa solo exceptúa el cierre de matrícula, con permiso y motivo; no consume el cambio gratuito del alumno. La cancelación con matrículas/reservas queda bloqueada.

@@ -42,7 +42,8 @@ export const studentPrivacy: RequestHandler = (req, res, next) => {
       typeof safe === 'object' &&
       'code' in safe &&
       typeof safe.code === 'string' &&
-      safe.code in COHORT_ERRORS
+      safe.code in COHORT_ERRORS &&
+      safe.code !== 'RESERVA_SOLAPE_PROPIO'
     ) {
       return json({
         ...safe,

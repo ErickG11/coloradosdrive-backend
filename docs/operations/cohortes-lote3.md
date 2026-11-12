@@ -1,3 +1,5 @@
+> Contrato vigente D3 (12/11/2026): los vehículos no limitan. Las referencias a límites físicos en resultados históricos describen versiones anteriores; no se activan ni se configuran. La capacidad actual son los instructores libres compartidos entre A y B.
+
 # Lote 3 — reservas, capacidad y pagos (071–072)
 
 Estado: implementación local con indicadores apagados. Sin push, consultas remotas, cambios de datos reales ni envío de pagos/correos.

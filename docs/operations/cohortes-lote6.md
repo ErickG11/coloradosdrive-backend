@@ -1,3 +1,5 @@
+> Contrato vigente D3 (12/11/2026): los vehículos no limitan. Las referencias a límites físicos en resultados históricos describen versiones anteriores; no se activan ni se configuran. La capacidad actual son los instructores libres compartidos entre A y B.
+
 # Lote 6 — lista de espera y avisos de apertura (075)
 
 Estado: cuatro escenarios obligatorios OK, tipos de ambos proyectos OK. Manifiesto limpio hasta 075; rollback/reaplicación conserva notificaciones. Indicador `waitlist` implementado y apagado; sin push, llamadas remotas ni correos reales. No se ejecutaron componentes, lint ni build.

@@ -30,7 +30,7 @@ const plan = () => [
   body('modalidad').isIn(['entre_semana', 'fin_de_semana']),
   body('fechaInicio').matches(/^\d{4}-\d{2}-\d{2}$/),
   body('horasPorDia').isInt({ min: 1, max: 6 }).toInt(),
-  body('horaInicio').isInt({ min: 6, max: 21 }).toInt(),
+  body('horaInicio').isInt({ min: 6, max: 23 }).toInt(),
 ];
 planChangeRouter.get(
   '/:enrollmentId',

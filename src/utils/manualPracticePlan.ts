@@ -40,16 +40,23 @@ export interface ManualPracticePlan {
   horasPorDia: number;
   horaDeseada: string;
 }
-export function manualPracticePlan(input: ManualPracticeInput, exact = false): ManualPracticePlan {
+export function manualPracticePlan(
+  input: ManualPracticeInput,
+  exact = false,
+  endHour = 22,
+): ManualPracticePlan {
   if (exact) {
     const hour = parseHora(input.horaResuelta ?? input.horaDeseada);
     if (hour.minute !== 0) throw invalid(PRACTICE_MESSAGES.horaDeseada, 'horaDeseada');
-    const plan = buildEnrollmentPlan({
-      modalidad: input.modalidad,
-      fechaInicio: input.fechaInicio,
-      horasPorDia: input.horasPorDia,
-      horaInicio: hour.hour,
-    });
+    const plan = buildEnrollmentPlan(
+      {
+        modalidad: input.modalidad,
+        fechaInicio: input.fechaInicio,
+        horasPorDia: input.horasPorDia,
+        horaInicio: hour.hour,
+      },
+      endHour,
+    );
     return {
       rulesActive: true,
       franjas: plan.franjas,
