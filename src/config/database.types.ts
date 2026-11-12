@@ -135,6 +135,34 @@ export interface Database {
       };
     };
     Functions: {
+      set_enrollment_document_v12: {
+        Args: {
+          p_actor: string;
+          p_student: string;
+          p_enrollment: string;
+          p_type: string;
+          p_status: string;
+          p_expected: string | null;
+        };
+        Returns: Record<string, unknown>;
+      };
+      admin_enrollment_management_v12: {
+        Args: { p_actor: string; p_student: string; p_enrollment: string };
+        Returns: Record<string, unknown>;
+      };
+      transfer_enrollment_cohort_v12: {
+        Args: {
+          p_actor: string;
+          p_student: string;
+          p_enrollment: string;
+          p_target: string;
+          p_version: string;
+          p_reason: string;
+          p_exception: boolean;
+        };
+        Returns: Record<string, unknown>;
+      };
+
       maintain_waitlist_v12: { Args: Record<string, never>; Returns: undefined };
       schedule_unavailable_v12: {
         Args: { p_student: string; p_enrollment: string; p_input: Record<string, unknown> };

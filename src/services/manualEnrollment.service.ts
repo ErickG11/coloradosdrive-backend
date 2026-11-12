@@ -566,11 +566,13 @@ export class ManualEnrollmentService {
         p_plan: storedPlan,
         p_scheduled_ats: scheduled,
         p_instructor: input.practice.instructorId ?? null,
-        p_documents: applyVotingExemption(
-          documents,
-          birthDate,
-          DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd'),
-        ),
+        p_documents: current
+          ? documents
+          : applyVotingExemption(
+              documents,
+              birthDate,
+              DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd'),
+            ),
         p_payment: payment,
       });
       if (we) throw manualEnrollmentError(we);

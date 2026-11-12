@@ -187,7 +187,8 @@ export class StudentEnrollmentStatusService {
     const documentosFisicos = DEFINICIONES.map((def): DocumentoFisicoEstado => {
       const fila = docs.data.find((d) => d.tipo === def.tipo);
       const exento =
-        (def.tipo === 'papeleta_votacion' && exentoVotacion) || fila?.estado === 'no_aplica';
+        (!fila && def.tipo === 'papeleta_votacion' && exentoVotacion) ||
+        fila?.estado === 'no_aplica';
       return {
         tipo: def.tipo,
         label: def.label,
