@@ -544,6 +544,93 @@ export const COHORT_ERRORS = {
     admin: 'No hay cambios en las franjas ni en la asignación.',
     action: 'Conservar el plan o elegir una alternativa; no consumir un cambio gratis.',
   },
+  FACTURA_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La facturación todavía no está habilitada.',
+    student: 'La facturación todavía no está habilitada.',
+    admin: 'La facturación todavía no está habilitada.',
+    action: 'Revisar indicador y fecha de activación.',
+  },
+  FACTURA_DATOS_INVALIDOS: {
+    status: 400,
+    cause: 'Revisa los datos de facturación del pagador.',
+    student: 'Revisa los datos de facturación del pagador.',
+    admin: 'Revisa los datos de facturación del pagador.',
+    action:
+      'Completar nombre, tipo/número de documento, dirección y correo; pueden ser distintos del alumno.',
+  },
+  FACTURA_ALUMNO_NO_ENCONTRADO: {
+    status: 404,
+    cause: 'No encontramos el titular de estos pagos.',
+    student: 'No encontramos el titular de estos pagos.',
+    admin: 'No encontramos el titular de estos pagos.',
+    action: 'Recargar la ficha del alumno y comprobar pertenencia.',
+  },
+  FACTURA_EN_PROCESO: {
+    status: 409,
+    cause: 'La factura se está procesando. Consulta su estado antes de modificarla.',
+    student: 'La factura se está procesando. Consulta su estado antes de modificarla.',
+    admin: 'La factura se está procesando. Consulta su estado antes de modificarla.',
+    action: 'Esperar lease o reintentar tras vencer; no duplicar emisión.',
+  },
+  FACTURA_LEASE_INVALIDO: {
+    status: 409,
+    cause: 'El procesamiento cambió. Consulta el estado fiscal actual.',
+    student: 'El procesamiento cambió. Consulta el estado fiscal actual.',
+    admin: 'El procesamiento cambió. Consulta el estado fiscal actual.',
+    action: 'No finalizar con un token vencido o ajeno.',
+  },
+  FACTURA_RESULTADO_INVALIDO: {
+    status: 400,
+    cause: 'La operación fiscal solicitada no es válida.',
+    student: 'La operación fiscal solicitada no es válida.',
+    admin: 'La operación fiscal solicitada no es válida.',
+    action: 'Usar reintento o registro de autorización existente.',
+  },
+  FACTURA_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos ese documento fiscal.',
+    student: 'No encontramos ese documento fiscal.',
+    admin: 'No encontramos ese documento fiscal.',
+    action: 'Comprobar pago y fecha de activación; históricos no se encolan.',
+  },
+  FACTURA_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'El documento fiscal cambió. Recarga antes de continuar.',
+    student: 'El documento fiscal cambió. Recarga antes de continuar.',
+    admin: 'El documento fiscal cambió. Recarga antes de continuar.',
+    action: 'Usar updatedAt actual sin redondear.',
+  },
+  FACTURA_YA_EMITIDA: {
+    status: 409,
+    cause: 'La autorización de este documento ya está registrada.',
+    student: 'La autorización de este documento ya está registrada.',
+    admin: 'La autorización de este documento ya está registrada.',
+    action: 'No volver a emitir; revisar la autorización existente.',
+  },
+  FACTURA_AUTORIZACION_INVALIDA: {
+    status: 400,
+    cause: 'Revisa la clave de acceso y la autorización fiscal.',
+    student: 'Revisa la clave de acceso y la autorización fiscal.',
+    admin: 'Revisa la clave de acceso y la autorización fiscal.',
+    action:
+      'Registrar únicamente autorización real del canal fiscal autorizado, fecha válida y RUC del proveedor.',
+  },
+  FACTURA_DEVOLUCION_INVALIDA: {
+    status: 422,
+    cause: 'Revisa el importe, motivo y evidencia de la devolución documentada.',
+    student: 'Revisa el importe, motivo y evidencia de la devolución documentada.',
+    admin: 'Revisa el importe, motivo y evidencia de la devolución documentada.',
+    action:
+      'No superar importe facturado; emitir nota de crédito solo para devolución real documentada, sin operación del proveedor.',
+  },
+  FACTURA_IDEMPOTENCIA_CONFLICTO: {
+    status: 409,
+    cause: 'Esa devolución ya fue documentada con datos distintos.',
+    student: 'Esa devolución ya fue documentada con datos distintos.',
+    admin: 'Esa devolución ya fue documentada con datos distintos.',
+    action: 'Consultar el evento original; no repetir con otra clave para el mismo hecho.',
+  },
 } as const;
 export type CohortErrorCode = keyof typeof COHORT_ERRORS;
 export function cohortError(code: CohortErrorCode): AppError {

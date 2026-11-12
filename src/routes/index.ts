@@ -1,3 +1,4 @@
+import { adminBillingRouter } from './billing.routes';
 import { adminPaymentRouter } from './adminPayment.routes';
 import { examQuestionImageRouter } from './examQuestionImage.routes';
 import { contentAdminRouter, contentStudentRouter } from './content.routes';
@@ -37,6 +38,7 @@ apiRouter.use('/admin/exams', examQuestionImageRouter);
 apiRouter.use('/admin/content', contentAdminRouter);
 apiRouter.use('/estudiantes/content', contentStudentRouter);
 apiRouter.use('/admin/pagos', adminPaymentRouter);
+apiRouter.use('/admin/facturacion', adminBillingRouter);
 apiRouter.use('/webhooks/kushki', kushkiWebhookRouter);
 apiRouter.use('/public/inscripcion', publicEnrollmentConfigRouter);
 apiRouter.use('/admin/inscripciones', adminEnrollmentConfigRouter);

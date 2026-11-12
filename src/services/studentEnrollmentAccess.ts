@@ -36,6 +36,8 @@ export async function inscripcionIncompleta(
 // Lista cerrada: cualquier nueva ruta autenticada queda bloqueada por defecto.
 export function permiteInscripcionIncompleta(method: string, mountedPath: string): boolean {
   const path = mountedPath.replace(/\/+$/, '');
+  if (['GET', 'PATCH'].includes(method) && path === '/estudiantes/inscripcion/facturacion')
+    return true;
   if (
     ['GET', 'POST'].includes(method) &&
     /^\/estudiantes\/inscripcion\/cambio\/(?:[\da-f-]{36}(?:\/(?:preview|reservar|calendario))?|reserva\/[\da-f-]{36}\/confirmar)$/i.test(
@@ -53,6 +55,7 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
       '/estudiantes/account-status',
       '/notifications',
       '/estudiantes/inscripcion/horario/config',
+      '/estudiantes/inscripcion/facturacion',
       '/estudiantes/inscripcion/matriculas',
     ].includes(path)
   )
