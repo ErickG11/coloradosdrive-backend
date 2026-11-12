@@ -1,3 +1,5 @@
+import { individualEnrollmentAccess } from './individualEnrollmentAccess.service';
+import type { IndividualEnrollmentSnapshot } from '../models/enrollmentFoundation.model';
 import { expireStudentSchedule } from './studentScheduleExpiry.service';
 import { DateTime } from 'luxon';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -25,6 +27,7 @@ export interface DocumentoFisicoEstado {
 }
 export interface EstadoInscripcionAlumno {
   enrollmentId: string | null;
+  individualDates?: IndividualEnrollmentSnapshot;
   origen: 'manual' | 'solicitud' | null;
   etapa: Etapa | 'sin_matricula';
   accesoCompleto: boolean;
@@ -75,6 +78,8 @@ function unavailable(error: unknown): never {
   });
 }
 export async function tieneRequisitosPendientes(db: Db, studentId: string): Promise<boolean> {
+  const access = await individualEnrollmentAccess(db, studentId);
+  if (access.active && access.enrollments.some((e) => e.eligible)) return false;
   const { data, error } = await db
     .from('enrollments')
     .select('id')
@@ -88,7 +93,14 @@ export async function tieneRequisitosPendientes(db: Db, studentId: string): Prom
 }
 export class StudentEnrollmentStatusService {
   constructor(private readonly db: Db) {}
-  async get(studentId: string, now = new Date()): Promise<EstadoInscripcionAlumno> {
+  async get(
+    studentId: string,
+    now = new Date(),
+    enrollmentId?: string,
+  ): Promise<EstadoInscripcionAlumno> {
+    const access = await individualEnrollmentAccess(this.db, studentId);
+    if (enrollmentId && !access.enrollments.some((e) => e.id === enrollmentId))
+      throw new AppError('No puedes consultar esa matrícula.', 403, { code: 'MATRICULA_AJENA' });
     await expireStudentSchedule(this.db, studentId);
     const enrollments = await this.db
       .from('enrollments')
@@ -96,12 +108,14 @@ export class StudentEnrollmentStatusService {
         'id,course_id,cohort_id,origen,etapa_inscripcion,reserva_expira_at,requisitos_verificados_at,identidad_presencial_at,cohorts!enrollments_cohort_id_fkey(nombre,fecha_fin_matricula)',
       )
       .eq('student_id', studentId)
-      .in('status', ESTADOS_VIGENTES)
+      .in('status', access.active ? [...ESTADOS_VIGENTES, 'finalizado'] : ESTADOS_VIGENTES)
       .order('created_at', { ascending: false })
       .order('id')
       .overrideTypes<EnrollmentRow[], { merge: false }>();
     if (enrollments.error) unavailable(enrollments.error);
-    const rows = enrollments.data;
+    const rows = enrollmentId
+      ? enrollments.data.filter((e) => e.id === enrollmentId)
+      : enrollments.data;
     const incompleta = rows.some(
       (r) => r.origen === 'solicitud' && r.etapa_inscripcion !== 'activa',
     );
@@ -190,10 +204,22 @@ export class StudentEnrollmentStatusService {
         def.bloqueaPago &&
         documentosFisicos.some((d) => d.tipo === def.tipo && d.estado === 'pendiente'),
     );
+    const latestReservation = access.active
+      ? await this.db
+          .from('student_schedule_reservations')
+          .select('estado,expira_at')
+          .eq('enrollment_id', principal.id)
+          .eq('student_id', studentId)
+          .order('creada_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : null;
+    if (latestReservation?.error) unavailable(latestReservation.error);
     const reservaVigente =
-      principal.etapa_inscripcion === 'reservado' &&
-      principal.reserva_expira_at !== null &&
-      new Date(principal.reserva_expira_at) > now;
+      latestReservation?.data?.estado === 'pago_en_curso' ||
+      (principal.etapa_inscripcion === 'reservado' &&
+        principal.reserva_expira_at !== null &&
+        new Date(principal.reserva_expira_at) > now);
     const etapa =
       principal.etapa_inscripcion === 'reservado' && !reservaVigente
         ? 'por_agendar'
@@ -222,9 +248,27 @@ export class StudentEnrollmentStatusService {
           : null;
     return {
       enrollmentId: principal.id,
+      ...(access.active
+        ? {
+            individualDates: {
+              practiceStartDate:
+                access.enrollments.find((e) => e.id === principal.id)?.practiceStartDate ?? null,
+              practiceEndDate:
+                access.enrollments.find((e) => e.id === principal.id)?.practiceEndDate ?? null,
+              accessEndDate:
+                access.enrollments.find((e) => e.id === principal.id)?.accessEndDate ?? null,
+              paidAmountCentavos:
+                access.enrollments.find((e) => e.id === principal.id)?.paidAmountCentavos ?? null,
+              datesSource:
+                access.enrollments.find((e) => e.id === principal.id)?.datesSource ?? null,
+              guardReady:
+                access.enrollments.find((e) => e.id === principal.id)?.guardReady ?? false,
+            },
+          }
+        : {}),
       origen: principal.origen,
       etapa,
-      accesoCompleto: !incompleta,
+      accesoCompleto: access.active ? principal.etapa_inscripcion === 'activa' : !incompleta,
       pasos: {
         documentos: requisitosVerificados,
         horario: etapa === 'activa' || reservaVigente,

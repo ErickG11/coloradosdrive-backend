@@ -1,3 +1,4 @@
+import type { IndividualEnrollmentAccess } from '../models/individualEnrollmentAccess.model';
 import type {
   FoundationFields,
   EnrollmentFoundationColumns,
@@ -77,7 +78,8 @@ export type SolicitudTipoDocumento =
   'cedula' | 'papeleta_votacion' | 'tipo_sangre' | 'titulo_bachiller' | 'certificado_estudios';
 export type SolicitudDocumentoEstado = 'recibido' | 'aprobado' | 'rechazado';
 export type CourseType = 'A' | 'B';
-export type EnrollmentStatus = 'activo' | 'finalizado' | 'retirado' | 'pendiente_cohorte';
+export type EnrollmentStatus =
+  'activo' | 'finalizado' | 'retirado' | 'anulada' | 'pendiente_cohorte';
 export type ExamType = 'practica' | 'definitivo';
 export type QuestionType = 'opcion_multiple' | 'texto_abierto';
 export type AttemptStatus = 'en_progreso' | 'completado';
@@ -112,6 +114,23 @@ export interface Database {
       };
     };
     Functions: {
+      admin_enrollment_access_v2: {
+        Args: { p_actor: string; p_student: string };
+        Returns: IndividualEnrollmentAccess;
+      };
+      student_enrollment_access_v2: {
+        Args: { p_student: string };
+        Returns: IndividualEnrollmentAccess;
+      };
+      extend_enrollment_access_v2: {
+        Args: { p_actor: string; p_enrollment: string; p_end: string; p_reason: string };
+        Returns: { id: string; accessEndDate: string };
+      };
+      authorize_repeat_enrollment_v2: {
+        Args: { p_actor: string; p_student: string; p_course: string; p_reason: string };
+        Returns: string;
+      };
+
       write_cohort_v2: {
         Args: {
           p_actor: string;

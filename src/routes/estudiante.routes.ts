@@ -1,3 +1,5 @@
+import { param } from 'express-validator';
+import { individualEnrollmentAccess } from '../services/individualEnrollmentAccess.service';
 import { Router } from 'express';
 import { studentPaymentRouter } from './studentPayment.routes';
 import { studentScheduleRouter } from './studentSchedule.routes';
@@ -35,6 +37,24 @@ estudianteRouter.get(
   asyncHandler(async (req, res) => {
     if (!req.user) throw new AppError('Authentication required', 401);
     res.set('Cache-Control', 'no-store').json(await estadoInscripcion.get(req.user.id));
+  }),
+);
+estudianteRouter.get(
+  '/inscripcion/matriculas',
+  asyncHandler(async (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .json(await individualEnrollmentAccess(supabaseAdmin, req.user!.id));
+  }),
+);
+estudianteRouter.get(
+  '/estado-inscripcion/:enrollmentId',
+  param('enrollmentId').isUUID(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .json(await estadoInscripcion.get(req.user!.id, new Date(), req.params.enrollmentId));
   }),
 );
 estudianteRouter.get('/practice-history/enrollments', asyncHandler(studentPracticeEnrollments));
