@@ -130,7 +130,7 @@ export class EmailService {
     const credentials = p.temporaryPassword
       ? `Contraseña temporal: ${p.temporaryPassword}\nDeberás cambiarla al ingresar por primera vez.`
       : 'Usa tus credenciales actuales. Esta matrícula no cambia tu contraseña.';
-    const summary = `Tipo ${p.courseType} · ${p.cohortName ?? 'Pendiente de cohorte'}\nEstado: ${p.status}\nPlan: ${String(p.days)} días, ${String(p.blocks)} bloques de 60 minutos (${formatEcuadorDateTime(p.start)} a ${formatEcuadorDateTime(p.end)}).`;
+    const summary = `Tipo ${p.courseType} · ${p.status === 'pendiente_cohorte' ? 'Horario por asignar' : 'Horario asignado'}\nEstado: ${p.status}\nPlan: ${String(p.days)} días, ${String(p.blocks)} bloques de 60 minutos (${formatEcuadorDateTime(p.start)} a ${formatEcuadorDateTime(p.end)}).`;
     const pending =
       p.status === 'pendiente_cohorte'
         ? 'El plan se conservó; aún no se generaron franjas. La asignación posterior de cohorte queda pendiente.'

@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 import { supabaseAdmin } from '../config/supabase';
 import { BillingService } from '../services/billing.service';
@@ -11,8 +12,7 @@ export function startBillingCron(): void {
     () => {
       if (running) return;
       running = true;
-      void service
-        .run()
+      void observeJob('billing', () => service.run())
         .catch((error: unknown) => logSafeError('billing_queue_failed', error))
         .finally(() => {
           running = false;

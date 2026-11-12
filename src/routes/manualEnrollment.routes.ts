@@ -1,3 +1,5 @@
+import { studentPlanRules } from '../services/studentPlanRules.service';
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { normalizeIdentityDocument } from '../utils/identityDocument';
 import { Router, type Request, type Response } from 'express';
 import { body, header, param, query } from 'express-validator';
@@ -14,7 +16,7 @@ import { assertBirthDate } from '../utils/birthDate';
 import { isValidCedulaEcuatoriana } from '../utils/cedula';
 import { isFechaCivil } from '../utils/cohortRules';
 import { MANUAL_MESSAGES as M } from '../utils/manualEnrollmentRules';
-import { manualPracticePlan, PRACTICE_MESSAGES } from '../utils/manualPracticePlan';
+import { PRACTICE_MESSAGES } from '../utils/manualPracticePlan';
 import { HORAS_POR_DIA_MESSAGE, isHorasPorDiaValid } from '../utils/practiceHours';
 import { isValidPhone, PHONE_MESSAGE } from '../utils/phone';
 import { AppError } from '../utils/AppError';
@@ -33,7 +35,17 @@ function actor(req: Request): string {
 export const manualEnrollmentRouter = Router();
 const service = new ManualEnrollmentService(supabaseAdmin, new EmailService(mailer));
 const details = new ManualEnrollmentDetailsService(supabaseAdmin);
-manualEnrollmentRouter.use(asyncHandler(authenticate), requireRole('admin'));
+manualEnrollmentRouter.use(
+  asyncHandler(authenticate),
+  requireRole('admin'),
+  requireEnrollmentPermission('reassign_schedules'),
+);
+manualEnrollmentRouter.get(
+  '/rules',
+  asyncHandler(async (_req, res) => {
+    res.json(await studentPlanRules(supabaseAdmin));
+  }),
+);
 const isMoney = (value: unknown): boolean =>
   typeof value === 'number' &&
   Number.isFinite(value) &&
@@ -225,19 +237,25 @@ manualEnrollmentRouter.post(
     res.json(await service.coursePreview((req.body as ManualEnrollmentInput).courseType));
   }),
 );
-manualEnrollmentRouter.post('/plan', practice, validateFields, (req: Request, res: Response) => {
-  res.json(manualPracticePlan((req.body as { practice: ManualPracticeInput }).practice));
-});
+manualEnrollmentRouter.post(
+  '/plan',
+  practice,
+  validateFields,
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json(await service.plan((req.body as { practice: ManualPracticeInput }).practice));
+  }),
+);
 manualEnrollmentRouter.post(
   '/practice-preview',
   [...course, ...practice],
   validateFields,
   asyncHandler(async (req, res) => {
-    res.json(await service.practicePreview(req.body as ManualEnrollmentInput));
+    res.json(await service.practicePreview(req.body as ManualEnrollmentInput, actor(req)));
   }),
 );
 manualEnrollmentRouter.post(
   '/confirm',
+  requireEnrollmentPermission('view_payments_invoices'),
   [
     ...course,
     ...practice,
@@ -260,6 +278,7 @@ manualEnrollmentRouter.post(
 );
 manualEnrollmentRouter.get(
   '/:enrollmentId/details',
+  requireEnrollmentPermission('view_payments_invoices'),
   [param('enrollmentId').isUUID()],
   validate,
   asyncHandler(async (req, res) => {
@@ -268,6 +287,7 @@ manualEnrollmentRouter.get(
 );
 manualEnrollmentRouter.patch(
   '/:enrollmentId/details',
+  requireEnrollmentPermission('view_payments_invoices'),
   [
     param('enrollmentId').isUUID(),
     body().custom(

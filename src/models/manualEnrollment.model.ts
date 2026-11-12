@@ -3,6 +3,7 @@ import type { Modalidad } from './practiceSlotGeneration.model';
 import type { DocumentInput, InitialPayment } from '../utils/manualEnrollmentDetails';
 
 export interface ManualPracticeInput {
+  precioCentavos?: number;
   semanas: 1 | 2 | 3;
   modalidad: Modalidad;
   fechaInicio: string;

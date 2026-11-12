@@ -268,7 +268,9 @@ export class StudentEnrollmentStatusService {
         : {}),
       origen: principal.origen,
       etapa,
-      accesoCompleto: access.active ? principal.etapa_inscripcion === 'activa' : !incompleta,
+      accesoCompleto: access.active
+        ? access.enrollments.some((e) => e.id === principal.id && e.eligible)
+        : !incompleta,
       pasos: {
         documentos: requisitosVerificados,
         horario: etapa === 'activa' || reservaVigente,

@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 
 import { mailer } from '../config/mailer';
@@ -25,8 +26,12 @@ export function startPracticeSlotCron(): void {
   cron.schedule('* * * * *', () => {
     if (running) return;
     running = true;
-    schedulerService.runOnce().catch((err: unknown) => {
-      logSafeError('practice_slot_scheduler_failed', err);
-    }).finally(() => { running = false; });
+    observeJob('practice', () => schedulerService.runOnce())
+      .catch((err: unknown) => {
+        logSafeError('practice_slot_scheduler_failed', err);
+      })
+      .finally(() => {
+        running = false;
+      });
   });
 }

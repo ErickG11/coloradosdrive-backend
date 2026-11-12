@@ -58,6 +58,7 @@ export interface StudentSchedulePreviewDay {
   motivo: { codigo: 'DIA_SIN_INSTRUCTOR' | 'SOLAPE_PROPIO'; mensaje: string } | null;
 }
 export interface StudentSchedulePreview {
+  precioCentavos?: number;
   enrollmentId: string;
   serverNow: string;
   modalidad: Modalidad;

@@ -146,7 +146,15 @@ studentScheduleRouter.post(
     const input = matchedData<StudentScheduleSelection & { enrollmentId: string }>(req, {
       locations: ['body'],
     });
-    res.json(await service.preview(subject(req), input.enrollmentId, input));
+    const preview = await service.preview(subject(req), input.enrollmentId, input);
+    if (preview.factible) {
+      const event = await supabaseAdmin.rpc('record_schedule_choice_v2', {
+        p_student: subject(req),
+        p_enrollment: input.enrollmentId,
+      });
+      if (event.error) throw event.error;
+    }
+    res.json(preview);
   }),
 );
 studentScheduleRouter.post(

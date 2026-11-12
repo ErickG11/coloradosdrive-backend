@@ -92,6 +92,7 @@ export class StudentScheduleService {
       enrollmentId,
       serverNow: state.serverNow,
       modalidad: input.modalidad,
+      precioCentavos: state.precioCentavos ?? undefined,
       horasTotales: 15,
       horasPorDia: plan.horasPorDia,
       horaInicio: plan.horaInicio,

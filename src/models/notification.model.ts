@@ -18,6 +18,11 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export type NotificationEmailStatus = 'pendiente' | 'enviado' | 'fallido' | null;
 
 export interface NotificationRow extends Record<string, unknown> {
+  domain_code?: string | null;
+  domain_entity_id?: string | null;
+  domain_severity?: string | null;
+  domain_last_seen_at?: string | null;
+  domain_resolved_at?: string | null;
   waitlist_type?: 'A' | 'B' | null;
   attendance_event_id: string | null;
   id: string;
@@ -38,6 +43,13 @@ export interface NotificationRow extends Record<string, unknown> {
 }
 
 export interface Notification {
+  alert?: {
+    code: string;
+    entityId: string | null;
+    severity: string;
+    lastSeenAt: string | null;
+    resolvedAt: string | null;
+  };
   attendanceEventId: string | null;
   id: string;
   tipo: NotificationType;

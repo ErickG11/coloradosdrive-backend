@@ -1,3 +1,4 @@
+import { adminFinancialPrivacy } from '../middlewares/adminFinancialPrivacy.middleware';
 import { Router } from 'express';
 import { query } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
@@ -10,6 +11,15 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const adminDashboardRouter = Router();
 const service = new AdminDashboardService(supabaseAdmin);
 adminDashboardRouter.use(asyncHandler(authenticate), requireRole('admin'));
+adminDashboardRouter.use(adminFinancialPrivacy);
+adminDashboardRouter.get(
+  '/enrollment-metrics',
+  asyncHandler(async (req, res) => {
+    const r = await supabaseAdmin.rpc('enrollment_metrics_v2', { p_actor: req.user!.id });
+    if (r.error) throw r.error;
+    res.json(r.data);
+  }),
+);
 adminDashboardRouter.get(
   '/',
   [
