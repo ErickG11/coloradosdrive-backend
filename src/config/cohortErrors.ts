@@ -752,6 +752,43 @@ export const COHORT_ERRORS = {
     admin: 'Tu acceso requiere revisión de la escuela.',
     action: 'Revisar revocación e identidad; no cobrar ni devolver automáticamente.',
   },
+  DOCUMENTO_TIPO_INVALIDO: {
+    status: 400,
+    cause: 'Selecciona cédula, pasaporte u otro documento.',
+    student: 'Selecciona cédula, pasaporte u otro documento.',
+    admin: 'Selecciona cédula, pasaporte u otro documento.',
+    action: 'Usar un tipo del catálogo; no inferirlo del número.',
+  },
+  DOCUMENTO_NUMERO_INVALIDO: {
+    status: 400,
+    cause: 'Revisa el número y el tipo de documento.',
+    student: 'Revisa el número y el tipo de documento.',
+    admin: 'Revisa el número y el tipo de documento.',
+    action:
+      'Cédula ecuatoriana con verificador válido; pasaporte/otro de 3 a 30 letras ASCII, números o guion, sin espacios interiores.',
+  },
+  DOCUMENTO_DUPLICADO: {
+    status: 409,
+    cause: 'Ese documento ya está registrado para el mismo tipo.',
+    student: 'Ese documento ya está registrado para el mismo tipo.',
+    admin: 'Ese documento ya está registrado para el mismo tipo.',
+    action: 'Buscar por tipo y número; tipos distintos pueden compartir número.',
+  },
+  DOCUMENTO_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'Ese tipo de documento todavía no está habilitado en línea.',
+    student: 'Ese tipo de documento todavía no está habilitado en línea.',
+    admin: 'Ese tipo de documento todavía no está habilitado en línea.',
+    action: 'Activar únicamente después de migración, permisos, QA y autorización operativa.',
+  },
+  DOCUMENTO_ESTADO_NO_EDITABLE: {
+    status: 409,
+    cause: 'El documento no se puede cambiar en este estado.',
+    student: 'El documento no se puede cambiar en este estado.',
+    admin: 'El documento no se puede cambiar en este estado.',
+    action:
+      'Devolver para corrección antes de modificar; conservar evidencia/verificaciones anteriores.',
+  },
 } as const;
 export type CohortErrorCode = keyof typeof COHORT_ERRORS;
 export function cohortError(code: CohortErrorCode): AppError {

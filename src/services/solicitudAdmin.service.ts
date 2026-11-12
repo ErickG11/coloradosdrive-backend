@@ -157,6 +157,9 @@ export class SolicitudAdminService {
             aceptadoAt: consent.data.aceptado_at,
             representanteNombre: consent.data.representante_nombre,
             representanteCedula: consent.data.representante_cedula,
+            representanteDocumentType: consent.data.representante_document_type,
+            representanteDocumentNumber:
+              consent.data.representante_document_number ?? consent.data.representante_cedula,
             representanteAcepta: consent.data.representante_acepta,
           }
         : null,
@@ -178,6 +181,8 @@ export class SolicitudAdminService {
       devolucionNotaInterna: s.devolucion_nota_interna,
       rechazoMotivoCodigo: s.rechazo_motivo_codigo,
       rechazoNotaInterna: s.rechazo_nota_interna,
+      documentType: s.identity_document_type,
+      documentNumber: s.identity_document_number,
       studentId: s.student_id,
       updatedAt: s.updated_at,
       archivedAt: s.archived_at,

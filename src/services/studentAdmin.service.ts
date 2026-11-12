@@ -25,6 +25,7 @@ type CohortRow = Database['public']['Tables']['cohorts']['Row'];
 export interface StudentDetail {
   id: string;
   cedula: string;
+  document?: { type: string; number: string };
   nombreCompleto: string;
   telefono: string | null;
   activo: boolean;
@@ -112,6 +113,21 @@ export class StudentAdminService {
     actor: string,
     page: StudentListResult,
   ): Promise<StudentListResult> {
+    if ((await enrollmentRuleEnabled(this.db, 'foreign_identity')) && page.items.length) {
+      const documents = await this.db.rpc('identity_documents_v2', {
+        p_actor: actor,
+        p_students: page.items.map((row) => row.id),
+      });
+      if (documents.error) throw databaseError(documents.error);
+      page = {
+        ...page,
+        items: page.items.map((row) => ({
+          ...row,
+          cedula: row.cedula ?? '',
+          document: documents.data[row.id],
+        })),
+      };
+    }
     if (!(await enrollmentRuleEnabled(this.db, 'identity')) || !page.items.length) return page;
     const result = await this.db.rpc('student_payment_statuses_v2', {
       p_actor: actor,
@@ -252,7 +268,8 @@ export class StudentAdminService {
       ),
       practiceSchedule: studentSchedule(slots, recovery, instructors.data, this.now()),
       id: user.id,
-      cedula: user.cedula,
+      cedula: user.cedula ?? '',
+      document: { type: user.identity_document_type, number: user.identity_document_number },
       nombreCompleto: user.nombre_completo,
       telefono: user.telefono,
       activo: user.activo,

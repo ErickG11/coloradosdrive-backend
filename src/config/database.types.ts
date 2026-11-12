@@ -1,3 +1,4 @@
+import type { IdentityDocument } from '../utils/identityDocument';
 import type {
   RequestReviewState,
   RequestRetentionPolicy,
@@ -134,6 +135,22 @@ export interface Database {
       };
     };
     Functions: {
+      identity_documents_v2: {
+        Args: { p_actor: string; p_students: string[] };
+        Returns: Record<string, IdentityDocument>;
+      };
+      find_manual_students_v2: {
+        Args: { p_actor: string; p_query: string };
+        Returns: {
+          id: string;
+          cedula: string | null;
+          nombre_completo: string;
+          correo: string;
+          documentType: IdentityDocument['type'];
+          documentNumber: string;
+        }[];
+      };
+
       student_payment_statuses_v2: {
         Args: { p_actor: string; p_students: string[] };
         Returns: Record<string, string>;
@@ -1243,10 +1260,12 @@ export interface Database {
       };
       users: {
         Row: {
+          identity_document_type: IdentityDocument['type'];
+          identity_document_number: string;
           identity_access_blocked_at: string | null;
           billing_profile: Json;
           id: string;
-          cedula: string;
+          cedula: string | null;
           nombre_completo: string;
           telefono: string | null;
           rol: UserRole;
@@ -1650,6 +1669,8 @@ export interface Database {
       };
       solicitud_consentimientos: {
         Row: {
+          representante_document_type: IdentityDocument['type'];
+          representante_document_number: string | null;
           id: string;
           solicitud_id: string;
           version_aviso: string;
@@ -1698,6 +1719,8 @@ export interface Database {
       };
       solicitudes_inscripcion: {
         Row: {
+          identity_document_type: IdentityDocument['type'];
+          identity_document_number: string | null;
           review_owner: string | null;
           review_until: string | null;
           updated_at: string;

@@ -90,3 +90,5 @@ Lote 7: componentes de calendario/cambio individual, contador de propuesta, sele
 Lote 8: formularios del pagador, estado fiscal, registro de autorización existente, reintento y devolución documentada en ficha: componentes/accesibilidad diferidos; riesgo de interpretar cola como emisión o reembolso; QA manual en operations/cohortes-lote8.md.
 
 Lote 9: UI de reclamación/renovación, modo/escaneo, archivo, revocación confirmada, correo en cola/reintento, retención y columna de pago diferidas; riesgos de interacción, foco y presentación. QA manual en operations/cohortes-lote9.md. Nueve pruebas omitidas preexistentes intactas.
+
+Lote 10: selectores de documento y representante, contacto según capacidad, resumen, búsquedas/listas y lectores tipados: UI/accesibilidad diferidas; riesgo de etiqueta incorrecta o progreso perdido. QA manual en operations/cohortes-lote10.md; unicidad y flujo de datos/aprobación verificados en SQL.
