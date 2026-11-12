@@ -1,3 +1,4 @@
+import type { IndividualEnrollmentSnapshot } from './enrollmentFoundation.model';
 import type { Modalidad } from './practiceSlotGeneration.model';
 import type { ReservationPlanSummary } from '../utils/studentFixedPlan';
 
@@ -11,6 +12,7 @@ export interface StudentScheduleSelection extends StudentScheduleInput {
   horaInicio: number;
 }
 export interface StudentScheduleReservation {
+  individualDates?: IndividualEnrollmentSnapshot;
   id: string;
   enrollmentId: string;
   estado: 'vigente' | 'pago_en_curso' | 'liberada' | 'vencida' | 'confirmada';

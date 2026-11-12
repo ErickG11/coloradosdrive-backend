@@ -1,3 +1,16 @@
+import type {
+  FoundationFields,
+  EnrollmentFoundationColumns,
+  ReservationFoundationColumns,
+  CohortFoundationColumns,
+  FoundationReadOnlyTable,
+  CourseTypePriceRow,
+  EnrollmentRuleFlagRow,
+  EnrollmentPlanOptionRow,
+  EnrollmentPermissionRow,
+  EnrollmentAuditRow,
+  EnrollmentFunnelRow,
+} from '../models/enrollmentFoundation.model';
 // Tipos manuales del esquema public, reflejando migrations/001_init.sql,
 // 002_enrollments_monto.sql y 006_matricula_v2_schema.sql. Se pasan a
 // createClient<Database>() para que el cliente de Supabase tipe
@@ -426,6 +439,12 @@ export interface Database {
       };
     };
     Tables: {
+      course_type_prices: FoundationReadOnlyTable<CourseTypePriceRow>;
+      enrollment_rule_flags: FoundationReadOnlyTable<EnrollmentRuleFlagRow>;
+      enrollment_plan_options: FoundationReadOnlyTable<EnrollmentPlanOptionRow>;
+      enrollment_admin_permissions: FoundationReadOnlyTable<EnrollmentPermissionRow>;
+      enrollment_domain_audit: FoundationReadOnlyTable<EnrollmentAuditRow>;
+      enrollment_funnel_events: FoundationReadOnlyTable<EnrollmentFunnelRow>;
       course_subjects: ContentTable<CourseSubjectRow, 'course_id' | 'title'>;
       course_materials: ContentTable<CourseMaterialRow, 'title' | 'kind'>;
       subject_items: ContentTable<SubjectItemRow, 'subject_id' | 'kind'>;
@@ -441,7 +460,7 @@ export interface Database {
       };
 
       student_schedule_reservations: {
-        Row: { id: string; student_id: string; enrollment_id: string; cohort_id: string;
+        Row: FoundationFields<ReservationFoundationColumns> & { id: string; student_id: string; enrollment_id: string; cohort_id: string;
           estado: StudentScheduleReservation['estado']; creada_at: string; expira_at: string;
           extensiones: number; pago_iniciado_at: string | null; cerrada_at: string | null;
           modalidad: 'entre_semana' | 'fin_de_semana'; fecha_inicio: string; horas_por_dia: number; margen_dias: number };
@@ -675,7 +694,7 @@ export interface Database {
         Relationships: [];
       };
       cohorts: {
-        Row: {
+        Row: FoundationFields<CohortFoundationColumns> & {
           id: string;
           course_id: string;
           nombre: string;
@@ -724,7 +743,7 @@ export interface Database {
         Relationships: [];
       };
       enrollments: {
-        Row: {
+        Row: FoundationFields<EnrollmentFoundationColumns> & {
           cohort_assigned_by: string | null;
           cohort_assigned_at: string | null;
           id: string;
