@@ -92,3 +92,7 @@ Lote 8: formularios del pagador, estado fiscal, registro de autorización existe
 Lote 9: UI de reclamación/renovación, modo/escaneo, archivo, revocación confirmada, correo en cola/reintento, retención y columna de pago diferidas; riesgos de interacción, foco y presentación. QA manual en operations/cohortes-lote9.md. Nueve pruebas omitidas preexistentes intactas.
 
 Lote 10: selectores de documento y representante, contacto según capacidad, resumen, búsquedas/listas y lectores tipados: UI/accesibilidad diferidas; riesgo de etiqueta incorrecta o progreso perdido. QA manual en operations/cohortes-lote10.md; unicidad y flujo de datos/aprobación verificados en SQL.
+
+## Instrucción posterior de cierre L11/L12
+
+No escribir ni ejecutar pruebas automáticas, lint o build. Única excepción al final: tipos en ambos repos y una instalación local completa 001–última con las verificaciones existentes; corregir y repetir solo el fallo. Privacidad, permisos, catálogo, concurrencia y QA de componentes de la punta final permanecen pendientes. No añadir skips. Las guías de cada lote se conservan; no se crea guía consolidada nueva.

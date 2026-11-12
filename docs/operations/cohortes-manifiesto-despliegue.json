@@ -1,0 +1,334 @@
+{
+  "migrations": [
+    {
+      "id": "001",
+      "file": "migrations/001_init.sql"
+    },
+    {
+      "id": "002",
+      "file": "migrations/002_enrollments_monto.sql"
+    },
+    {
+      "id": "003",
+      "file": "migrations/003_seed_courses.sql"
+    },
+    {
+      "id": "004",
+      "file": "migrations/004_exams.sql"
+    },
+    {
+      "id": "005",
+      "file": "migrations/005_practice_slots.sql"
+    },
+    {
+      "id": "006",
+      "file": "migrations/006_matricula_v2_schema.sql"
+    },
+    {
+      "id": "007",
+      "file": "migrations/007_solicitudes_inscripcion.sql"
+    },
+    {
+      "id": "008",
+      "file": "migrations/008_solicitudes_intentos_codigo.sql"
+    },
+    {
+      "id": "009",
+      "file": "migrations/009_enable_rls.sql"
+    },
+    {
+      "id": "010",
+      "file": "migrations/010_practice_slots_no_overlap.sql"
+    },
+    {
+      "id": "011",
+      "file": "migrations/011_realtime_broadcast_authorization.sql"
+    },
+    {
+      "id": "012",
+      "file": "migrations/012_cohorts_matricula_curso_fechas.sql"
+    },
+    {
+      "id": "013",
+      "file": "migrations/013_enrollment_status_pendiente_cohorte.sql"
+    },
+    {
+      "id": "014",
+      "file": "migrations/014_enrollments_pendiente_cohorte_shape_y_cupo.sql"
+    },
+    {
+      "id": "015",
+      "file": "migrations/015_solicitudes_course_id.sql"
+    },
+    {
+      "id": "016",
+      "file": "migrations/016_users_datos_estudiante_ampliados.sql"
+    },
+    {
+      "id": "017",
+      "file": "migrations/017_enrollments_pago_inicial.sql"
+    },
+    {
+      "id": "018",
+      "file": "migrations/018_practice_slots_integrity.sql"
+    },
+    {
+      "id": "019",
+      "file": "migrations/019_practice_slots_atomic_transitions.sql"
+    },
+    {
+      "id": "020",
+      "file": "migrations/020_matricula_manual_simplificada.sql"
+    },
+    {
+      "id": "021",
+      "file": "migrations/021_instructores_activos.sql"
+    },
+    {
+      "id": "022",
+      "file": "migrations/022_matricula_documentos_abono.sql"
+    },
+    {
+      "id": "023",
+      "file": "migrations/023_estudiantes_listado_ficha.sql"
+    },
+    {
+      "id": "024",
+      "file": "migrations/024_estudiantes_edicion.sql"
+    },
+    {
+      "id": "025",
+      "file": "migrations/025_estudiantes_acceso.sql"
+    },
+    {
+      "id": "026",
+      "file": "migrations/026_estudiantes_eliminacion.sql"
+    },
+    {
+      "id": "027",
+      "file": "migrations/027_estudiantes_asignacion_cohorte.sql"
+    },
+    {
+      "id": "028",
+      "file": "migrations/028_estudiantes_busqueda_mejorada.sql"
+    },
+    {
+      "id": "029",
+      "file": "migrations/029_cohortes_validaciones.sql"
+    },
+    {
+      "id": "030",
+      "file": "migrations/030_asistencia_cancelacion.sql"
+    },
+    {
+      "id": "031",
+      "file": "migrations/031_asistencia_cambio_cupo.sql"
+    },
+    {
+      "id": "032",
+      "file": "migrations/032_asistencia_excluir_cupo_propio.sql"
+    },
+    {
+      "id": "033",
+      "file": "migrations/033_asistencia_notificaciones.sql"
+    },
+    {
+      "id": "034",
+      "file": "migrations/034_asistencia_auditoria.sql"
+    },
+    {
+      "id": "035",
+      "file": "migrations/035_calificacion_instructores.sql"
+    },
+    {
+      "id": "036",
+      "file": "migrations/036_distribucion_calificaciones_instructor.sql"
+    },
+    {
+      "id": "037",
+      "file": "migrations/037_inscripcion_privacidad.sql"
+    },
+    {
+      "id": "038",
+      "file": "migrations/038_solicitudes_aprobacion_atomica.sql"
+    },
+    {
+      "id": "039",
+      "file": "migrations/039_solicitudes_eliminacion_atomica.sql"
+    },
+    {
+      "id": "040",
+      "file": "migrations/040_solicitudes_envio.sql"
+    },
+    {
+      "id": "041",
+      "file": "migrations/041_documentos_notificaciones.sql"
+    },
+    {
+      "id": "042",
+      "file": "migrations/042_inscripcion_flujo_final.sql"
+    },
+    {
+      "id": "043",
+      "file": "migrations/043_inscripcion_endurecimiento.sql"
+    },
+    {
+      "id": "044",
+      "file": "migrations/044_inscripcion_limites.sql"
+    },
+    {
+      "id": "045",
+      "file": "migrations/045_inscripcion_codigos.sql"
+    },
+    {
+      "id": "046",
+      "file": "migrations/046_inscripcion_consentimiento_versionado.sql"
+    },
+    {
+      "id": "047",
+      "file": "migrations/047_inscripcion_datos_atomicos.sql"
+    },
+    {
+      "id": "048",
+      "file": "migrations/048_inscripcion_certificado_atomico.sql"
+    },
+    {
+      "id": "049",
+      "file": "migrations/049_inscripcion_envio_atomico.sql"
+    },
+    {
+      "id": "050",
+      "file": "migrations/050_inscripcion_verificaciones.sql"
+    },
+    {
+      "id": "051",
+      "file": "migrations/051_inscripcion_decisiones.sql"
+    },
+    {
+      "id": "052",
+      "file": "migrations/052_inscripcion_aprobacion.sql"
+    },
+    {
+      "id": "053",
+      "file": "migrations/053_inscripcion_retencion.sql"
+    },
+    {
+      "id": "054",
+      "file": "migrations/054_identidad_presencial.sql"
+    },
+    {
+      "id": "055",
+      "file": "migrations/055_recuperacion_aprobaciones.sql"
+    },
+    {
+      "id": "056",
+      "file": "migrations/056_identidad_presencial_admin.sql"
+    },
+    {
+      "id": "057",
+      "file": "migrations/057_aprobacion_estado_matricula.sql"
+    },
+    {
+      "id": "058",
+      "file": "migrations/058_alumno_etapas_matricula.sql"
+    },
+    {
+      "id": "059",
+      "file": "migrations/059_alumno_reservas_horario.sql"
+    },
+    {
+      "id": "060",
+      "file": "migrations/060_alumno_pagos_atomicos.sql"
+    },
+    {
+      "id": "061",
+      "file": "migrations/061_alumnos_pendientes_solo_activa.sql"
+    },
+    {
+      "id": "062",
+      "file": "migrations/062_pagos_sin_envio_vencidos.sql"
+    },
+    {
+      "id": "063",
+      "file": "migrations/063_inscripcion_datos_obligatorios.sql"
+    },
+    {
+      "id": "065",
+      "file": "migrations/065_contenido_examenes.sql"
+    },
+    {
+      "id": "066a",
+      "file": "migrations/066a_contenido_api_funciones.sql"
+    },
+    {
+      "id": "066b",
+      "file": "migrations/066b_contenido_api_borrado_permisos.sql"
+    },
+    {
+      "id": "067",
+      "file": "migrations/067_examenes_imagenes_preguntas.sql"
+    },
+    {
+      "id": "068",
+      "file": "migrations/068_inscripcion_modelo_base.sql"
+    },
+    {
+      "id": "069",
+      "file": "migrations/069_inscripcion_backfill_trazable.sql"
+    },
+    {
+      "id": "070",
+      "file": "migrations/070_inscripcion_reglas_calendario.sql"
+    },
+    {
+      "id": "071",
+      "file": "migrations/071_inscripcion_reservas_capacidad.sql"
+    },
+    {
+      "id": "072",
+      "file": "migrations/072_inscripcion_pagos_conciliacion.sql"
+    },
+    {
+      "id": "073",
+      "file": "migrations/073_cohortes_administracion.sql"
+    },
+    {
+      "id": "074",
+      "file": "migrations/074_matriculas_acceso_individual.sql"
+    },
+    {
+      "id": "075",
+      "file": "migrations/075_lista_espera_notificaciones.sql"
+    },
+    {
+      "id": "076",
+      "file": "migrations/076_cambio_plan_atomico.sql"
+    },
+    {
+      "id": "077",
+      "file": "migrations/077_reasignacion_masiva_cancelacion.sql"
+    },
+    {
+      "id": "078",
+      "file": "migrations/078_facturacion_cola_manual.sql"
+    },
+    {
+      "id": "079",
+      "file": "migrations/079_solicitudes_identidad_archivo.sql"
+    },
+    {
+      "id": "080",
+      "file": "migrations/080_identidad_tipo_numero.sql"
+    }
+  ],
+  "excluded": [
+    "migrations/064_precio_por_tipo_curso.sql"
+  ],
+  "finalIntegration": {
+    "preflight": "docs/operations/cohortes-lote11-preflight.sql",
+    "apply": "docs/operations/cohortes-lote11-integracion.sql",
+    "verify": "docs/operations/cohortes-lote11-verificacion.sql",
+    "rollback": "docs/operations/cohortes-lote11-rollback.sql"
+  },
+  "activateRules": false
+}
