@@ -15,8 +15,8 @@ begin
  if precio_a_centavos is null or precio_b_centavos is null or admin_1 is null or admin_2 is null or actor is null then
    raise exception 'Completar precios A/B, ADMIN 1, ADMIN 2 y actor; ningún dato fue cargado';end if;
  if admin_1=admin_2 then raise exception 'Los dos administradores deben ser distintos';end if;
- if exists(select 1 from unnest(array[admin_1,admin_2,actor]) id
-   where not exists(select 1 from public.users u where u.id=id and u.rol='admin' and u.activo)) then
+ if exists(select 1 from unnest(array[admin_1,admin_2,actor]) as candidates(candidate_id)
+   where not exists(select 1 from public.users u where u.id=candidates.candidate_id and u.rol='admin' and u.activo)) then
    raise exception 'Identidades administrativas no válidas o inactivas';end if;
  if exists(select 1 from public.course_type_prices) then raise exception 'Precios ya configurados: usar cambio auditado, no recargar';end if;
  insert into public.course_type_prices(tipo,precio_centavos,updated_by,motivo)

@@ -48,7 +48,7 @@ test('indicadores apagados, permisos/precios vacíos y 12 combinaciones configur
 test('backfill usa última fecha efectiva del plan, nunca fin elegido o cohorte, y conserva versiones', async () => {
   const before = (
     await db.query(
-      'select id,updated_at,monto_total,monto_abonado,practice_plan from public.enrollments order by id',
+      'select id,student_id,course_id,course_type,cohort_id,updated_at,monto_total,monto_abonado,practice_plan from public.enrollments order by id',
     )
   ).rows;
   await backfill();
@@ -68,7 +68,7 @@ test('backfill usa última fecha efectiva del plan, nunca fin elegido o cohorte,
   expect(
     (
       await db.query(
-        'select id,updated_at,monto_total,monto_abonado,practice_plan from public.enrollments order by id',
+        'select id,student_id,course_id,course_type,cohort_id,updated_at,monto_total,monto_abonado,practice_plan from public.enrollments order by id',
       )
     ).rows,
   ).toEqual(before);
@@ -290,6 +290,13 @@ test('script de datos falla sin valores y carga solo dos admins explícitos con 
     .replace('admin_1 uuid := null', "admin_1 uuid := '10000000-0000-0000-0000-000000000001'")
     .replace('admin_2 uuid := null', "admin_2 uuid := '10000000-0000-0000-0000-000000000002'")
     .replace('actor uuid := null', "actor uuid := '10000000-0000-0000-0000-000000000001'");
+  const studentInsteadOfAdmin = configured.replace(
+    "admin_2 uuid := '10000000-0000-0000-0000-000000000002'",
+    "admin_2 uuid := '10000000-0000-0000-0000-000000000010'",
+  );
+  await expect(db.exec(studentInsteadOfAdmin)).rejects.toThrow('no válidas o inactivas');
+  await db.exec('rollback');
+  expect((await db.query('select * from public.course_type_prices')).rows).toEqual([]);
   await db.exec(configured);
   expect(
     (await db.query('select count(*)::int n from public.enrollment_admin_permissions')).rows[0],
