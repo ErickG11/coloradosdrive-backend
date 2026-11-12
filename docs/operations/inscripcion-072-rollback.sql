@@ -1,0 +1,20 @@
+begin;
+set local lock_timeout='5s';
+do $$ begin
+ if exists(select 1 from public.enrollment_rule_flags where enabled or(implemented and key not in ('date_rules','capacity','reservations','prices','payments'))) then raise exception 'Revertir lotes posteriores y apagar indicadores';end if;
+ if exists(select 1 from public.payments where estado in ('pendiente','revision') and reservation_id in(select id from public.student_schedule_reservations where admission_rule_version='070')) then raise exception 'Resolver pagos nuevos antes de revertir';end if;
+end $$;
+drop function public.claim_payment_reconciliation();
+drop function public.finish_payment_reconciliation(uuid,uuid,text);
+drop function public.begin_student_payment(uuid,uuid,text,uuid,integer,integer,uuid,text);
+alter function private.legacy072_begin_student_payment(uuid,uuid,text,uuid,integer,integer,uuid,text) rename to begin_student_payment;
+alter function private.begin_student_payment(uuid,uuid,text,uuid,integer,integer,uuid,text) set schema public;
+drop function public.claim_payment_dispatch(uuid);
+alter function private.legacy072_claim_payment_dispatch(uuid) rename to claim_payment_dispatch;
+alter function private.claim_payment_dispatch(uuid) set schema public;
+drop function public.confirm_student_payment(uuid,text,text,text,bigint,text,text,text);
+alter function private.legacy072_confirm_student_payment(uuid,text,text,text,bigint,text,text,text) rename to confirm_student_payment;
+alter function private.confirm_student_payment(uuid,text,text,text,bigint,text,text,text) set schema public;
+update public.enrollment_rule_flags set enabled=false,implemented=false where key='payments';
+notify pgrst,'reload schema';
+commit;

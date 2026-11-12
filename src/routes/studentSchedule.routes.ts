@@ -89,7 +89,37 @@ studentScheduleRouter.use((req, _res, next) => {
   }
   next();
 });
-studentScheduleRouter.get('/horario/config',readLimit,asyncHandler(async(req,res)=>{subject(req);res.json(await studentPlanRules(supabaseAdmin));}));
+studentScheduleRouter.get(
+  '/horario/config',
+  readLimit,
+  asyncHandler(async (req, res) => {
+    subject(req);
+    res.json(await studentPlanRules(supabaseAdmin));
+  }),
+);
+studentScheduleRouter.post(
+  '/horario/calendario',
+  readLimit,
+  planValidators(false),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const input = matchedData<StudentScheduleInput & { enrollmentId: string }>(req, {
+      locations: ['body'],
+    });
+    res.json(await service.calendar(subject(req), input.enrollmentId, input));
+  }),
+);
+studentScheduleRouter.get(
+  '/reserva/matricula/:enrollmentId',
+  readLimit,
+  param('enrollmentId').isUUID(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const { enrollmentId } = matchedData<{ enrollmentId: string }>(req, { locations: ['params'] });
+    const reserva = await service.currentForEnrollment(subject(req), enrollmentId);
+    res.json({ reserva, serverNow: reserva?.serverNow ?? new Date().toISOString() });
+  }),
+);
 studentScheduleRouter.post(
   '/horario/opciones',
   readLimit,

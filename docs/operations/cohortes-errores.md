@@ -1,21 +1,50 @@
 # Errores de cohortes e inscripción
 
-SQL usa P7000 con el código estable en message y metadatos controlados en detail.
-La API devuelve el código de dominio, estado HTTP y mensaje en español; nunca detalles
-internos a alumnos. Autenticación/permiso/propiedad preceden a reglas de negocio.
-No registrar nombre, correo, cédula, documentos, tokens ni tarjeta.
+SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, HTTP y mensaje al alumno; no devuelve los detalles SQL. No registrar nombres, correos, documentos, tokens ni tarjetas.
 
 | Código | Causa | HTTP | Alumno | Administrador | Acción |
 | --- | --- | --- | --- | --- | --- |
-| PLAN_CONFIG_NO_DISPONIBLE | Configuración no disponible | 503 | No se pudo consultar el plan. Intenta nuevamente. | Verificar catálogo y permisos del backend | Restablecer configuración y reintentar |
-| PLAN_ENTRADA_INVALIDA | Formato/modalidad/horas fuera de rango | 400 | Revisa la fecha, modalidad y horas de tu plan. | Deben ser 15 horas, 1–6 por día, 06:00–22:00 | Corregir campos |
-| PLAN_INICIO_PASADO | Inicio anterior al día local | 409 | Elige una fecha de inicio desde hoy. | Inicio efectivo en el pasado | Elegir fecha vigente |
-| PLAN_FRANJA_PASADA | Una franja ya comenzó | 409 | Esa hora ya pasó. Elige una hora posterior. | Deben ser futuras según reloj servidor | Recargar disponibilidad |
-| COHORTE_FECHAS_INVALIDAS | Cadena de fechas incompatible | 422 | No se puede utilizar ese período de inscripción. | inicio matrícula ≤ fin matrícula ≤ fin curso; inicio curso ≤ fin curso | Ajustar fechas conjuntamente |
+| PLAN_CONFIG_NO_DISPONIBLE | No se pudo leer la configuración del plan | 503 | No se pudo consultar el plan. Intenta nuevamente. | La configuración de reglas no está disponible. | Verificar la configuración y reintentar. |
+| PLAN_ENTRADA_INVALIDA | Formato, modalidad u horas fuera de rango | 400 | Revisa la fecha, modalidad y horas de tu plan. | El plan debe tener 15 horas, de 1 a 6 por día y franjas de 06:00 a 22:00. | Corregir los campos indicados y volver a consultar. |
+| PLAN_INICIO_PASADO | Primera fecha anterior al día de Guayaquil | 409 | Elige una fecha de inicio desde hoy. | El inicio efectivo del plan está en el pasado. | Seleccionar una fecha vigente. |
+| PLAN_FRANJA_PASADA | Alguna franja ya comenzó | 409 | Esa hora ya pasó. Elige una hora posterior. | Todas las franjas deben ser posteriores al instante del servidor. | Recargar disponibilidad y elegir otra hora. |
+| COHORTE_FECHAS_INVALIDAS | Cadena de fechas inválida | 422 | No se puede utilizar ese período de inscripción. | Debe cumplirse inicio de matrícula ≤ fin de matrícula ≤ fin del curso e inicio del curso ≤ fin del curso. | Ajustar las fechas relacionadas en una sola operación. |
+| PLAN_OPCION_NO_OFERTADA | La combinación de modalidad y horas no está habilitada. | 422 | La combinación de modalidad y horas no está habilitada. | La combinación de modalidad y horas no está habilitada. | Elegir otra combinación o aprobar su configuración. |
+| RESERVA_MATRICULA_AJENA | No puedes operar sobre esa inscripción. | 403 | No puedes operar sobre esa inscripción. | No puedes operar sobre esa inscripción. | Comprobar el usuario autenticado y la pertenencia de la matrícula. |
+| RESERVA_CUENTA_NO_HABILITADA | Tu cuenta no está habilitada para reservar. | 403 | Tu cuenta no está habilitada para reservar. | Tu cuenta no está habilitada para reservar. | Revisar el estado y la verificación de la cuenta. |
+| RESERVA_ESTADO_NO_PERMITIDO | Tu inscripción no permite reservar en este momento. | 409 | Tu inscripción no permite reservar en este momento. | Tu inscripción no permite reservar en este momento. | Consultar la inscripción y su reserva vigente. |
+| RESERVA_LIMITE_EXPIRADAS | Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar. | 429 | Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar. | Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar. | Revisar el límite diario y la espera configurada. |
+| RESERVA_RECURSO_OCUPADO | Una hora acaba de ocuparse. Consulta otro horario. | 409 | Una hora acaba de ocuparse. Consulta otro horario. | Una hora acaba de ocuparse. Consulta otro horario. | Recargar la disponibilidad completa antes de reservar. |
+| RESERVA_SOLAPE_PROPIO | Ya tienes una práctica en ese horario. | 409 | Ya tienes una práctica en ese horario. | Ya tienes una práctica en ese horario. | Elegir sesiones que no se solapen con tu agenda. |
+| RESERVA_SIN_HORARIOS | No hay horarios disponibles para ese plan. | 409 | No hay horarios disponibles para ese plan. | No hay horarios disponibles para ese plan. | Cambiar fecha, modalidad u hora; solicitar aviso de apertura. |
+| RESERVA_ACCION_INVALIDA | La acción solicitada no es válida. | 400 | La acción solicitada no es válida. | La acción solicitada no es válida. | Usar una operación de reserva permitida. |
+| RESERVA_REGLAS_INACTIVAS | La nueva modalidad de reserva aún no está disponible. | 409 | La nueva modalidad de reserva aún no está disponible. | La nueva modalidad de reserva aún no está disponible. | Comprobar los indicadores y sus dependencias. |
+| RESERVA_NO_AMPLIABLE | Esta reserva no permite ampliar el tiempo. | 409 | Esta reserva no permite ampliar el tiempo. | Esta reserva no permite ampliar el tiempo. | Continuar con el pago o elegir otro horario. |
+| RESERVA_NO_ENCONTRADA | No encontramos esa reserva. | 404 | No encontramos esa reserva. | No encontramos esa reserva. | Consultar las reservas de esta inscripción. |
+| CAPACIDAD_CONFIG_REQUERIDA | La escuela debe configurar la disponibilidad antes de reservar. | 503 | La escuela debe configurar la disponibilidad antes de reservar. | La escuela debe configurar la disponibilidad antes de reservar. | Configurar explícitamente el número global de vehículos. |
+| CAPACIDAD_CUPO_AGOTADO | No hay disponibilidad durante todas las fechas del plan. | 409 | No hay disponibilidad durante todas las fechas del plan. | No hay disponibilidad durante todas las fechas del plan. | Consultar la ocupación por intervalo y elegir otras fechas. |
+| CAPACIDAD_HISTORICO_PENDIENTE | La escuela debe revisar las fechas de esta inscripción. | 409 | La escuela debe revisar las fechas de esta inscripción. | La escuela debe revisar las fechas de esta inscripción. | Resolver el preflight con evidencia y excepción auditada. |
+| CAPACIDAD_INSTRUCTOR_NO_DISPONIBLE | El instructor ya no está disponible. Consulta otro horario. | 409 | El instructor ya no está disponible. Consulta otro horario. | El instructor ya no está disponible. Consulta otro horario. | Revisar la vigencia y disponibilidad del instructor. |
+| CAPACIDAD_VEHICULOS_AGOTADA | No quedan recursos disponibles en esa hora. | 409 | No quedan recursos disponibles en esa hora. | No quedan recursos disponibles en esa hora. | Revisar prácticas simultáneas y vehículos globales. |
+| PAGO_PRECIO_NO_CONFIGURADO | El precio aún no está disponible. Contacta con la escuela. | 503 | El precio aún no está disponible. Contacta con la escuela. | El precio aún no está disponible. Contacta con la escuela. | Cargar el precio por tipo mediante el script explícito aprobado. |
+| PAGO_EN_PROCESO | El pago sigue en proceso. Espera su resultado y no pagues de nuevo. | 409 | El pago sigue en proceso. Espera su resultado y no pagues de nuevo. | El pago sigue en proceso. Espera su resultado y no pagues de nuevo. | Consultar el proveedor o conciliar antes de liberar recursos. |
+| PAGO_ENTRADA_INVALIDA | Revisa los datos del intento de pago. | 400 | Revisa los datos del intento de pago. | Revisa los datos del intento de pago. | Verificar proveedor, identificador e importes. |
+| PAGO_CUENTA_NO_HABILITADA | Tu cuenta no está habilitada para pagar. | 403 | Tu cuenta no está habilitada para pagar. | Tu cuenta no está habilitada para pagar. | Revisar la cuenta antes de iniciar un pago nuevo. |
+| PAGO_IDEMPOTENCIA_CONFLICTO | El intento corresponde a otra operación. Consulta el estado del pago. | 409 | El intento corresponde a otra operación. Consulta el estado del pago. | El intento corresponde a otra operación. Consulta el estado del pago. | Comprobar la clave idempotente y sus entidades. |
+| PAGO_INTENTO_PENDIENTE | Ya hay un pago pendiente o recibido. No pagues otra vez. | 409 | Ya hay un pago pendiente o recibido. No pagues otra vez. | Ya hay un pago pendiente o recibido. No pagues otra vez. | Resolver el intento existente antes de crear otro. |
+| PAGO_NO_ENCONTRADO | No encontramos ese pago. | 404 | No encontramos ese pago. | No encontramos ese pago. | Consultar el intento asociado a la inscripción. |
+| PAGO_REFERENCIA_CONFLICTO | La respuesta del pago requiere revisión. No pagues otra vez. | 409 | La respuesta del pago requiere revisión. No pagues otra vez. | La respuesta del pago requiere revisión. No pagues otra vez. | Conciliar la referencia con el intento original. |
+| PAGO_RESERVA_INVALIDA | La reserva no permite iniciar este pago. Consulta su estado. | 409 | La reserva no permite iniciar este pago. Consulta su estado. | La reserva no permite iniciar este pago. Consulta su estado. | Comprobar retenciones, estado y precio fijado. |
+| PAGO_RESERVA_NO_ENCONTRADA | No encontramos la reserva de ese pago. | 404 | No encontramos la reserva de ese pago. | No encontramos la reserva de ese pago. | Revisar la reserva y la pertenencia del intento. |
+| PAGO_APROBADO_SIN_RECURSOS | Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo. | 409 | Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo. | Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo. | Resolver la asignación o documentar la devolución; no simular reembolsos. |
+| PAGO_ACTIVACION_REVISION | La escuela está revisando la asignación de tu pago. | 409 | La escuela está revisando la asignación de tu pago. | La escuela está revisando la asignación de tu pago. | Revisar el pago y las prácticas retenidas antes de resolver. |
+| PERMISO_REQUERIDO | No tienes permiso para realizar esta operación. | 403 | No tienes permiso para realizar esta operación. | No tienes permiso para realizar esta operación. | Solicitar el permiso específico a un administrador autorizado. |
 
-## Alertas
+## Alertas implementadas (L3)
 
-El lote 2 no crea workers ni alertas nuevas: no hay proceso periódico nuevo que pueda
-atascarse. Las alertas operativas del contrato se integrarán en notificaciones/panel
-existentes en los lotes que introduzcan sus causas. No se crea un módulo nuevo.
-La guía de cada lote incluye cómo provocar sus errores y alertas.
+| Código | Severidad | Destinatario | Causa y acción | Deduplicación/cierre |
+| --- | --- | --- | --- | --- |
+| PAGO_CONCILIACION_NO_OPERATIVA | Alta | view_payments_invoices | Consulta de Kushki no disponible; revisar referencia en proveedor | Usuario+código+pago; 1 día, RESUELTO cierra |
+| PAGO_DESPACHADO_INCIERTO | Alta | view_payments_invoices | Despacho sin resultado; no liberar ni volver a cobrar | Usuario+código+pago; 1 día, RESUELTO cierra |
+
+Reproducción manual y restablecimiento: [guía L3](cohortes-lote3.md). Las alertas de causas introducidas en lotes posteriores se añadirán con sus reglas; no hay un módulo paralelo de alertas.
