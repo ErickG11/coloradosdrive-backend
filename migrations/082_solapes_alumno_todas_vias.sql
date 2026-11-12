@@ -149,7 +149,11 @@ do $released$ declare definition text;begin
  definition:=pg_get_functiondef('public.released_practice_slots_for_student(uuid)'::regprocedure);
  definition:=replace(definition,'return v_result;', $body$
  if private.enrollment_rule_enabled('reservations') then
- select coalesce(jsonb_agg(item||jsonb_build_object('conflict',private.own_schedule_conflict_v12(p_student_id,array[(item->>'scheduledAt')::timestamptz])) order by item->>'scheduledAt',item->>'id'),'[]'::jsonb) into v_result from jsonb_array_elements(v_result) item;
+ select coalesce(jsonb_agg(item||jsonb_build_object('conflict',case when item->>'caso'='B' then
+ (select case when count(*) filter(where candidate_conflict is null)>0 then null else (jsonb_agg(candidate_conflict))->0 end from (
+ select private.own_schedule_conflict_v12(p_student_id,array[(item->>'scheduledAt')::timestamptz],null,null,source_id::uuid) candidate_conflict
+ from jsonb_array_elements_text(item->'practicasASoltarIds') source_id) candidates)
+ else private.own_schedule_conflict_v12(p_student_id,array[(item->>'scheduledAt')::timestamptz]) end) order by item->>'scheduledAt',item->>'id'),'[]'::jsonb) into v_result from jsonb_array_elements(v_result) item;
  end if;
  return v_result;$body$);execute definition;
 end $released$;
