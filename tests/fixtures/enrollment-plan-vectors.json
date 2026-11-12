@@ -1,0 +1,98 @@
+[
+  {
+    "modalidad": "entre_semana",
+    "horasPorDia": 1,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-16",
+    "sesiones": 15,
+    "fin": "2026-12-04"
+  },
+  {
+    "modalidad": "entre_semana",
+    "horasPorDia": 2,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-16",
+    "sesiones": 8,
+    "fin": "2026-11-25"
+  },
+  {
+    "modalidad": "entre_semana",
+    "horasPorDia": 3,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-16",
+    "sesiones": 5,
+    "fin": "2026-11-20"
+  },
+  {
+    "modalidad": "entre_semana",
+    "horasPorDia": 4,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-16",
+    "sesiones": 4,
+    "fin": "2026-11-19"
+  },
+  {
+    "modalidad": "entre_semana",
+    "horasPorDia": 5,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-16",
+    "sesiones": 3,
+    "fin": "2026-11-18"
+  },
+  {
+    "modalidad": "entre_semana",
+    "horasPorDia": 6,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-16",
+    "sesiones": 3,
+    "fin": "2026-11-18"
+  },
+  {
+    "modalidad": "fin_de_semana",
+    "horasPorDia": 1,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-21",
+    "sesiones": 15,
+    "fin": "2027-01-09"
+  },
+  {
+    "modalidad": "fin_de_semana",
+    "horasPorDia": 2,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-21",
+    "sesiones": 8,
+    "fin": "2026-12-13"
+  },
+  {
+    "modalidad": "fin_de_semana",
+    "horasPorDia": 3,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-21",
+    "sesiones": 5,
+    "fin": "2026-12-05"
+  },
+  {
+    "modalidad": "fin_de_semana",
+    "horasPorDia": 4,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-21",
+    "sesiones": 4,
+    "fin": "2026-11-29"
+  },
+  {
+    "modalidad": "fin_de_semana",
+    "horasPorDia": 5,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-21",
+    "sesiones": 3,
+    "fin": "2026-11-28"
+  },
+  {
+    "modalidad": "fin_de_semana",
+    "horasPorDia": 6,
+    "horaInicio": 6,
+    "fechaInicio": "2026-11-21",
+    "sesiones": 3,
+    "fin": "2026-11-28"
+  }
+]

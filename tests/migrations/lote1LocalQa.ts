@@ -1,3 +1,4 @@
+import { approvedMigrations } from '../helpers/migrationManifest';
 import { createInterface } from 'node:readline';
 import { writeFileSync } from 'node:fs';
 import { EmbeddedPostgres } from '../helpers/embeddedPostgres';
@@ -19,7 +20,13 @@ async function main(): Promise<void> {
       const command = value.trim();
       if (command === 'exit') break;
       try {
-        if (command === 'reset') {
+        if (/^(apply|verify|rollback) \d{3}[ab]?$/.test(command)) {
+          const [action,id]=command.split(' ');
+          const entry=approvedMigrations().find(e=>e.id===id);
+          if(!entry || !entry.operations) throw new Error('Migración o guion no aprobado');
+          const path=action==='apply' ? `migrations/${entry.file}` : `docs/operations/${entry.operations}-${action==='verify'?'verificacion':'rollback'}.sql`;
+          await db.exec(enrollmentSql(path));
+        } else if (command === 'reset') {
           await db.close();
           db = new EmbeddedPostgres({ btreeGist: true, snapshot: baseline });
         } else if (command === 'preflight' || command === 'export') {
