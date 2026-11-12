@@ -110,6 +110,11 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | SOLICITUD_CORREO_LEASE_INVALIDO | El envío cambió. Consulta su estado antes de reintentar. | 409 | El envío cambió. Consulta su estado antes de reintentar. | El envío cambió. Consulta su estado antes de reintentar. | No finalizar con lease ajeno o vencido. |
 | SOLICITUD_RETENCION_INVALIDA | Revisa los plazos y el motivo de retención. | 400 | Revisa los plazos y el motivo de retención. | Revisa los plazos y el motivo de retención. | Usar días enteros positivos; aprobadas/archivadas se conservan, rechazadas puede heredar configuración. |
 | SOLICITUD_ACCESO_REVOCADO | Tu acceso requiere revisión de la escuela. | 403 | Tu acceso requiere revisión de la escuela. | Tu acceso requiere revisión de la escuela. | Revisar revocación e identidad; no cobrar ni devolver automáticamente. |
+| DOCUMENTO_TIPO_INVALIDO | Selecciona cédula, pasaporte u otro documento. | 400 | Selecciona cédula, pasaporte u otro documento. | Selecciona cédula, pasaporte u otro documento. | Usar un tipo del catálogo; no inferirlo del número. |
+| DOCUMENTO_NUMERO_INVALIDO | Revisa el número y el tipo de documento. | 400 | Revisa el número y el tipo de documento. | Revisa el número y el tipo de documento. | Cédula ecuatoriana con verificador válido; pasaporte/otro de 3 a 30 letras ASCII, números o guion, sin espacios interiores. |
+| DOCUMENTO_DUPLICADO | Ese documento ya está registrado para el mismo tipo. | 409 | Ese documento ya está registrado para el mismo tipo. | Ese documento ya está registrado para el mismo tipo. | Buscar por tipo y número; tipos distintos pueden compartir número. |
+| DOCUMENTO_REGLAS_INACTIVAS | Ese tipo de documento todavía no está habilitado en línea. | 409 | Ese tipo de documento todavía no está habilitado en línea. | Ese tipo de documento todavía no está habilitado en línea. | Activar únicamente después de migración, permisos, QA y autorización operativa. |
+| DOCUMENTO_ESTADO_NO_EDITABLE | El documento no se puede cambiar en este estado. | 409 | El documento no se puede cambiar en este estado. | El documento no se puede cambiar en este estado. | Devolver para corrección antes de modificar; conservar evidencia/verificaciones anteriores. |
 
 ## Alertas implementadas (L3)
 
@@ -131,3 +136,5 @@ L7: rechazos de cambio, reasignación y cancelación: [QA L7](cohortes-lote7.md)
 L8: FACTURA_ENCOLADO_FALLIDO y FACTURA_PENDIENTE (alta, view_payments_invoices), evento por documento/pago y usuario, enfriamiento 1 día; cierre al recuperar cola/registrar autorización. [Reproducción y reset L8](cohortes-lote8.md).
 
 L9: SOLICITUD_REVOCADA_CON_PAGO y SOLICITUD_CORREO_ATASCADO (alta, verify_identity), usuario+código+solicitud, enfriamiento 1 día; correo se cierra al entregar. El caso pagado conserva revisión hasta resolución administrativa. [QA L9](cohortes-lote9.md).
+
+L10: DOCUMENTO_* se reproduce/restablece en [QA de documento tipado](cohortes-lote10.md); no añade un módulo de alertas.

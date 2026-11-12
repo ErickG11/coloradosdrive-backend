@@ -1,3 +1,4 @@
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { env } from '../config/env';
@@ -148,6 +149,7 @@ export class EnrollmentLimitsService {
   }
   async publicConfig(): Promise<{
     inscripcionesAbiertas: boolean;
+    documentTypes?: string[];
     cursos: { id: string; tipo: 'A' | 'B'; nombre: string; edadMinima: number }[];
     versionAviso: string;
     versionTerminos: string;
@@ -170,6 +172,9 @@ export class EnrollmentLimitsService {
       });
     return {
       ...settings,
+      documentTypes: (await enrollmentRuleEnabled(this.db, 'foreign_identity'))
+        ? ['cedula', 'pasaporte', 'otro']
+        : ['cedula'],
       cursos: courses.data.map((c) => ({
         id: c.id,
         tipo: c.tipo,

@@ -17,6 +17,7 @@ export interface StudentListResult extends Record<string, unknown> {
   items: {
     id: string;
     cedula: string;
+    document?: { type: string; number: string };
     nombreCompleto: string;
     telefono: string | null;
     activo: boolean;

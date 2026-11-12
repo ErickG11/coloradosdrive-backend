@@ -1,3 +1,6 @@
+import { normalizeIdentityDocument, type IdentityDocumentType } from '../utils/identityDocument';
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
+import { cohortError, translateCohortSqlError } from '../config/cohortErrors';
 import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
@@ -12,7 +15,12 @@ import { MANUAL_MESSAGES as M, manualError } from '../utils/manualEnrollmentRule
 import { assertStudentMutable } from './studentDeletion.service';
 import { manualPracticePlan, type ManualPracticePlan } from '../utils/manualPracticePlan';
 import { SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
-import { applyVotingExemption, normalizeDocuments, validateInitialPayment, type InitialPayment } from '../utils/manualEnrollmentDetails';
+import {
+  applyVotingExemption,
+  normalizeDocuments,
+  validateInitialPayment,
+  type InitialPayment,
+} from '../utils/manualEnrollmentDetails';
 import {
   CohortAssignmentService,
   type AssignCohortForCourseResult,
@@ -29,6 +37,8 @@ interface CatalogEntry {
 interface StudentSearchResult {
   id: string;
   cedula: string;
+  documentType?: IdentityDocumentType;
+  documentNumber?: string;
   nombreCompleto: string;
   correo: string;
   vigentes: { tipo: CourseType; status: string }[];
@@ -51,14 +61,21 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 export function manualEnrollmentError(error: PostgrestError): Error {
+  const domain = translateCohortSqlError(error);
+  if (domain) return domain;
   if (['IR409', '55P03', '40P01', '40001'].includes(error.code))
     return new AppError('El horario cambió o está reservado. Consulta una nueva sugerencia.', 409, {
       code: 'HORARIO_NO_DISPONIBLE',
     });
   if (error.code === 'CD030')
-    return new AppError('El alumno tiene una eliminación pendiente', 409, { code: 'DELETION_PENDING' });
+    return new AppError('El alumno tiene una eliminación pendiente', 409, {
+      code: 'DELETION_PENDING',
+    });
   if (error.code === 'CD023')
-    return new AppError('El instructor dejó de estar disponible. Consulta una nueva sugerencia.', 409);
+    return new AppError(
+      'El instructor dejó de estar disponible. Consulta una nueva sugerencia.',
+      409,
+    );
   // Dos administradores a la vez: la restricción única de cédula identifica el campo.
   // Otras restricciones únicas (matrícula vigente del mismo tipo) conservan el 409 general.
   if (error.code === '23505' && error.message.includes('users_cedula_unique'))
@@ -102,10 +119,10 @@ export class ManualEnrollmentService {
     }));
   }
   async search(actor: string, query: string): Promise<StudentSearchResult[]> {
-    const { data, error } = await this.db.rpc('find_manual_students', {
-      p_actor: actor,
-      p_query: query.trim(),
-    });
+    const args = { p_actor: actor, p_query: query.trim() };
+    const { data, error } = await ((await enrollmentRuleEnabled(this.db, 'foreign_identity'))
+      ? this.db.rpc('find_manual_students_v2', args)
+      : this.db.rpc('find_manual_students', args));
     if (error) throw error;
     const ids = data.map((s) => s.id);
     if (!ids.length) return [];
@@ -117,7 +134,10 @@ export class ManualEnrollmentService {
     if (e) throw e;
     return data.map((s) => ({
       id: s.id,
-      cedula: s.cedula,
+      cedula: s.cedula ?? '',
+      ...('documentType' in s
+        ? { documentType: s.documentType, documentNumber: s.documentNumber }
+        : {}),
       nombreCompleto: s.nombre_completo,
       correo: s.correo,
       vigentes: enrollments
@@ -132,10 +152,26 @@ export class ManualEnrollmentService {
   // instructor o admin solo lo detecta Auth al confirmar.
   async duplicates(
     actor: string,
-    input: { cedula?: string; correo?: string },
+    input: {
+      cedula?: string;
+      correo?: string;
+      documentType?: IdentityDocumentType;
+      documentNumber?: string;
+    },
   ): Promise<{ cedula: boolean; correo: boolean }> {
     let cedula = false;
-    if (input.cedula !== undefined) {
+    if (input.documentNumber !== undefined) {
+      if (!(await enrollmentRuleEnabled(this.db, 'foreign_identity')))
+        throw cohortError('DOCUMENTO_REGLAS_INACTIVAS');
+      const doc = normalizeIdentityDocument(input.documentType ?? 'cedula', input.documentNumber);
+      const result = await this.db
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('identity_document_type', doc.type)
+        .eq('identity_document_number', doc.number);
+      if (result.error) throw result.error;
+      cedula = (result.count ?? 0) > 0;
+    } else if (input.cedula !== undefined) {
       const { count, error } = await this.db
         .from('users')
         .select('id', { count: 'exact', head: true })
@@ -222,8 +258,7 @@ export class ManualEnrollmentService {
       .eq('id', input.cohortId)
       .maybeSingle();
     if (error) throw error;
-    if (!cohort)
-      throw manualError(M.cohorteNoExiste, 'cohortId', 404, 'COHORT_NOT_FOUND');
+    if (!cohort) throw manualError(M.cohorteNoExiste, 'cohortId', 404, 'COHORT_NOT_FOUND');
     const { data: course, error: ce } = await this.db
       .from('courses')
       .select('tipo')
@@ -272,14 +307,39 @@ export class ManualEnrollmentService {
     id: string,
     input: ManualEnrollmentInput,
   ): Promise<ManualEnrollmentResult> {
+    if (
+      input.student.mode === 'new' &&
+      (input.student.documentType || input.student.documentNumber)
+    ) {
+      const active = await enrollmentRuleEnabled(this.db, 'foreign_identity');
+      const doc = normalizeIdentityDocument(
+        input.student.documentType ?? 'cedula',
+        input.student.documentNumber ?? input.student.cedula,
+      );
+      if (!active && doc.type !== 'cedula') throw cohortError('DOCUMENTO_REGLAS_INACTIVAS');
+      if (active)
+        input = {
+          ...input,
+          student: {
+            ...input.student,
+            documentType: doc.type,
+            documentNumber: doc.number,
+            cedula: doc.type === 'cedula' ? doc.number : '',
+          },
+        };
+    }
     if (input.student.mode === 'existing') await assertStudentMutable(this.db, input.student.id);
     const worker = randomUUID();
     const documents = normalizeDocuments(input.documentos);
     const payment: InitialPayment = input.pago ?? {
-      modalidad: 'abono', descuento: 0, montoAbonado: 0,
+      modalidad: 'abono',
+      descuento: 0,
+      montoAbonado: 0,
     };
     // Ninguna contraseña forma parte del payload ni del registro de idempotencia.
-    const hash = createHash('sha256').update(stable({ ...input, documentos: documents, pago: payment })).digest('hex');
+    const hash = createHash('sha256')
+      .update(stable({ ...input, documentos: documents, pago: payment }))
+      .digest('hex');
     const { data: op, error: re } = await this.db.rpc('reserve_manual_enrollment', {
       p_id: id,
       p_actor: actor,
@@ -332,12 +392,15 @@ export class ManualEnrollmentService {
           );
       } else {
         birthDate = input.student.fechaNacimiento ?? null;
-        const { data: profile, error } = await this.db
-          .from('users')
-          .select('id')
-          .eq('cedula', input.student.cedula)
-          .maybeSingle();
+        let duplicateQuery = this.db.from('users').select('id');
+        duplicateQuery = input.student.documentType
+          ? duplicateQuery
+              .eq('identity_document_type', input.student.documentType)
+              .eq('identity_document_number', input.student.documentNumber!)
+          : duplicateQuery.eq('cedula', input.student.cedula);
+        const { data: profile, error } = await duplicateQuery.maybeSingle();
         if (error) throw error;
+        if (profile && input.student.documentType) throw cohortError('DOCUMENTO_DUPLICADO');
         if (profile)
           throw manualError(M.cedulaDuplicada, 'student.cedula', 409, 'DUPLICATE_CEDULA');
         password = randomBytes(18).toString('base64url');
@@ -376,8 +439,11 @@ export class ManualEnrollmentService {
         p_plan: storedPlan,
         p_scheduled_ats: scheduled,
         p_instructor: input.practice.instructorId ?? null,
-        p_documents: applyVotingExemption(documents, birthDate,
-          DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd')),
+        p_documents: applyVotingExemption(
+          documents,
+          birthDate,
+          DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd'),
+        ),
         p_payment: payment,
       });
       if (we) throw manualEnrollmentError(we);
@@ -435,8 +501,7 @@ export class ManualEnrollmentService {
     }
   }
   private requireInstructor(plan: ManualPracticeInput): string {
-    if (!plan.instructorId)
-      throw manualError(M.instructorObligatorio, 'practice.instructorId');
+    if (!plan.instructorId) throw manualError(M.instructorObligatorio, 'practice.instructorId');
     return plan.instructorId;
   }
   private async updateOperation(

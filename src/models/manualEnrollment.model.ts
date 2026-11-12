@@ -17,6 +17,8 @@ export interface ManualEnrollmentInput {
     | { mode: 'existing'; id: string }
     | {
         mode: 'new';
+        documentType?: 'cedula' | 'pasaporte' | 'otro';
+        documentNumber?: string;
         cedula: string;
         nombreCompleto: string;
         correo: string;

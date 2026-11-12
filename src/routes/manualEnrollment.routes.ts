@@ -1,3 +1,4 @@
+import { normalizeIdentityDocument } from '../utils/identityDocument';
 import { Router, type Request, type Response } from 'express';
 import { body, header, param, query } from 'express-validator';
 import { mailer } from '../config/mailer';
@@ -17,7 +18,12 @@ import { manualPracticePlan, PRACTICE_MESSAGES } from '../utils/manualPracticePl
 import { HORAS_POR_DIA_MESSAGE, isHorasPorDiaValid } from '../utils/practiceHours';
 import { isValidPhone, PHONE_MESSAGE } from '../utils/phone';
 import { AppError } from '../utils/AppError';
-import { DOCUMENT_TYPES, validateDocumentUpdates, type DocumentInput, type InitialPayment } from '../utils/manualEnrollmentDetails';
+import {
+  DOCUMENT_TYPES,
+  validateDocumentUpdates,
+  type DocumentInput,
+  type InitialPayment,
+} from '../utils/manualEnrollmentDetails';
 import { ManualEnrollmentDetailsService } from '../services/manualEnrollmentDetails.service';
 function actor(req: Request): string {
   if (!req.user) throw new AppError('Authentication required', 401);
@@ -29,18 +35,30 @@ const service = new ManualEnrollmentService(supabaseAdmin, new EmailService(mail
 const details = new ManualEnrollmentDetailsService(supabaseAdmin);
 manualEnrollmentRouter.use(asyncHandler(authenticate), requireRole('admin'));
 const isMoney = (value: unknown): boolean =>
-  typeof value === 'number' && Number.isFinite(value) && value >= 0 &&
+  typeof value === 'number' &&
+  Number.isFinite(value) &&
+  value >= 0 &&
   Math.abs(value * 100 - Math.round(value * 100)) < 1e-8;
 const documents = [
-  body('documentos').optional().isArray({ max: DOCUMENT_TYPES.length })
-    .withMessage(M.documentos).bail()
-    .custom((value: unknown) => { validateDocumentUpdates(value as DocumentInput[]); return true; }),
+  body('documentos')
+    .optional()
+    .isArray({ max: DOCUMENT_TYPES.length })
+    .withMessage(M.documentos)
+    .bail()
+    .custom((value: unknown) => {
+      validateDocumentUpdates(value as DocumentInput[]);
+      return true;
+    }),
   body('documentos.*.tipo').isIn(DOCUMENT_TYPES).withMessage(M.documentos),
-  body('documentos.*.estado').isIn(['entregado', 'pendiente', 'no_aplica']).withMessage(M.documentos),
+  body('documentos.*.estado')
+    .isIn(['entregado', 'pendiente', 'no_aplica'])
+    .withMessage(M.documentos),
 ];
 const payment = [
   body('pago').optional().isObject().withMessage(M.pagoObjeto),
-  body('pago.modalidad').if(body('pago').exists()).isIn(['abono', 'completo'])
+  body('pago.modalidad')
+    .if(body('pago').exists())
+    .isIn(['abono', 'completo'])
     .withMessage(M.modalidadPago),
   body('pago.descuento').if(body('pago').exists()).custom(isMoney).withMessage(M.descuento),
   body('pago.montoAbonado').if(body('pago').exists()).custom(isMoney).withMessage(M.montoAbonado),
@@ -100,13 +118,15 @@ const practice = [
 ];
 const newStudent = body('student.mode').equals('new');
 const studentNew = [
-  body('student.cedula')
+  body('student')
     .if(newStudent)
-    .custom((v) => typeof v === 'string' && v.trim() !== '')
-    .withMessage(M.cedulaObligatoria)
-    .bail()
-    .custom((v: string) => isValidCedulaEcuatoriana(v))
-    .withMessage(M.cedula),
+    .custom((value: { cedula?: unknown; documentType?: unknown; documentNumber?: unknown }) => {
+      normalizeIdentityDocument(
+        value.documentType ?? 'cedula',
+        value.documentNumber ?? value.cedula,
+      );
+      return true;
+    }),
   body('student.nombreCompleto')
     .if(newStudent)
     .custom((v) => typeof v === 'string' && v.trim() !== '')
@@ -163,19 +183,38 @@ manualEnrollmentRouter.get(
 manualEnrollmentRouter.post(
   '/duplicates',
   [
-    body().custom((v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v) &&
-      Object.keys(v).every((k) => ['cedula', 'correo'].includes(k)) &&
-      ('cedula' in v || 'correo' in v)).withMessage(M.duplicadosCuerpo),
-    body('cedula').optional().custom((v) => typeof v === 'string' && isValidCedulaEcuatoriana(v))
+    body()
+      .custom(
+        (v: unknown) =>
+          !!v &&
+          typeof v === 'object' &&
+          !Array.isArray(v) &&
+          Object.keys(v).every((k) =>
+            ['cedula', 'correo', 'documentType', 'documentNumber'].includes(k),
+          ) &&
+          ('cedula' in v || 'correo' in v || 'documentNumber' in v),
+      )
+      .withMessage(M.duplicadosCuerpo),
+    body('cedula')
+      .optional()
+      .custom((v) => typeof v === 'string' && isValidCedulaEcuatoriana(v))
       .withMessage(M.cedula),
-    body('correo').optional()
-      .custom((v) => typeof v === 'string' && v.length <= 254).withMessage(M.correoLargo).bail()
-      .isEmail().withMessage(M.correo)
+    body('documentType').optional().isIn(['cedula', 'pasaporte', 'otro']),
+    body('documentNumber').optional().isString().isLength({ min: 3, max: 30 }),
+    body('correo')
+      .optional()
+      .custom((v) => typeof v === 'string' && v.length <= 254)
+      .withMessage(M.correoLargo)
+      .bail()
+      .isEmail()
+      .withMessage(M.correo)
       .normalizeEmail({ gmail_remove_dots: false, gmail_remove_subaddress: false }),
   ],
   validateFields,
   asyncHandler(async (req, res) => {
-    res.json(await service.duplicates(actor(req), req.body as { cedula?: string; correo?: string }));
+    res.json(
+      await service.duplicates(actor(req), req.body as { cedula?: string; correo?: string }),
+    );
   }),
 );
 manualEnrollmentRouter.post(
@@ -204,7 +243,9 @@ manualEnrollmentRouter.post(
     ...practice,
     header('Idempotency-Key').isUUID().withMessage(M.idempotencia),
     body('student.mode').isIn(['new', 'existing']).withMessage(M.studentMode),
-    body('student.id').if(body('student.mode').equals('existing')).isUUID()
+    body('student.id')
+      .if(body('student.mode').equals('existing'))
+      .isUUID()
       .withMessage(M.studentId),
     ...studentNew,
     ...documents,
@@ -219,7 +260,8 @@ manualEnrollmentRouter.post(
 );
 manualEnrollmentRouter.get(
   '/:enrollmentId/details',
-  [param('enrollmentId').isUUID()], validate,
+  [param('enrollmentId').isUUID()],
+  validate,
   asyncHandler(async (req, res) => {
     res.json(await details.get(req.params.enrollmentId));
   }),
@@ -228,15 +270,25 @@ manualEnrollmentRouter.patch(
   '/:enrollmentId/details',
   [
     param('enrollmentId').isUUID(),
-    body().custom((value: unknown) => !!value && typeof value === 'object' &&
-      Object.keys(value).length > 0 &&
-      Object.keys(value).every((key) => ['documentos', 'pago'].includes(key))),
+    body().custom(
+      (value: unknown) =>
+        !!value &&
+        typeof value === 'object' &&
+        Object.keys(value).length > 0 &&
+        Object.keys(value).every((key) => ['documentos', 'pago'].includes(key)),
+    ),
     ...documents,
     ...payment,
-  ], validate,
+  ],
+  validate,
   asyncHandler(async (req, res) => {
-    res.json(await details.update(actor(req), req.params.enrollmentId,
-      req.body as { documentos?: DocumentInput[]; pago?: InitialPayment }));
+    res.json(
+      await details.update(
+        actor(req),
+        req.params.enrollmentId,
+        req.body as { documentos?: DocumentInput[]; pago?: InitialPayment },
+      ),
+    );
   }),
 );
 manualEnrollmentRouter.get(

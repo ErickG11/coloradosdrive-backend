@@ -14,7 +14,7 @@ Ramas: feat/cohortes-reglas-inscripcion en ambos repositorios. Sin push ni bases
 | 7 | Completo | 5 escenarios SQL OK, calendario y guard de pago incluidos; tipos ambos OK; rollback/reaplicación 076–077 OK. |
 | 8 | Completo | 4 escenarios locales OK: único, fallo aislado, reintento, rollback/reaplicación; tipos ambos OK; proveedor fiscal pendiente. |
 | 9 | Completo | 4 escenarios nativos OK, dos revisores reales, aprobación/archivo, ambas revocaciones, retención heredada, rollback/reaplicación; tipos ambos OK. |
-| 10 | Pendiente | Documento por tipo/número |
+| 10 | Completo | 2 escenarios locales agrupados OK: pares tipados, solicitud/aprobación real y representante, backfill trazable, rollback/reaplicación; tipos ambos OK. |
 | 11 | Pendiente | Integración, privacidad, permisos, errores/alertas y cierre |
 
 Los 14 indicadores enabled=false por defecto y al cierre. implemented solo cambia al pasar su lote.

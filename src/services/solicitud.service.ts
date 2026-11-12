@@ -1,3 +1,4 @@
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
 import { createHash, randomInt } from 'node:crypto';
 import { EnrollmentLimitsService } from './enrollmentLimits.service';
 import type { EnrollmentSummary } from '../models/enrollmentLimits.model';
@@ -22,7 +23,11 @@ import { NIVELES_ESTUDIOS, type NivelEstudios } from '../config/enrollmentCatalo
 import { env } from '../config/env';
 import { enrollmentRateKey } from '../utils/enrollmentRateKey';
 import { normalizeEnrollmentEmail, requireKnownFields } from '../utils/enrollmentSanitization';
-import { validateCertificateSubtype, validateEnrollmentData, validateVerificationCode } from '../utils/enrollmentValidation';
+import {
+  validateCertificateSubtype,
+  validateEnrollmentData,
+  validateVerificationCode,
+} from '../utils/enrollmentValidation';
 import { signSolicitudToken } from '../utils/solicitudToken';
 import type { AccountService } from './account.service';
 import type { CohortAssignmentService } from './cohortAssignment.service';
@@ -39,7 +44,7 @@ export const MAX_CODE_ATTEMPTS = env.ENROLLMENT_FAILED_CODES_PER_EMAIL_DAILY_CAP
 // que es falsificable. Es solo para rechazar temprano lo obviamente no
 // permitido; la decisión de seguridad real es detectFileType() sobre el
 // contenido ya bufferizado, más abajo en subirDocumento().
-export const ALLOWED_MIMETYPES = ['image/jpeg','image/png','application/pdf'];
+export const ALLOWED_MIMETYPES = ['image/jpeg', 'image/png', 'application/pdf'];
 
 function hashCode(code: string): string {
   return createHash('sha256').update(code).digest('hex');
@@ -68,34 +73,65 @@ export class SolicitudService {
   // Verificación de correo
   // ---------------------------------------------------------------------
   async verificarCorreo(correoInput: string, courseId: string): Promise<void> {
-    const correo=normalizeEnrollmentEmail(correoInput).correo;
-    const code=String(randomInt(0,1_000_000)).padStart(6,'0');
-    const {data,error}=await this.supabase.rpc('emitir_codigo_inscripcion',{
-      p_correo:correo,p_curso:courseId,p_codigo_hash:hashCode(code),
-      p_expira:new Date(Date.now()+CODE_TTL_MINUTES*60000).toISOString(),
-      p_correo_hash:enrollmentRateKey('correo',correo,env.ENROLLMENT_RATE_HMAC_SECRET),
-      p_topes:new EnrollmentLimitsService(this.supabase).topes(),
+    const correo = normalizeEnrollmentEmail(correoInput).correo;
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const { data, error } = await this.supabase.rpc('emitir_codigo_inscripcion', {
+      p_correo: correo,
+      p_curso: courseId,
+      p_codigo_hash: hashCode(code),
+      p_expira: new Date(Date.now() + CODE_TTL_MINUTES * 60000).toISOString(),
+      p_correo_hash: enrollmentRateKey('correo', correo, env.ENROLLMENT_RATE_HMAC_SECRET),
+      p_topes: new EnrollmentLimitsService(this.supabase).topes(),
     });
-    if(error)throw error;
-    if(data?.motivo==='cerradas')throw solicitudError('Las inscripciones están cerradas. Contacta a la escuela.',503,'INSCRIPCIONES_CERRADAS');
-    if(data?.motivo==='limite')throw solicitudError('Se alcanzó el cupo diario de solicitudes. Contacta a la escuela.',429,'CUPO_DIARIO_AGOTADO');
-    if(data?.emitir!==true||!data.correo)return;
-    try {await this.emailService.sendVerificationCodeEmail({to:data.correo,code,expiresInMinutes:CODE_TTL_MINUTES});}
-    catch {logSolicitudFailure('verification_email_failed');}
+    if (error) throw error;
+    if (data?.motivo === 'cerradas')
+      throw solicitudError(
+        'Las inscripciones están cerradas. Contacta a la escuela.',
+        503,
+        'INSCRIPCIONES_CERRADAS',
+      );
+    if (data?.motivo === 'limite')
+      throw solicitudError(
+        'Se alcanzó el cupo diario de solicitudes. Contacta a la escuela.',
+        429,
+        'CUPO_DIARIO_AGOTADO',
+      );
+    if (data?.emitir !== true || !data.correo) return;
+    try {
+      await this.emailService.sendVerificationCodeEmail({
+        to: data.correo,
+        code,
+        expiresInMinutes: CODE_TTL_MINUTES,
+      });
+    } catch {
+      logSolicitudFailure('verification_email_failed');
+    }
   }
 
-  async confirmarCodigo(correoInput:string,codigo:string):Promise<ConfirmarCodigoResult> {
-    const correo=normalizeEnrollmentEmail(correoInput).correo;
+  async confirmarCodigo(correoInput: string, codigo: string): Promise<ConfirmarCodigoResult> {
+    const correo = normalizeEnrollmentEmail(correoInput).correo;
     validateVerificationCode(codigo);
-    const {data,error}=await this.supabase.rpc('confirmar_codigo_inscripcion',{
-      p_correo:correo,p_codigo_hash:hashCode(codigo),
-      p_correo_hash:enrollmentRateKey('correo',correo,env.ENROLLMENT_RATE_HMAC_SECRET),
-      p_topes:new EnrollmentLimitsService(this.supabase).topes(),
+    const { data, error } = await this.supabase.rpc('confirmar_codigo_inscripcion', {
+      p_correo: correo,
+      p_codigo_hash: hashCode(codigo),
+      p_correo_hash: enrollmentRateKey('correo', correo, env.ENROLLMENT_RATE_HMAC_SECRET),
+      p_topes: new EnrollmentLimitsService(this.supabase).topes(),
     });
-    if(error||!data)throw solicitudError('No se pudo comprobar el código. Intenta de nuevo.',503,'VERIFICACION_NO_DISPONIBLE');
-    if(data.resultado==='limite')throw solicitudError('Alcanzaste el máximo diario de intentos. Intenta mañana.',429,'CUPO_DIARIO_AGOTADO');
-    if(data.resultado!=='valido'||!data.id||!data.scope)throw solicitudError('Código inválido o vencido',400,'CODIGO_INVALIDO_O_VENCIDO');
-    return {solicitudId:data.id,token:signSolicitudToken(data.id,undefined,data.scope)};
+    if (error || !data)
+      throw solicitudError(
+        'No se pudo comprobar el código. Intenta de nuevo.',
+        503,
+        'VERIFICACION_NO_DISPONIBLE',
+      );
+    if (data.resultado === 'limite')
+      throw solicitudError(
+        'Alcanzaste el máximo diario de intentos. Intenta mañana.',
+        429,
+        'CUPO_DIARIO_AGOTADO',
+      );
+    if (data.resultado !== 'valido' || !data.id || !data.scope)
+      throw solicitudError('Código inválido o vencido', 400, 'CODIGO_INVALIDO_O_VENCIDO');
+    return { solicitudId: data.id, token: signSolicitudToken(data.id, undefined, data.scope) };
   }
 
   // ---------------------------------------------------------------------
@@ -120,7 +156,12 @@ export class SolicitudService {
         503,
         'CURSO_NO_DISPONIBLE',
       );
-    const validated = validateEnrollmentData(input, course.data.edad_minima);
+    const validated = validateEnrollmentData(
+      input,
+      course.data.edad_minima,
+      new Date(),
+      await enrollmentRuleEnabled(this.supabase, 'foreign_identity'),
+    );
     // Lista explícita: nombreCompleto lo deriva el trigger, nunca el cliente.
     const { data, error } = await this.supabase.rpc('guardar_datos_inscripcion', {
       p_id: solicitudId,
@@ -129,7 +170,11 @@ export class SolicitudService {
       p_datos: {
         nombres: validated.nombres,
         apellidos: validated.apellidos,
-        cedula: validated.cedula,
+        cedula:
+          validated.documentType && validated.documentType !== 'cedula' ? null : validated.cedula,
+        ...(validated.documentType
+          ? { documentType: validated.documentType, documentNumber: validated.documentNumber }
+          : {}),
         fechaNacimiento: validated.fechaNacimiento,
         telefono: validated.telefono,
         nacionalidadTipo: validated.nacionalidadTipo,
@@ -203,10 +248,18 @@ export class SolicitudService {
       throw solicitudError('Verifica tu correo', 403, 'CORREO_NO_VERIFICADO');
     const nivel = solicitud.nivel_estudios;
     if (!nivel || !solicitud.datos_actualizados_at || !(nivel in NIVELES_ESTUDIOS))
-      throw solicitudError('Completa tus datos y tu nivel de estudios primero', 409, 'DATOS_REQUERIDOS');
+      throw solicitudError(
+        'Completa tus datos y tu nivel de estudios primero',
+        409,
+        'DATOS_REQUERIDOS',
+      );
     const config = NIVELES_ESTUDIOS[nivel as NivelEstudios];
     if (config.archivo === 'ninguno')
-      throw solicitudError('Tu nivel de estudios no requiere archivo', 409, 'NIVEL_NO_REQUIERE_ARCHIVO');
+      throw solicitudError(
+        'Tu nivel de estudios no requiere archivo',
+        409,
+        'NIVEL_NO_REQUIERE_ARCHIVO',
+      );
     const subtipo = validateCertificateSubtype(nivel as NivelEstudios, fields.subtipo);
     const prepared = await prepareCertificate(file);
     return new SolicitudCertificateStorage(this.supabase).save(
@@ -220,7 +273,9 @@ export class SolicitudService {
   // ---------------------------------------------------------------------
   // Panel del admin
   // ---------------------------------------------------------------------
-  async resumen():Promise<EnrollmentSummary>{return new EnrollmentLimitsService(this.supabase).summary();}
+  async resumen(): Promise<EnrollmentSummary> {
+    return new EnrollmentLimitsService(this.supabase).summary();
+  }
 
   // ---------------------------------------------------------------------
   // Helpers

@@ -40,7 +40,9 @@ function toEnrollment(row: EnrollmentRow): Enrollment {
 function toUserProfile(row: UserRow): UserProfile {
   return {
     id: row.id,
-    cedula: row.cedula,
+    cedula: row.cedula ?? '',
+    documentType: row.identity_document_type,
+    documentNumber: row.identity_document_number,
     nombreCompleto: row.nombre_completo,
     telefono: row.telefono,
     rol: row.rol,
