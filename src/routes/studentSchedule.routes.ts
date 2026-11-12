@@ -1,3 +1,4 @@
+import { studentPlanRules } from '../services/studentPlanRules.service';
 import { createHmac } from 'node:crypto';
 import { Router } from 'express';
 import { body, matchedData, param, type ValidationChain } from 'express-validator';
@@ -88,6 +89,7 @@ studentScheduleRouter.use((req, _res, next) => {
   }
   next();
 });
+studentScheduleRouter.get('/horario/config',readLimit,asyncHandler(async(req,res)=>{subject(req);res.json(await studentPlanRules(supabaseAdmin));}));
 studentScheduleRouter.post(
   '/horario/opciones',
   readLimit,

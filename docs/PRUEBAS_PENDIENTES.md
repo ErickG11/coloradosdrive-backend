@@ -75,3 +75,8 @@ su reactivación queda pendiente del cierre autorizado. Se conserva su estado or
 [resultados reales](operations/cohortes-lote1-resultados.md).
 Los grupos futuros añadirán guía manual antes de su entrega. Nunca se marcará
 una prueba manual como ejecutada sin haberla realizado.
+
+## Autorización posterior de pasada continua
+
+Lotes 2 al 11 autorizados sin paradas por grupos. Esta instrucción sustituye la
+agrupación anterior. Mantener solo pruebas obligatorias y tipos; no activar indicadores.

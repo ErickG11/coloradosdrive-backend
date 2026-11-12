@@ -35,7 +35,7 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
   const path = mountedPath.replace(/\/+$/, '');
   if (
     method === 'GET' &&
-    ['/estudiantes/estado-inscripcion', '/estudiantes/account-status', '/notifications'].includes(
+    ['/estudiantes/estado-inscripcion', '/estudiantes/account-status', '/notifications', '/estudiantes/inscripcion/horario/config'].includes(
       path,
     )
   )

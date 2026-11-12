@@ -75,3 +75,9 @@ export interface StudentSchedulePreview {
   diasFallan: string[];
   factible: boolean;
 }
+
+export interface StudentPlanRules {
+  active: boolean; serverNow: string;
+  options: { modalidad: 'entre_semana'|'fin_de_semana'; horasPorDia: number; habilitada: boolean;
+    sesiones: number; primeraFecha: string; ultimaFecha: string; }[];
+}
