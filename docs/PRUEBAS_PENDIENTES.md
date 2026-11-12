@@ -86,3 +86,5 @@ Lote 5: pruebas de componentes del selector A/B, cambio con respuestas tardías,
 Lote 6: automatización de Avísame/WhatsApp, filtro y contadores, diálogo N=0/N>0 y reintento de correo diferida; riesgo de interacción, codificación, foco y presentación de entrega frente a cola. Guía manual en operations/cohortes-lote6.md.
 
 Lote 7: componentes de calendario/cambio individual, contador de propuesta, selección masiva/destino, confirmación de capacidad, cancelación y mensajes/foco diferidos; guía manual en operations/cohortes-lote7.md. Atomicidad y conservación del original verificadas en SQL.
+
+Lote 8: formularios del pagador, estado fiscal, registro de autorización existente, reintento y devolución documentada en ficha: componentes/accesibilidad diferidos; riesgo de interpretar cola como emisión o reembolso; QA manual en operations/cohortes-lote8.md.

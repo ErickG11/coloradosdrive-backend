@@ -1,3 +1,4 @@
+import { studentBillingRouter } from './billing.routes';
 import { planChangeRouter } from './planChange.routes';
 import { param } from 'express-validator';
 import { individualEnrollmentAccess } from '../services/individualEnrollmentAccess.service';
@@ -31,6 +32,7 @@ export const estudianteRouter = Router();
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
 estudianteRouter.use('/inscripcion/pagos', studentPaymentRouter);
 estudianteRouter.use('/inscripcion/cambio', planChangeRouter);
+estudianteRouter.use('/inscripcion/facturacion', studentBillingRouter);
 estudianteRouter.use('/inscripcion', studentScheduleRouter);
 // Solo lectura: el alumno con cuenta no sube documentos; los físicos se llevan a la escuela.
 const estadoInscripcion = new StudentEnrollmentStatusService(supabaseAdmin);

@@ -1,3 +1,5 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+import type { BillingState, BillingClaim } from '../models/billing.model';
 import type {
   PlanChangeState,
   PlanChangePreview,
@@ -121,6 +123,41 @@ export interface Database {
       };
     };
     Functions: {
+      billing_state_v2: {
+        Args: { p_student: string; p_actor?: string | null };
+        Returns: BillingState;
+      };
+      save_billing_profile_v2: {
+        Args: { p_student: string; p_profile: Json; p_actor?: string | null };
+        Returns: BillingState;
+      };
+      claim_billing_v2: { Args: Record<string, never>; Returns: BillingClaim | null };
+      finish_billing_v2: {
+        Args: { p_document: string; p_token: string; p_result: string };
+        Returns: boolean;
+      };
+      admin_billing_action_v2: {
+        Args: {
+          p_actor: string;
+          p_document: string;
+          p_version: string;
+          p_action: string;
+          p_data: Json;
+        };
+        Returns: BillingState;
+      };
+      document_refund_v2: {
+        Args: {
+          p_actor: string;
+          p_payment: string;
+          p_key: string;
+          p_amount: number;
+          p_reason: string;
+          p_reference: string;
+        };
+        Returns: BillingState;
+      };
+
       student_plan_change_calendar_v2: {
         Args: {
           p_student: string;
