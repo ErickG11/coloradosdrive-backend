@@ -90,7 +90,7 @@ export class StudentAdminService {
       });
       if (filtered.error)
         throw translateCohortSqlError(filtered.error) ?? databaseError(filtered.error);
-      return filtered.data;
+      return this.withPaymentStatuses(actor, filtered.data);
     }
     const { data, error } = await this.db.rpc('list_admin_students', {
       p_actor: actor,
@@ -105,7 +105,27 @@ export class StudentAdminService {
       p_page_size: query.pageSize,
     });
     if (error) throw databaseError(error);
-    return data;
+    return this.withPaymentStatuses(actor, data);
+  }
+
+  private async withPaymentStatuses(
+    actor: string,
+    page: StudentListResult,
+  ): Promise<StudentListResult> {
+    if (!(await enrollmentRuleEnabled(this.db, 'identity')) || !page.items.length) return page;
+    const result = await this.db.rpc('student_payment_statuses_v2', {
+      p_actor: actor,
+      p_students: page.items.map((row) => row.id),
+    });
+    if (result.error) {
+      if (result.error.code === 'P7000' && result.error.message === 'PERMISO_REQUERIDO')
+        return page;
+      throw databaseError(result.error);
+    }
+    return {
+      ...page,
+      items: page.items.map((row) => ({ ...row, paymentStatus: result.data[row.id] })),
+    };
   }
 
   private async user(id: string): Promise<UserRow> {

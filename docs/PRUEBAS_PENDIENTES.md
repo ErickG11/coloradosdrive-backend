@@ -88,3 +88,5 @@ Lote 6: automatización de Avísame/WhatsApp, filtro y contadores, diálogo N=0/
 Lote 7: componentes de calendario/cambio individual, contador de propuesta, selección masiva/destino, confirmación de capacidad, cancelación y mensajes/foco diferidos; guía manual en operations/cohortes-lote7.md. Atomicidad y conservación del original verificadas en SQL.
 
 Lote 8: formularios del pagador, estado fiscal, registro de autorización existente, reintento y devolución documentada en ficha: componentes/accesibilidad diferidos; riesgo de interpretar cola como emisión o reembolso; QA manual en operations/cohortes-lote8.md.
+
+Lote 9: UI de reclamación/renovación, modo/escaneo, archivo, revocación confirmada, correo en cola/reintento, retención y columna de pago diferidas; riesgos de interacción, foco y presentación. QA manual en operations/cohortes-lote9.md. Nueve pruebas omitidas preexistentes intactas.

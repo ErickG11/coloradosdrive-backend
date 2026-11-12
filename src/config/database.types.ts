@@ -1,3 +1,8 @@
+import type {
+  RequestReviewState,
+  RequestRetentionPolicy,
+  RequestEmailClaim,
+} from '../models/requestReview.model';
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 import type { BillingState, BillingClaim } from '../models/billing.model';
 import type {
@@ -82,7 +87,13 @@ export type StudentStatus =
   | 'rechazado'
   | 'expirado';
 export type SolicitudEstado =
-  'pendiente_revision' | 'borrador' | 'enviada' | 'devuelta' | 'aprobada' | 'rechazada';
+  | 'pendiente_revision'
+  | 'borrador'
+  | 'enviada'
+  | 'devuelta'
+  | 'aprobada'
+  | 'rechazada'
+  | 'archivada';
 export type SolicitudTipoDocumento =
   'cedula' | 'papeleta_votacion' | 'tipo_sangre' | 'titulo_bachiller' | 'certificado_estudios';
 export type SolicitudDocumentoEstado = 'recibido' | 'aprobado' | 'rechazado';
@@ -123,6 +134,55 @@ export interface Database {
       };
     };
     Functions: {
+      student_payment_statuses_v2: {
+        Args: { p_actor: string; p_students: string[] };
+        Returns: Record<string, string>;
+      };
+      assert_identity_permission_v2: { Args: { p_actor: string }; Returns: undefined };
+      retry_request_emails_v2: {
+        Args: { p_actor: string; p_id: string; p_reason: string };
+        Returns: number;
+      };
+      request_review_v2: {
+        Args: { p_actor: string; p_id: string; p_claim?: boolean };
+        Returns: RequestReviewState;
+      };
+      register_request_verification_v2: {
+        Args: {
+          p_actor: string;
+          p_id: string;
+          p_token: string;
+          p_type: string;
+          p_method: string;
+          p_result: string;
+          p_note: string;
+          p_mode: string;
+          p_scan?: Json;
+        };
+        Returns: Record<string, unknown>;
+      };
+      revoke_request_approval_v2: {
+        Args: { p_actor: string; p_id: string; p_version: string; p_reason: string };
+        Returns: RequestReviewState;
+      };
+      request_retention_config_v2: {
+        Args: Record<string, never>;
+        Returns: RequestRetentionPolicy | null;
+      };
+      set_request_retention_v2: {
+        Args: { p_actor: string; p_policy: Json; p_reason: string };
+        Returns: RequestRetentionPolicy;
+      };
+      claim_request_email_v2: { Args: Record<string, never>; Returns: RequestEmailClaim | null };
+      finish_request_email_v2: {
+        Args: { p_id: string; p_token: string; p_sent: boolean };
+        Returns: boolean;
+      };
+      mark_verification_scan_deleted_v2: {
+        Args: { p_id: string; p_path: string };
+        Returns: boolean;
+      };
+
       billing_state_v2: {
         Args: { p_student: string; p_actor?: string | null };
         Returns: BillingState;
@@ -1183,6 +1243,8 @@ export interface Database {
       };
       users: {
         Row: {
+          identity_access_blocked_at: string | null;
+          billing_profile: Json;
           id: string;
           cedula: string;
           nombre_completo: string;
@@ -1636,6 +1698,13 @@ export interface Database {
       };
       solicitudes_inscripcion: {
         Row: {
+          review_owner: string | null;
+          review_until: string | null;
+          updated_at: string;
+          archived_at: string | null;
+          linked_enrollment_id: string | null;
+          revoked_at: string | null;
+          revocation_payment_review: boolean;
           datos_actualizados_at: string | null;
           correo_normalizado: string;
           nombres: string | null;
@@ -1711,6 +1780,12 @@ export interface Database {
       };
       solicitud_verificaciones: {
         Row: {
+          mode: string | null;
+          scan_path: string | null;
+          scan_mime: string | null;
+          scan_sha256: string | null;
+          scan_size: number | null;
+          scan_deleted_at: string | null;
           id: string;
           solicitud_id: string;
           tipo: 'identidad' | 'estudios';

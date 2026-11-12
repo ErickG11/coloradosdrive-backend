@@ -1,3 +1,4 @@
+import { startRequestEmailCron } from './jobs/requestEmailCron';
 import { startBillingCron } from './jobs/billingCron';
 import { startPaymentReconciliationCron } from './jobs/paymentReconciliationCron';
 import { startPaymentWelcomeCron } from './jobs/paymentWelcomeCron';
@@ -22,6 +23,7 @@ if (process.env.DISABLE_CRON !== 'true') {
   startPaymentWelcomeCron();
   startPaymentReconciliationCron();
   startBillingCron();
+  startRequestEmailCron();
   startSolicitudCleanupCron();
   startSolicitudApprovalRecoveryCron();
 } else {

@@ -1,3 +1,4 @@
+import { translateCohortSqlError } from '../config/cohortErrors';
 import { AppError } from './AppError';
 import { MENSAJE_DATOS_DUPLICADOS } from '../config/enrollmentCatalog';
 
@@ -29,9 +30,15 @@ export function solicitudError(message: string, status: number, code: string): A
 }
 
 export function normalizeSolicitudError(error: Error): Error {
+  const domain = translateCohortSqlError(error);
+  if (domain) return domain;
   const sql = 'code' in error ? error.code : undefined;
   const map: Partial<Record<string, [number, string, string]>> = {
-    IE409: [409, 'APROBACION_REQUIERE_ACTUALIZACION', 'La aprobación requiere el backend actualizado. Recarga antes de reintentar.'],
+    IE409: [
+      409,
+      'APROBACION_REQUIERE_ACTUALIZACION',
+      'La aprobación requiere el backend actualizado. Recarga antes de reintentar.',
+    ],
     SI404: [404, 'NO_ENCONTRADO', 'La solicitud o el documento no existe'],
     SI401: [403, 'CORREO_NO_VERIFICADO', 'Verifica tu correo'],
     SI410: [409, 'SOLICITUD_ENVIADA', 'La solicitud ya fue enviada'],
@@ -50,9 +57,17 @@ export function normalizeSolicitudError(error: Error): Error {
     SI427: [400, 'FECHA_INVALIDA', 'Ingresa una fecha de nacimiento real y no futura.'],
     SI428: [503, 'CURSO_NO_DISPONIBLE', 'El curso no está disponible. Contacta a la escuela.'],
     SI429: [409, 'DATOS_NO_REGISTRADOS', MENSAJE_DATOS_DUPLICADOS],
-    SI436: [400, 'TELEFONO_INVALIDO', 'Ingresa un teléfono local: celular de 10 dígitos (09) o convencional de 9 (02 a 07).'],
+    SI436: [
+      400,
+      'TELEFONO_INVALIDO',
+      'Ingresa un teléfono local: celular de 10 dígitos (09) o convencional de 9 (02 a 07).',
+    ],
     SI437: [400, 'NIVEL_ESTUDIOS_INVALIDO', 'Selecciona un nivel de estudios vigente.'],
-    SI435: [409, 'ESTADO_INCORRECTO', 'Esta acción no corresponde al estado actual de tu solicitud.'],
+    SI435: [
+      409,
+      'ESTADO_INCORRECTO',
+      'Esta acción no corresponde al estado actual de tu solicitud.',
+    ],
     SI433: [
       409,
       'DATOS_CAMBIARON',
@@ -74,7 +89,11 @@ export function normalizeSolicitudError(error: Error): Error {
       'No se requieren datos del representante para una persona adulta.',
     ],
     // B1 (F15): requisitos de aprobación.
-    SI460: [409, 'CEDULA_DUPLICADA', 'Ya existe un usuario o una solicitud activa con esta cédula.'],
+    SI460: [
+      409,
+      'CEDULA_DUPLICADA',
+      'Ya existe un usuario o una solicitud activa con esta cédula.',
+    ],
     SI461: [
       409,
       'IDENTIDAD_NO_VERIFICADA',
@@ -111,6 +130,10 @@ export function normalizeSolicitudError(error: Error): Error {
   if (code === 'SI409')
     return solicitudError('La solicitud está cerrada o en resolución', 409, 'SOLICITUD_CERRADA');
   if (code === 'SI403')
-    return solicitudError('Acepta el aviso y los términos vigentes', 409, 'CONSENTIMIENTO_REQUERIDO');
+    return solicitudError(
+      'Acepta el aviso y los términos vigentes',
+      409,
+      'CONSENTIMIENTO_REQUERIDO',
+    );
   return error;
 }
