@@ -8,8 +8,8 @@ Ramas: feat/cohortes-reglas-inscripcion en ambos repositorios. Sin push ni bases
 | 1 | Aprobado y reaplicación verificada | 14 pruebas OK; 068 y 069 se revierten y reaplican sin borrar datos. |
 | 2 | Completo | 16 casos TS/SQL y tipos OK; 12 combinaciones parametrizadas; interfaz detrás del indicador. |
 | 3 | Completo; integración final pendiente en 11 | 10 escenarios nativos OK, tipos ambos OK, F45 001–072 sin errores; rollback/reaplicación OK. |
-| 4 | En preparación | Cohortes y precios |
-| 5 | Pendiente | Matrículas y acceso |
+| 4 | Completo | 6 escenarios SQL OK, manifiesto limpio 073 y rollback/reaplicación OK; tipos ambos OK. |
+| 5 | En preparación | Matrículas y acceso |
 | 6 | Pendiente | Espera y avisos |
 | 7 | Pendiente | Cambios y reasignaciones |
 | 8 | Pendiente | Facturación cola/manual |

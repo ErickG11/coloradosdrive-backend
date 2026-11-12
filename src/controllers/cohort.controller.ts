@@ -13,7 +13,7 @@ import { CohortService } from '../services/cohort.service';
 const cohortService = new CohortService(supabaseAdmin);
 
 export async function createCohort(req: Request, res: Response<Cohort>): Promise<void> {
-  const cohort = await cohortService.createCohort(req.body as CreateCohortInput);
+  const cohort = await cohortService.createCohort(req.body as CreateCohortInput, req.user?.id);
   res.status(201).json(cohort);
 }
 
@@ -28,7 +28,11 @@ export async function getCohort(req: Request, res: Response<CohortDetail>): Prom
 }
 
 export async function updateCohort(req: Request, res: Response<Cohort>): Promise<void> {
-  const cohort = await cohortService.updateCohort(req.params.id, req.body as UpdateCohortInput);
+  const cohort = await cohortService.updateCohort(
+    req.params.id,
+    req.body as UpdateCohortInput,
+    req.user?.id,
+  );
   res.status(200).json(cohort);
 }
 

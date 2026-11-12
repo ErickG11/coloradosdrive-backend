@@ -1,5 +1,10 @@
 export interface Cohort {
   id: string;
+  codigo?: string | null;
+  habilitada?: boolean;
+  estado?: 'matricula_abierta' | 'matricula_cerrada_en_curso' | 'terminada';
+  cierreMatricula?: string;
+  rulesActive?: boolean;
   courseId: string;
   nombre: string;
   precio: number;
@@ -17,6 +22,8 @@ export interface Cohort {
 }
 
 export interface CreateCohortInput {
+  habilitada?: boolean;
+  reason?: string;
   courseId: string;
   nombre: string;
   precio: number;

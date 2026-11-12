@@ -112,6 +112,36 @@ export interface Database {
       };
     };
     Functions: {
+      write_cohort_v2: {
+        Args: {
+          p_actor: string;
+          p_id: string | null;
+          p_version: string | null;
+          p_input: Record<string, unknown>;
+          p_reason: string;
+        };
+        Returns: Database['public']['Tables']['cohorts']['Row'];
+      };
+      cohort_admin_config_v2: {
+        Args: { p_actor: string };
+        Returns: {
+          active: boolean;
+          serverNow?: string;
+          vehiculos?: number | null;
+          prices?: { tipo: 'A' | 'B'; centavos: number }[];
+          pricesActive?: boolean;
+          capacityActive?: boolean;
+        };
+      };
+      set_course_type_price_v2: {
+        Args: { p_actor: string; p_type: 'A' | 'B'; p_cents: number; p_reason: string };
+        Returns: undefined;
+      };
+      set_vehicle_capacity_v2: {
+        Args: { p_actor: string; p_count: number; p_reason: string };
+        Returns: { vehiculos: number; horasSobreLimite: number };
+      };
+
       student_schedule_calendar_v2: {
         Args: {
           p_student: string;
