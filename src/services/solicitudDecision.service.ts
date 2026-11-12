@@ -1,3 +1,4 @@
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
@@ -18,7 +19,8 @@ import { SolicitudApprovalService } from './solicitudApproval.service';
 
 export interface DecisionResult {
   id: string;
-  estado: 'devuelta' | 'rechazada' | 'aprobada';
+  estado: 'devuelta' | 'rechazada' | 'aprobada' | 'archivada';
+  correoEncolado?: boolean;
   studentId: string | null;
   etapa?: 'por_agendar';
   cohorte?: { id: string; nombre: string } | null;
@@ -75,6 +77,8 @@ export class SolicitudDecisionService {
     });
     if (error) throw normalizeSolicitudError(error);
     if (!data) throw solicitudError('No se pudo devolver.', 503, 'SERVICIO_NO_DISPONIBLE');
+    if (await enrollmentRuleEnabled(this.db, 'identity'))
+      return { id, estado: 'devuelta', studentId: null, correoEncolado: true };
     let correoEnviado = true;
     try {
       await this.email.sendApplicationReturnedEmail({ to: data.correo });
@@ -116,6 +120,8 @@ export class SolicitudDecisionService {
     if (error) throw normalizeSolicitudError(error);
     if (!data) throw solicitudError('No se pudo rechazar.', 503, 'SERVICIO_NO_DISPONIBLE');
     const result: DecisionResult = { id, estado: 'rechazada', studentId: null };
+    if (await enrollmentRuleEnabled(this.db, 'identity'))
+      return { ...result, correoEncolado: motivo !== 'SPAM' };
     // DATOS_INCONSISTENTES_O_FALSOS y SPAM no envían correo.
     if (MOTIVOS_RECHAZO[motivo].enviarCorreo) {
       try {
@@ -133,7 +139,7 @@ export class SolicitudDecisionService {
     const r = await this.approval.aprobar(id, actor);
     return {
       id,
-      estado: 'aprobada',
+      estado: (await enrollmentRuleEnabled(this.db, 'identity')) ? 'archivada' : 'aprobada',
       studentId: r.studentId,
       etapa: r.etapa,
       cohorte: r.cohorte,

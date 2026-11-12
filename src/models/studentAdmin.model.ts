@@ -21,6 +21,7 @@ export interface StudentListResult extends Record<string, unknown> {
     telefono: string | null;
     activo: boolean;
     createdAt: string;
+    paymentStatus?: string;
     requirements?: { pending: string[]; unavailable: string[] };
     matchingEnrollments: {
       id: string;

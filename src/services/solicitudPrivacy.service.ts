@@ -98,6 +98,7 @@ export class SolicitudPrivacyService {
     courseId: string;
     curso: { id: string; tipo: 'A' | 'B'; nombre: string; edadMinima: number } | null;
     estado: string;
+    revokedAt?: string | null;
     enviadaAt: string | null;
     correoVerificado: boolean;
     identidadVerificada: boolean;
@@ -198,6 +199,7 @@ export class SolicitudPrivacyService {
           }
         : null,
       estado: row.estado,
+      revokedAt: row.revoked_at,
       enviadaAt: row.enviada_at ?? null,
       correoVerificado: row.correo_verificado,
       identidadVerificada: identidad.data?.resultado === 'verificado',

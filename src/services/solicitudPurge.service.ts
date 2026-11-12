@@ -27,7 +27,7 @@ export class SolicitudPurgeService {
     // El admin no ve borradores; su existencia no se revela.
     if (actor && row.estado === 'borrador')
       throw solicitudError('La solicitud no existe', 404, 'NO_ENCONTRADO');
-    if (row.estado === 'aprobada')
+    if (row.estado === 'aprobada' || row.estado === 'archivada')
       throw solicitudError('Una solicitud aprobada no se puede eliminar', 409, 'SOLICITUD_CERRADA');
     // Enviada o devuelta con reclamación activa: hay una decisión en curso.
     if (['enviada', 'devuelta'].includes(row.estado) && row.reviewed_at)
@@ -44,7 +44,8 @@ export class SolicitudPurgeService {
       : claimQuery.is('reviewed_at', null);
     const locked = await claimQuery.select('id').maybeSingle();
     if (locked.error) throw locked.error;
-    if (!locked.data) throw solicitudError('La solicitud está en resolución', 409, 'SOLICITUD_CERRADA');
+    if (!locked.data)
+      throw solicitudError('La solicitud está en resolución', 409, 'SOLICITUD_CERRADA');
 
     try {
       const docs = await this.db

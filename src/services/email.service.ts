@@ -400,4 +400,27 @@ export class EmailService {
       text: `Tu solicitud no fue aprobada. Motivo: ${params.motivo}\nPuedes contactar a la escuela para más información.`,
     });
   }
+  async sendRequestStateEmail(event: {
+    id: string;
+    to: string;
+    kind: 'devuelta' | 'rechazada' | 'archivada' | 'revocada';
+  }): Promise<void> {
+    const message = {
+      devuelta:
+        'Tu solicitud necesita una corrección. Ingresa con tu correo para consultar su estado.',
+      rechazada:
+        'La revisión de tu solicitud ha finalizado. Ingresa para consultar el resultado o contacta a la escuela.',
+      archivada:
+        'Tu solicitud fue aprobada y su expediente quedó archivado. Recibirás las instrucciones de acceso por separado.',
+      revocada:
+        'El acceso de tu inscripción requiere revisión. Contacta a la escuela para recibir instrucciones.',
+    }[event.kind];
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: event.to,
+      subject: 'Estado de tu inscripción',
+      messageId: `<${event.id}@notifications.coloradosdrive>`,
+      text: `${message} ${env.FRONTEND_URL}/inscripcion`,
+    });
+  }
 }
