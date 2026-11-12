@@ -82,3 +82,5 @@ Lotes 2 al 11 autorizados sin paradas por grupos. Esta instrucción sustituye la
 agrupación anterior. Mantener solo pruebas obligatorias y tipos; no activar indicadores.
 
 Lote 4: automatización de formulario (código/estado/cierre, habilitación, motivo, solo lectura, ayuda de extensión, edición de precios y flota) diferida; riesgo de interacción, accesibilidad y recarga visual cubierto por la guía QA manual del lote 4.
+
+Lote 5: pruebas de componentes del selector A/B, cambio con respuestas tardías, extensión individual y excepción de repetición diferidas. Riesgo: selección visual incorrecta o mensaje no anunciado. Guía manual en operations/cohortes-lote5.md.

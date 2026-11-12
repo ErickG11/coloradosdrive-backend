@@ -1,3 +1,4 @@
+import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router, type Request } from 'express';
 import { assertBirthDate, BIRTH_DATE_MESSAGES } from '../utils/birthDate';
 import { body, param, query } from 'express-validator';
@@ -35,6 +36,73 @@ function actor(req: Request): string {
   return req.user.id;
 }
 
+studentAdminRouter.get(
+  '/:id/matriculas/acceso',
+  param('id').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const flag = await supabaseAdmin
+      .from('enrollment_rule_flags')
+      .select('enabled,implemented')
+      .eq('key', 'enrollment_access')
+      .single();
+    if (flag.error) throwStudentScheduleError(flag.error);
+    if (!flag.data.enabled || !flag.data.implemented) {
+      res.json({ active: false, serverNow: new Date().toISOString(), enrollments: [] });
+      return;
+    }
+    const result = await supabaseAdmin.rpc('admin_enrollment_access_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.set('Cache-Control', 'no-store').json(result.data);
+  }),
+);
+studentAdminRouter.patch(
+  '/:id/matriculas/:enrollmentId/acceso',
+  param('id').isUUID(),
+  param('enrollmentId').isUUID(),
+  body('fin').isISO8601({ strict: true }),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validate,
+  asyncHandler(async (req, res) => {
+    const { fin, motivo } = req.body as { fin: string; motivo: string };
+    const own = await supabaseAdmin.rpc('admin_enrollment_access_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+    });
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data.enrollments.some((e) => e.id === req.params.enrollmentId))
+      throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
+    const result = await supabaseAdmin.rpc('extend_enrollment_access_v2', {
+      p_actor: actor(req),
+      p_enrollment: req.params.enrollmentId,
+      p_end: fin,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/repeticion',
+  param('id').isUUID(),
+  body('courseId').isUUID(),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validate,
+  asyncHandler(async (req, res) => {
+    const { courseId, motivo } = req.body as { courseId: string; motivo: string };
+    const result = await supabaseAdmin.rpc('authorize_repeat_enrollment_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_course: courseId,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.status(201).json({ id: result.data });
+  }),
+);
 const listFields = [
   'q',
   'activo',

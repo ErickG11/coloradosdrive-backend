@@ -81,6 +81,6 @@ export interface PracticeHistoryEnrollment {
   cohortId: string | null;
   courseId: string;
   courseType: 'A' | 'B';
-  status: 'activo' | 'finalizado' | 'retirado' | 'pendiente_cohorte';
+  status: 'activo' | 'finalizado' | 'retirado' | 'anulada' | 'pendiente_cohorte';
   horasObjetivo: number | null;
 }

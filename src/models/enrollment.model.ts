@@ -7,6 +7,7 @@ export const ENROLLMENT_STATUSES = [
   'activo',
   'finalizado',
   'retirado',
+  'anulada',
   'pendiente_cohorte',
 ] as const;
 

@@ -54,6 +54,16 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | PAGO_PRECIO_INVALIDO | Revisa el importe y el motivo del cambio. | 400 | Revisa el importe y el motivo del cambio. | Revisa el importe y el motivo del cambio. | Indicar centavos enteros dentro de 0–999999 y un motivo. |
 | PAGO_PRECIO_CARGA_INICIAL | El precio inicial requiere una carga revisada. | 409 | El precio inicial requiere una carga revisada. | El precio inicial requiere una carga revisada. | Usar exclusivamente la plantilla explícita de precios A/B; nunca 064. |
 | CAPACIDAD_ENTRADA_INVALIDA | Revisa la cantidad de recursos y el motivo. | 400 | Revisa la cantidad de recursos y el motivo. | Revisa la cantidad de recursos y el motivo. | Indicar un entero de 0–1000 y un motivo. |
+| MATRICULA_TIPO_VIGENTE | Ya tienes una matrícula vigente de ese tipo. | 409 | Ya tienes una matrícula vigente de ese tipo. | Ya tienes una matrícula vigente de ese tipo. | Retomar la inscripción existente; A y B pueden coexistir. |
+| MATRICULA_REPETICION_REQUIERE_EXCEPCION | Ya finalizaste ese tipo de curso. La escuela debe autorizar una excepción. | 409 | Ya finalizaste ese tipo de curso. La escuela debe autorizar una excepción. | Ya finalizaste ese tipo de curso. La escuela debe autorizar una excepción. | Registrar motivo y autorización antes de crear la repetición. |
+| MATRICULA_CUENTA_NO_HABILITADA | La cuenta no está habilitada para esta operación. | 403 | La cuenta no está habilitada para esta operación. | La cuenta no está habilitada para esta operación. | Revisar el estado de la cuenta. |
+| MATRICULA_REGLAS_INACTIVAS | La operación individual aún no está habilitada. | 409 | La operación individual aún no está habilitada. | La operación individual aún no está habilitada. | Revisar el indicador de acceso individual. |
+| MATRICULA_NO_ENCONTRADA | No encontramos la matrícula solicitada. | 404 | No encontramos la matrícula solicitada. | No encontramos la matrícula solicitada. | Recargar la ficha del alumno. |
+| MATRICULA_ACCESO_ESTADO_INVALIDO | Las fechas de esta matrícula requieren revisión antes de ampliar el acceso. | 409 | Las fechas de esta matrícula requieren revisión antes de ampliar el acceso. | Las fechas de esta matrícula requieren revisión antes de ampliar el acceso. | Comprobar pago, estado y evidencia de fechas del preflight. |
+| MATRICULA_EXTENSION_INVALIDA | Revisa la fecha y el motivo de la ampliación. | 400 | Revisa la fecha y el motivo de la ampliación. | Revisa la fecha y el motivo de la ampliación. | Solo extender el fin actual con fecha válida y motivo obligatorio. |
+| MATRICULA_REPETICION_ESTADO_INVALIDO | No hay un curso finalizado que permita esta excepción. | 409 | No hay un curso finalizado que permita esta excepción. | No hay un curso finalizado que permita esta excepción. | Revisar las matrículas finalizadas del mismo tipo. |
+| MATRICULA_ROLLBACK_CONVIVENCIA | Hay inscripciones A y B vigentes que deben resolverse antes de desactivar. | 409 | Hay inscripciones A y B vigentes que deben resolverse antes de desactivar. | Hay inscripciones A y B vigentes que deben resolverse antes de desactivar. | No borrar datos: decidir el rollback compatible para los casos exportados. |
+| PAGO_MONTO_NO_COINCIDE | El importe recibido requiere revisión. No pagues nuevamente. | 409 | El importe recibido requiere revisión. No pagues nuevamente. | El importe recibido requiere revisión. No pagues nuevamente. | Conciliar importe y moneda con la instantánea de la reserva. |
 
 ## Alertas implementadas (L3)
 
@@ -65,3 +75,5 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 Reproducción manual y restablecimiento: [guía L3](cohortes-lote3.md). Las alertas de causas introducidas en lotes posteriores se añadirán con sus reglas; no hay un módulo paralelo de alertas.
 
 L4: CAPACIDAD_HORAS_SOBRE_LIMITE (alta, manage_cohorts_prices), una notificación abierta por usuario/código/configuración; al corregir flota se cierra. Reproducción y restablecimiento de los códigos nuevos: [QA L4](cohortes-lote4.md). El nombre duplicado se identifica solo en la respuesta administrativa.
+
+L5: reproducción de todos los rechazos nuevos y restablecimiento en [QA de matrículas](cohortes-lote5.md). Los históricos sin guard conservan el comportamiento anterior hasta aprobar evidencia.
