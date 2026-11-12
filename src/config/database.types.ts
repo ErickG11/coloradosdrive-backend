@@ -135,6 +135,17 @@ export interface Database {
       };
     };
     Functions: {
+      maintain_waitlist_v12: { Args: Record<string, never>; Returns: undefined };
+      schedule_unavailable_v12: {
+        Args: { p_student: string; p_enrollment: string; p_input: Record<string, unknown> };
+        Returns: {
+          codigo: 'SIN_CURSOS_ABIERTOS' | 'SIN_FECHAS_COMPATIBLES' | 'SIN_HORAS_LIBRES';
+          mensaje: string;
+          primeraFechaPosible: null;
+          ultimaFechaInicioPosible: string | null;
+        };
+      };
+
       identity_documents_v2: {
         Args: { p_actor: string; p_students: string[] };
         Returns: Record<string, IdentityDocument>;

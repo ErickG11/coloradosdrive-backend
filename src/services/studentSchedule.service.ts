@@ -70,6 +70,19 @@ export class StudentScheduleService {
     if (flag.error) throw cohortError('PLAN_CONFIG_NO_DISPONIBLE');
     return flag.data.enabled && flag.data.implemented;
   }
+  private async unavailable(
+    studentId: string,
+    enrollmentId: string,
+    input: StudentScheduleSelection,
+  ) {
+    const result = await this.db.rpc('schedule_unavailable_v12', {
+      p_student: studentId,
+      p_enrollment: enrollmentId,
+      p_input: { ...input },
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    return result.data;
+  }
   private async previewNew(
     studentId: string,
     enrollmentId: string,
@@ -107,9 +120,8 @@ export class StudentScheduleService {
       sinCohorte: state.factible
         ? null
         : {
-            codigo: 'SIN_COHORTE_ELEGIBLE',
-            mensaje: state.conflict?.message ?? 'No hay horarios disponibles para ese plan.',
-            primeraFechaPosible: null,
+            ...(await this.unavailable(studentId, enrollmentId, input)),
+            ...(state.conflict ? { mensaje: state.conflict.message } : {}),
           },
       diasFallan: state.diasFallan,
       factible: state.factible,
@@ -354,7 +366,10 @@ export class StudentScheduleService {
             diasFallan: p.diasFallan,
             motivo: p.factible
               ? null
-              : { codigo: 'DIA_SIN_INSTRUCTOR', mensaje: 'Sin disponibilidad para todo el plan.' },
+              : {
+                  codigo: 'DIA_SIN_INSTRUCTOR',
+                  mensaje: p.sinCohorte?.mensaje ?? 'No hay horas libres en esas fechas.',
+                },
           });
         } catch (error) {
           if (
@@ -374,11 +389,7 @@ export class StudentScheduleService {
         cohorte: null,
         sinCohorte: rows.some((r) => r.factible)
           ? null
-          : {
-              codigo: 'SIN_COHORTE_ELEGIBLE',
-              mensaje: 'No hay horarios disponibles.',
-              primeraFechaPosible: null,
-            },
+          : await this.unavailable(studentId, enrollmentId, { ...input, horaInicio: 6 }),
         horas: rows,
       };
     }

@@ -14,6 +14,8 @@ export class NotificationEmailService {
   ) {}
 
   async runOnce(): Promise<void> {
+    const maintained = await this.supabase.rpc('maintain_waitlist_v12');
+    if (maintained.error) throw maintained.error;
     const deadline = Date.now() + 45_000;
     for (let i = 0; i < 20 && Date.now() < deadline; i += 1) {
       const { data, error } = await this.supabase.rpc('claim_notification_email').maybeSingle();
@@ -66,6 +68,7 @@ export class NotificationEmailService {
       await this.email.sendWaitlistAvailabilityEmail({
         to: auth.user.email,
         type: notification.waitlist_type,
+        summary: notification.mensaje,
         messageId: `<${notification.id}@notifications.coloradosdrive>`,
       });
       return;

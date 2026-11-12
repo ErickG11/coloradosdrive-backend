@@ -231,17 +231,21 @@ export class EmailService {
   async sendWaitlistAvailabilityEmail(params: {
     to: string;
     type: 'A' | 'B';
+    summary?: string;
     messageId: string;
   }): Promise<void> {
-    const url = new URL('/student/inscripcion', env.FRONTEND_URL).toString();
-    const text = `Puedes consultar fechas y precio para el tipo ${params.type} en Mi inscripción. La asignación está sujeta a cupos disponibles.`;
+    const url = new URL('/student/inscripcion?paso=2', env.FRONTEND_URL).toString();
+    const unsubscribe = new URL('/student/inscripcion?avisos=retirar', env.FRONTEND_URL).toString();
+    const text =
+      params.summary ??
+      `Puedes consultar fechas y precio para el tipo ${params.type} en Mi inscripción. La asignación está sujeta a cupos disponibles.`;
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to: params.to,
       messageId: params.messageId,
       subject: 'Hay horarios disponibles para tu inscripción',
-      text: `${text}\n${url}`,
-      html: `<p>${escapeHtml(text)}</p><p><a href="${escapeHtml(url)}">Consultar Mi inscripción</a></p>`,
+      text: `${text}\n${url}\nNo recibir más avisos: ${unsubscribe}`,
+      html: `<p>${escapeHtml(text)}</p><p><a href="${escapeHtml(url)}">Elegir horario</a></p><p><a href="${escapeHtml(unsubscribe)}">No recibir más avisos</a></p>`,
     });
   }
 

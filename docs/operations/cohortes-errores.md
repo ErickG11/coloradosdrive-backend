@@ -266,3 +266,5 @@ L10: DOCUMENTO_* se reproduce/restablece en [QA de documento tipado](cohortes-lo
 ## Ajustes D1–D10
 
 RESERVA_SOLAPE_PROPIO indica el curso, fecha y hora de la práctica o reserva propia incompatible, nunca nombre/código de cohorte. CAPACIDAD_VEHICULOS_AGOTADA y CAPACIDAD_VEHICULOS_EXCEDIDA quedan retirados del flujo vigente por D3. MATRICULA_PLAN_REQUERIDO (409): la ruta antigua no recibe el plan individual; usar la caja actualizada. No se requiere configurar vehículos.
+
+L12b: ESPERA_YA_MATRICULADO (409): ya existe matrícula activa/finalizada de ese tipo. SIN_CURSOS_ABIERTOS, SIN_FECHAS_COMPATIBLES y SIN_HORAS_LIBRES explican disponibilidad sin datos de cohorte. ESPERA_APERTURA_FUTURA es una alerta administrativa deduplicada, no un correo automático. ESPERA_REVISION_CONTRATO conserva las marcas de avisos antiguos sin rangos demostrables. Cuota de despacho por persona: máximo configurado de 400 al día, conservadora ante errores del proveedor.
