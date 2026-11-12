@@ -1,3 +1,5 @@
+import { translateCohortSqlError, cohortError as domainCohortError } from '../config/cohortErrors';
+import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { supabaseAdmin } from '../config/supabase';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router } from 'express';
@@ -73,6 +75,38 @@ cohortRouter.patch(
   }),
 );
 
+cohortRouter.post(
+  '/:id/espera/preview',
+  param('id').isUUID(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist'))) {
+      res.json({ count: 0 });
+      return;
+    }
+    const result = await supabaseAdmin.rpc('preview_waitlist_event_v2', {
+      p_actor: req.user!.id,
+      p_cohort: req.params.id,
+    });
+    if (result.error) throw translateCohortSqlError(result.error)??domainCohortError('ESPERA_PREVIEW_NO_DISPONIBLE');
+    res.json(result.data);
+  }),
+);
+cohortRouter.post(
+  '/:id/espera/notificar',
+  param('id').isUUID(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist')))
+      throw domainCohortError('ESPERA_REGLAS_INACTIVAS');
+    const result = await supabaseAdmin.rpc('enqueue_waitlist_event_v2', {
+      p_actor: req.user!.id,
+      p_cohort: req.params.id,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json({ queued: result.data });
+  }),
+);
 type Mode = 'create' | 'update';
 
 // Desfase horario como máximo ±15:59 (PostgreSQL rechaza más con 22009).

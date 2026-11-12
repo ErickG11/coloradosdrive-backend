@@ -1,3 +1,4 @@
+import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router, type Request } from 'express';
 import { assertBirthDate, BIRTH_DATE_MESSAGES } from '../utils/birthDate';
@@ -103,8 +104,41 @@ studentAdminRouter.post(
     res.status(201).json({ id: result.data });
   }),
 );
+studentAdminRouter.get(
+  '/espera/resumen',
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist'))) {
+      res.json({ active: false, A: 0, B: 0 });
+      return;
+    }
+    const result = await supabaseAdmin.rpc('admin_waitlist_counts_v2', { p_actor: actor(req) });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/espera/reintentar',
+  body('tipo').isIn(['A', 'B']),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validate,
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist')))
+      throw new AppError('Los avisos de apertura aún no están habilitados.', 409, {
+        code: 'ESPERA_REGLAS_INACTIVAS',
+      });
+    const { tipo, motivo } = req.body as { tipo: 'A' | 'B'; motivo: string };
+    const result = await supabaseAdmin.rpc('retry_waitlist_emails_v2', {
+      p_actor: actor(req),
+      p_type: tipo,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json({ retried: result.data });
+  }),
+);
 const listFields = [
   'q',
+  'interesadoEn',
   'activo',
   'courseId',
   'cohortId',
@@ -120,6 +154,7 @@ studentAdminRouter.get(
     query().custom((value: Record<string, unknown>) =>
       Object.keys(value).every((k) => listFields.includes(k)),
     ),
+    query('interesadoEn').optional().isIn(['A', 'B']),
     query('q').optional().isString().trim().isLength({ min: 1, max: 80 }),
     ...['activo', 'pendienteCohorte', 'documentosPendientes', 'incluirHistorial'].map((name) =>
       query(name).optional().isIn(['true', 'false']),
@@ -136,6 +171,7 @@ studentAdminRouter.get(
     res.json(
       await service.list(actor(req), {
         q: req.query.q as string | undefined,
+        interesadoEn: req.query.interesadoEn as 'A' | 'B' | undefined,
         courseId: req.query.courseId as string | undefined,
         cohortId: req.query.cohortId as string | undefined,
         activo: boolean('activo'),

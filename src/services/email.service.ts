@@ -64,13 +64,25 @@ function escapeHtml(value: string): string {
 export class EmailService {
   constructor(private readonly transporter: MailTransport) {}
 
-  async sendPaymentWelcomeEmail(params: { to: string; nombreCompleto: string; paymentId: string }): Promise<void> {
+  async sendPaymentWelcomeEmail(params: {
+    to: string;
+    nombreCompleto: string;
+    paymentId: string;
+  }): Promise<void> {
     const url = new URL('/student', env.FRONTEND_URL);
-    const intro = 'Tu pago fue confirmado y tu matrícula ya está activa. Puedes consultar tus prácticas, documentos y exámenes en la plataforma.';
+    const intro =
+      'Tu pago fue confirmado y tu matrícula ya está activa. Puedes consultar tus prácticas, documentos y exámenes en la plataforma.';
     await this.transporter.sendMail({
-      from: env.EMAIL_FROM, to: params.to, subject: 'Bienvenido a ColoradosDrive: tu matrícula está activa',
+      from: env.EMAIL_FROM,
+      to: params.to,
+      subject: 'Bienvenido a ColoradosDrive: tu matrícula está activa',
       messageId: `<pago-bienvenida-${params.paymentId}@${url.hostname}>`,
-      text: [`Hola ${params.nombreCompleto},`, intro, `Ingresar: ${url.toString()}`, 'Recuerda llevar tus documentos físicos antes de tu primera práctica.'].join('\n'),
+      text: [
+        `Hola ${params.nombreCompleto},`,
+        intro,
+        `Ingresar: ${url.toString()}`,
+        'Recuerda llevar tus documentos físicos antes de tu primera práctica.',
+      ].join('\n'),
       html: `<p>Hola ${escapeHtml(params.nombreCompleto)},</p><p>${intro}</p><p><a href="${escapeHtml(url.toString())}">Ingresar a la plataforma</a></p><p>Recuerda llevar tus documentos físicos antes de tu primera práctica.</p>`,
     });
   }
@@ -81,7 +93,9 @@ export class EmailService {
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to: params.to,
-      subject: reset ? 'Restablecimiento de contraseña de instructor' : 'Acceso de instructor a ColoradosDrive',
+      subject: reset
+        ? 'Restablecimiento de contraseña de instructor'
+        : 'Acceso de instructor a ColoradosDrive',
       text: [
         `Hola ${params.nombreCompleto},`,
         ...(reset ? ['Un administrador solicitó restablecer tu contraseña.'] : []),
@@ -96,7 +110,9 @@ export class EmailService {
         ...(reset ? ['<p>Un administrador solicitó restablecer tu contraseña.</p>'] : []),
         '<p>Tus credenciales de instructor son:</p>',
         `<p>Correo: ${escapeHtml(params.to)}<br>Contraseña temporal: <strong>${escapeHtml(params.temporaryPassword)}</strong></p>`,
-        reset ? '<p>Debes cambiarla al ingresar.</p>' : '<p>Debes cambiarla al ingresar por primera vez.</p>',
+        reset
+          ? '<p>Debes cambiarla al ingresar.</p>'
+          : '<p>Debes cambiarla al ingresar por primera vez.</p>',
         `<p><a href="${escapeHtml(login)}">Acceder a ColoradosDrive</a></p>`,
       ].join('\n'),
     });
@@ -194,6 +210,23 @@ export class EmailService {
         `<p>Ya tenemos el resultado de tu examen "${examTitle}":</p>`,
         `<p>Puntaje: <strong>${scoreFormatted}%</strong><br>Resultado: <strong>${resultado}</strong></p>`,
       ].join('\n'),
+    });
+  }
+
+  async sendWaitlistAvailabilityEmail(params: {
+    to: string;
+    type: 'A' | 'B';
+    messageId: string;
+  }): Promise<void> {
+    const url = new URL('/student/inscripcion', env.FRONTEND_URL).toString();
+    const text = `Puedes consultar fechas y precio para el tipo ${params.type} en Mi inscripción. La asignación está sujeta a cupos disponibles.`;
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      messageId: params.messageId,
+      subject: 'Hay horarios disponibles para tu inscripción',
+      text: `${text}\n${url}`,
+      html: `<p>${escapeHtml(text)}</p><p><a href="${escapeHtml(url)}">Consultar Mi inscripción</a></p>`,
     });
   }
 
@@ -313,7 +346,8 @@ export class EmailService {
     const intro = params.reenvio
       ? 'Te enviamos un enlace nuevo para crear tu contraseña de ColoradosDrive.'
       : 'Tu solicitud de inscripción en ColoradosDrive fue aprobada. Crea tu contraseña con este enlace.';
-    const aviso = 'El enlace es de un solo uso y vence pronto. Si no lo solicitaste, ignora este correo.';
+    const aviso =
+      'El enlace es de un solo uso y vence pronto. Si no lo solicitaste, ignora este correo.';
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to: params.to,
@@ -344,10 +378,11 @@ export class EmailService {
   }
 
   async sendApplicationRejectedEmail(params: { to: string; motivo: string }): Promise<void> {
-    await this.transporter.sendMail({ from: env.EMAIL_FROM, to: params.to,
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
       subject: 'Revisión de tu solicitud de ColoradosDrive',
       text: `Tu solicitud no fue aprobada. Motivo: ${params.motivo}\nPuedes contactar a la escuela para más información.`,
     });
   }
-
 }

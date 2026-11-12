@@ -422,6 +422,35 @@ export const COHORT_ERRORS = {
     admin: 'El importe recibido requiere revisión. No pagues nuevamente.',
     action: 'Conciliar importe y moneda con la instantánea de la reserva.',
   },
+  ESPERA_CUENTA_NO_HABILITADA: {
+    status: 403,
+    cause: 'Tu cuenta no está habilitada para solicitar este aviso.',
+    student: 'Tu cuenta no está habilitada para solicitar este aviso.',
+    admin: 'Tu cuenta no está habilitada para solicitar este aviso.',
+    action: 'Revisar el estado de la cuenta.',
+  },
+  ESPERA_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'Los avisos de apertura todavía no están habilitados.',
+    student: 'Los avisos de apertura todavía no están habilitados.',
+    admin: 'Los avisos de apertura todavía no están habilitados.',
+    action: 'Revisar el indicador y sus dependencias.',
+  },
+  ESPERA_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa el tipo de curso y el horario preferido.',
+    student: 'Revisa el tipo de curso y el horario preferido.',
+    admin: 'Revisa el tipo de curso y el horario preferido.',
+    action: 'Usar tipo A/B y preferencias estructuradas válidas.',
+  },
+  ESPERA_PREVIEW_NO_DISPONIBLE: {
+    status: 503,
+    cause: 'No se pudo comprobar el aviso de disponibilidad.',
+    student: 'No se pudo comprobar el aviso de disponibilidad.',
+    admin: 'No se pudo comprobar el aviso de disponibilidad.',
+    action:
+      'La cohorte puede estar guardada: recargar y comprobar disponibilidad antes de notificar.',
+  },
 } as const;
 export type CohortErrorCode = keyof typeof COHORT_ERRORS;
 export function cohortError(code: CohortErrorCode): AppError {

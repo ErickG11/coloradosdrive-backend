@@ -7,9 +7,7 @@ Las suites preexistentes se conservan, pero no se ejecutan indiscriminadamente.
 
 ## Aprobaciones y pruebas que NO se difieren
 
-Orden: **1 → 2+3 → 4+5 → 6+7 → 8+9+10 → 11**. Cada grupo requiere aprobación,
-entrega y parada. Solo está autorizado el lote 1. La siguiente tabla asigna las
-pruebas obligatorias a su implementación; no autoriza ejecutarlas ahora.
+Orden actual: lote 1 aprobado; **lotes 2–11 autorizados en pasada continua**. Esta instrucción sustituye las paradas por grupos. Avanzar únicamente cuando pasan las pruebas obligatorias del lote actual.
 
 | Lote/grupo | Pruebas obligatorias conservadas |
 | --- | --- |
@@ -84,3 +82,5 @@ agrupación anterior. Mantener solo pruebas obligatorias y tipos; no activar ind
 Lote 4: automatización de formulario (código/estado/cierre, habilitación, motivo, solo lectura, ayuda de extensión, edición de precios y flota) diferida; riesgo de interacción, accesibilidad y recarga visual cubierto por la guía QA manual del lote 4.
 
 Lote 5: pruebas de componentes del selector A/B, cambio con respuestas tardías, extensión individual y excepción de repetición diferidas. Riesgo: selección visual incorrecta o mensaje no anunciado. Guía manual en operations/cohortes-lote5.md.
+
+Lote 6: automatización de Avísame/WhatsApp, filtro y contadores, diálogo N=0/N>0 y reintento de correo diferida; riesgo de interacción, codificación, foco y presentación de entrega frente a cola. Guía manual en operations/cohortes-lote6.md.

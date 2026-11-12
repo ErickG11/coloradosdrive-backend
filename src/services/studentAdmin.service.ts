@@ -1,3 +1,6 @@
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
+import { cohortError as domainCohortError } from '../config/cohortErrors';
+import { translateCohortSqlError } from '../config/cohortErrors';
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import type { StudentListQuery, StudentListResult } from '../models/studentAdmin.model';
@@ -77,6 +80,18 @@ export class StudentAdminService {
   ) {}
 
   async list(actor: string, query: StudentListQuery): Promise<StudentListResult> {
+    if (query.interesadoEn) {
+      if (!(await enrollmentRuleEnabled(this.db, 'waitlist')))
+        throw domainCohortError('ESPERA_REGLAS_INACTIVAS');
+      const filtered = await this.db.rpc('list_admin_waitlist_students_v2', {
+        p_actor: actor,
+        p_type: query.interesadoEn,
+        p_filters: { ...query },
+      });
+      if (filtered.error)
+        throw translateCohortSqlError(filtered.error) ?? databaseError(filtered.error);
+      return filtered.data;
+    }
     const { data, error } = await this.db.rpc('list_admin_students', {
       p_actor: actor,
       p_q: query.q ?? null,

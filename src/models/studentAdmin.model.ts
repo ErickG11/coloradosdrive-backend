@@ -1,6 +1,7 @@
 import type { Database } from '../config/database.types';
 
 export interface StudentListQuery {
+  interesadoEn?: 'A' | 'B';
   q?: string;
   activo?: boolean;
   courseId?: string;
