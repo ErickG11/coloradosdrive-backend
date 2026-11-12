@@ -115,6 +115,10 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | DOCUMENTO_DUPLICADO | Ese documento ya está registrado para el mismo tipo. | 409 | Ese documento ya está registrado para el mismo tipo. | Ese documento ya está registrado para el mismo tipo. | Buscar por tipo y número; tipos distintos pueden compartir número. |
 | DOCUMENTO_REGLAS_INACTIVAS | Ese tipo de documento todavía no está habilitado en línea. | 409 | Ese tipo de documento todavía no está habilitado en línea. | Ese tipo de documento todavía no está habilitado en línea. | Activar únicamente después de migración, permisos, QA y autorización operativa. |
 | DOCUMENTO_ESTADO_NO_EDITABLE | El documento no se puede cambiar en este estado. | 409 | El documento no se puede cambiar en este estado. | El documento no se puede cambiar en este estado. | Devolver para corrección antes de modificar; conservar evidencia/verificaciones anteriores. |
+| PAGO_PRECIO_CAMBIO | El precio cambió desde la consulta. Revisa el precio y confirma nuevamente. | 409 | El precio cambió desde la consulta. Revisa el precio y confirma nuevamente. | El precio cambió desde la consulta. Revisa el precio y confirma nuevamente. | Recargar la vista previa; no aceptar un cobro distinto sin confirmación. |
+| CONFIG_DEPENDENCIA_REQUERIDA | La configuración requiere activar sus dependencias en una misma transacción. | 409 | La configuración requiere activar sus dependencias en una misma transacción. | La configuración requiere activar sus dependencias en una misma transacción. | Revisar el orden del guion de activación y conservar todos los indicadores apagados si falla. |
+| CONFIG_OBSERVACION_INVALIDA | El identificador o resultado del trabajo periódico no es válido. | 400 | El identificador o resultado del trabajo periódico no es válido. | El identificador o resultado del trabajo periódico no es válido. | Usar solo el catálogo cerrado de trabajos y estados. |
+| FACTURA_DEVOLUCION_DOCUMENTADA | La reducción de un cobro requiere una devolución documentada. | 409 | La reducción de un cobro requiere una devolución documentada. | La reducción de un cobro requiere una devolución documentada. | Documentar importe, motivo y referencia; no sobrescribir el abono ni simular al proveedor. |
 
 ## Alertas implementadas (L3)
 
@@ -138,3 +142,123 @@ L8: FACTURA_ENCOLADO_FALLIDO y FACTURA_PENDIENTE (alta, view_payments_invoices),
 L9: SOLICITUD_REVOCADA_CON_PAGO y SOLICITUD_CORREO_ATASCADO (alta, verify_identity), usuario+código+solicitud, enfriamiento 1 día; correo se cierra al entregar. El caso pagado conserva revisión hasta resolución administrativa. [QA L9](cohortes-lote9.md).
 
 L10: DOCUMENTO_* se reproduce/restablece en [QA de documento tipado](cohortes-lote10.md); no añade un módulo de alertas.
+
+## Preparación manual de códigos (sin ejecutar)
+
+| Código | Cómo provocarlo en la copia local | HTTP esperado |
+| --- | --- | ---: |
+| PLAN_CONFIG_NO_DISPONIBLE | En la copia, retirar temporalmente SELECT del lector de configuración; abrir Horario y restaurar el GRANT original. | 503 |
+| PLAN_ENTRADA_INVALIDA | Enviar la vista previa con horasPorDia=7 o inicio inválido; repetir con sesión que termine después de las 22:00. | 400 |
+| PLAN_INICIO_PASADO | Solicitar un plan cuya primera fecha efectiva sea ayer en Guayaquil. | 409 |
+| PLAN_FRANJA_PASADA | Elegir hoy y una hora que ya comenzó, conservando el resto del plan válido. | 409 |
+| COHORTE_FECHAS_INVALIDAS | Guardar fin de matrícula posterior al fin del curso; repetir con fin del curso anterior a su inicio. | 422 |
+| PLAN_OPCION_NO_OFERTADA | Solicitar fin de semana y 1 hora/día mientras esa combinación permanezca deshabilitada. | 422 |
+| RESERVA_MATRICULA_AJENA | Con sesión del alumno A, pedir reserva sobre el UUID de matrícula del alumno B. | 403 |
+| RESERVA_CUENTA_NO_HABILITADA | Desactivar el alumno del fixture y ejecutar la operación de este dominio desde el backend local; restaurar la cuenta después. | 403 |
+| RESERVA_ESTADO_NO_PERMITIDO | Intentar reserva inicial de una matrícula ya activa o sin requisitos verificados. | 409 |
+| RESERVA_LIMITE_EXPIRADAS | En la copia crear el límite diario configurado de reservas vencidas del mismo alumno y solicitar otra; repetir durante el cooldown. | 429 |
+| RESERVA_RECURSO_OCUPADO | Consultar un plan libre, ocupar su última franja con otro alumno y confirmar la selección anterior. | 409 |
+| RESERVA_SOLAPE_PROPIO | Mantener una reserva de A y solicitar B en una hora coincidente; repetir con una práctica asignada. | 409 |
+| RESERVA_SIN_HORARIOS | Deshabilitar las candidatas o llenar un día intermedio del intervalo, y solicitar el plan. | 409 |
+| RESERVA_ACCION_INVALIDA | Invocar la RPC de gestión con una acción distinta de las admitidas. | 400 |
+| RESERVA_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| RESERVA_NO_AMPLIABLE | Intentar ampliar una reserva del régimen nuevo, que no admite extensiones. | 409 |
+| RESERVA_NO_ENCONTRADA | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| CAPACIDAD_CONFIG_REQUERIDA | Dejar vehículos globales NULL o sin la carga A/B e intentar activar el grupo de reservas. | 503 |
+| CAPACIDAD_CUPO_AGOTADO | Con el último cupo ocupado un día del rango, confirmar otra matrícula en ese intervalo. | 409 |
+| CAPACIDAD_HISTORICO_PENDIENTE | Usar matrícula histórica activa sin fechas demostrables al intentar la operación que exige prueba del intervalo. | 409 |
+| CAPACIDAD_INSTRUCTOR_NO_DISPONIBLE | Entre vista previa y confirmación desactivar el instructor propuesto, y confirmar. | 409 |
+| CAPACIDAD_VEHICULOS_AGOTADA | Con N instructores libres y un vehículo, ocupar la hora y escribir una segunda práctica concurrente. | 409 |
+| PAGO_PRECIO_NO_CONFIGURADO | En la copia sin activar reglas, retirar la tarifa del tipo; solicitar vista previa nueva después de preparar la activación válida o llamar al flujo interno desde el backend local. | 503 |
+| PAGO_EN_PROCESO | Despachar un intento y solicitar liberar o vencer su reserva antes de un resultado definitivo. | 409 |
+| PAGO_ENTRADA_INVALIDA | Enviar proveedor no admitido, importe con formato inválido o recargo fuera del rango. | 400 |
+| PAGO_CUENTA_NO_HABILITADA | Desactivar el alumno del fixture y ejecutar la operación de este dominio desde el backend local; restaurar la cuenta después. | 403 |
+| PAGO_IDEMPOTENCIA_CONFLICTO | Repetir el attemptKey original con datos de pago diferentes. | 409 |
+| PAGO_INTENTO_PENDIENTE | Abrir otro intento para una matrícula con pago pendiente, sin resolver el primero. | 409 |
+| PAGO_NO_ENCONTRADO | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| PAGO_REFERENCIA_CONFLICTO | Confirmar el pago con una referencia distinta de la ya registrada o utilizada por otro pago. | 409 |
+| PAGO_RESERVA_INVALIDA | Iniciar pago sobre una reserva que ya no está vigente o cuya prueba de precio no existe. | 409 |
+| PAGO_RESERVA_NO_ENCONTRADA | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| PAGO_APROBADO_SIN_RECURSOS | En una copia aislada preparar un pago aprobado cuya retención fue retirada; confirmar sin recrear recursos. | 409 |
+| PAGO_ACTIVACION_REVISION | Preparar discrepancia de recursos en la confirmación; intentar activar la matrícula sin resolver su revisión. | 409 |
+| PERMISO_REQUERIDO | Conceder solo uno de los cuatro permisos a un admin local; ejecutar una RPC pública de otro permiso como service_role y comprobar el rechazo; como authenticated debe faltar EXECUTE. | 403 |
+| COHORTE_NOMBRE_DUPLICADO | Crear «Grupo Á» y luego « grupo a » en otro curso; revisar que el admin vea el nombre en conflicto. | 409 |
+| COHORTE_TERMINADA | En una copia con fin del curso ayer, intentar editar cualquier campo o habilitar de nuevo. | 409 |
+| COHORTE_INICIO_INMUTABLE | Con una matrícula o reserva existente cambiar el inicio del curso o su curso/tipo. | 409 |
+| COHORTE_CODIGO_INMUTABLE | Con una matrícula existente intentar modificar el código por RPC. | 409 |
+| COHORTE_FIN_CON_COMPROMISOS | Acortar fin del curso a un día anterior al último fin individual de alumno/reserva. | 409 |
+| COHORTE_CUPO_INFERIOR | Bajar cupo por debajo del máximo diario comprometido del intervalo. | 409 |
+| COHORTE_CANCELACION_BLOQUEADA | Cancelar una cohorte que todavía tiene matrículas o reservas protegidas, sin reasignarlas. | 409 |
+| COHORTE_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| COHORTE_ENTRADA_INVALIDA | Guardar una cohorte con motivo vacío, campo fuera del contrato o nombre vacío. | 400 |
+| COHORTE_NO_ENCONTRADA | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| COHORTE_CURSO_NO_ENCONTRADO | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| COHORTE_VERSION_CONFLICTO | Guardar desde dos pestañas usando el mismo updatedAt; repetir el guardado de la pestaña antigua. | 409 |
+| PAGO_PRECIO_INVALIDO | Editar tarifa con centavos negativos o motivo vacío. | 400 |
+| PAGO_PRECIO_CARGA_INICIAL | Intentar crear desde la interfaz una tarifa A/B ausente; debe exigir el script explícito de carga inicial. | 409 |
+| CAPACIDAD_ENTRADA_INVALIDA | Guardar vehículos negativos o motivo vacío. | 400 |
+| MATRICULA_TIPO_VIGENTE | Confirmar dos matrículas activas del mismo tipo para el mismo alumno; conservar A y B en el control positivo. | 409 |
+| MATRICULA_REPETICION_REQUIERE_EXCEPCION | Con una matrícula finalizada intentar otra del mismo tipo sin excepción auditada. | 409 |
+| MATRICULA_CUENTA_NO_HABILITADA | Desactivar el alumno del fixture y ejecutar la operación de este dominio desde el backend local; restaurar la cuenta después. | 403 |
+| MATRICULA_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| MATRICULA_NO_ENCONTRADA | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| MATRICULA_ACCESO_ESTADO_INVALIDO | Extender acceso de una matrícula anulada, pendiente o sin fechas demostrables. | 409 |
+| MATRICULA_EXTENSION_INVALIDA | Extender sin motivo o poner fin de acceso anterior al fin individual de prácticas. | 400 |
+| MATRICULA_REPETICION_ESTADO_INVALIDO | Solicitar excepción de repetición sobre una matrícula que aún no está finalizada. | 409 |
+| MATRICULA_ROLLBACK_CONVIVENCIA | Con A y B vigentes en la copia, intentar el rollback que restauraría la unicidad global antigua. | 409 |
+| PAGO_MONTO_NO_COINCIDE | Enviar confirmación sintética con total o moneda diferentes de la instantánea del pago. | 409 |
+| ESPERA_CUENTA_NO_HABILITADA | Desactivar el alumno del fixture y ejecutar la operación de este dominio desde el backend local; restaurar la cuenta después. | 403 |
+| ESPERA_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| ESPERA_ENTRADA_INVALIDA | Guardar preferencia con campos no admitidos, tipo inventado o fechas/horas inválidas. | 400 |
+| ESPERA_PREVIEW_NO_DISPONIBLE | Pedir el diálogo de notificación de una cohorte cerrada o sin un plan factible; no debe inventar interesados elegibles. | 503 |
+| MATRICULA_AJENA | Con sesión de otro alumno consultar/confirmar un cambio de plan sobre la matrícula ajena. | 403 |
+| PLAN_CAMBIO_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| PLAN_CAMBIO_ESTADO_INVALIDO | Proponer cambio para matrícula sin pago, anulada o sin evidencia individual aprobada. | 409 |
+| PLAN_CAMBIO_FUERA_PLAZO | Situar la primera práctica a menos de 48 horas del instante del servidor y pedir el cambio. | 409 |
+| PLAN_CAMBIO_LIMITE | Confirmar el número permitido de cambios gratuitos y pedir uno más. | 409 |
+| PLAN_CAMBIO_MOTIVO_REQUERIDO | Enviar reasignación administrativa sin motivo o con más de 500 caracteres. | 400 |
+| PLAN_CAMBIO_RESERVA_VENCIDA | Reservar la propuesta, dejar vencer su TTL y confirmar; comprobar que el plan original sigue intacto. | 409 |
+| PLAN_CAMBIO_VERSION_CONFLICTO | Enviar la versión de matrícula anterior a otra reasignación confirmada. | 409 |
+| PLAN_CAMBIO_RETENCION_INCOMPLETA | En una copia retirar una de las 15 retenciones de la propuesta y confirmar; original intacto. | 409 |
+| PLAN_CAMBIO_SIN_COBRO | Intentar cotizar/pagar una reserva cuyo purpose es plan_change. | 409 |
+| PLAN_REASIGNACION_ENTRADA_INVALIDA | Repetir una matrícula en el lote masivo, omitir versión, dejar la lista vacía o exceder su máximo operativo. | 400 |
+| MATRICULA_ROLLBACK_HISTORIAL | Tras confirmar cambios de plan, intentar rollback que perdería su asociación histórica. | 409 |
+| PLAN_CAMBIO_SIN_CAMBIOS | Proponer las mismas franjas, asignación y destino que ya tiene el alumno. | 400 |
+| FACTURA_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| FACTURA_DATOS_INVALIDOS | Guardar datos del pagador sin dirección/correo o con tipo de documento no admitido. | 400 |
+| FACTURA_ALUMNO_NO_ENCONTRADO | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| FACTURA_EN_PROCESO | Reintentar o registrar autorización de un documento con lease fiscal vigente. | 409 |
+| FACTURA_LEASE_INVALIDO | Finalizar un documento usando token ajeno o vencido. | 409 |
+| FACTURA_RESULTADO_INVALIDO | Finalizar la cola manual con un resultado distinto de MANUAL_PENDING/FAILED. | 400 |
+| FACTURA_NO_ENCONTRADA | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| FACTURA_VERSION_CONFLICTO | Registrar autorización con updatedAt anterior a un reintento o cambio de estado. | 409 |
+| FACTURA_YA_EMITIDA | Volver a registrar otra autorización sobre el mismo documento emitido. | 409 |
+| FACTURA_AUTORIZACION_INVALIDA | Registrar clave de acceso con longitud distinta de 49, sin fecha o sin RUC externo válido. | 400 |
+| FACTURA_DEVOLUCION_INVALIDA | Documentar devolución sin motivo/referencia, con importe no positivo o superior a lo facturado. | 422 |
+| FACTURA_IDEMPOTENCIA_CONFLICTO | Reusar la clave de devolución con otro importe o referencia. | 409 |
+| SOLICITUD_NO_ENCONTRADA | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
+| SOLICITUD_ESTADO_INVALIDO | Editar o decidir una solicitud en estado no permitido por esa transición. | 409 |
+| SOLICITUD_REVISION_REQUERIDA | Decidir sin reclamar revisión o con un lease que ya venció. | 409 |
+| SOLICITUD_REVISION_OCUPADA | Reclamar el mismo expediente desde dos revisores antes de que venza el lease del primero. | 409 |
+| SOLICITUD_VERIFICACION_ACTUALIZAR | Con identidad nueva activa invocar el registro heredado sin modo y observación. | 409 |
+| SOLICITUD_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| SOLICITUD_VERIFICACION_INVALIDA | Registrar verificación con modo no admitido u observación vacía. | 400 |
+| SOLICITUD_HOMOLOGACION_REQUERIDA | Elegir documento homologado sin indicar evidencia de homologación. | 422 |
+| SOLICITUD_ESCANEO_REQUERIDO | Elegir presencial y enviar verificación sin escaneo. | 422 |
+| SOLICITUD_ESCANEO_NO_DISPONIBLE | Preparar ruta/hash de escaneo sin objeto de Storage local o simular fallo del almacenamiento local. | 503 |
+| SOLICITUD_APROBACION_SIN_COHORTE | Intentar aprobar enviando cohorte o monto en vez de matrícula por_agendar. | 409 |
+| SOLICITUD_ARCHIVO_NO_BORRABLE | Intentar borrar un expediente aprobado, archivado o enlazado a alumno. | 409 |
+| SOLICITUD_VERSION_CONFLICTO | Revocar o modificar usando el updatedAt anterior a otra decisión. | 409 |
+| SOLICITUD_MOTIVO_REQUERIDO | Revocar con motivo vacío. | 400 |
+| SOLICITUD_CORREO_LEASE_INVALIDO | Finalizar correo con token de otro envío o lease vencido. | 409 |
+| SOLICITUD_RETENCION_INVALIDA | Guardar días no enteros/no positivos o vencimiento de aprobadas/archivadas no admitido. | 400 |
+| SOLICITUD_ACCESO_REVOCADO | Revocar aprobación pagada y usar el JWT anterior en una ruta protegida; ni el pago ni la matrícula se borran. | 403 |
+| DOCUMENTO_TIPO_INVALIDO | Enviar tipo diferente de cedula/pasaporte/otro. | 400 |
+| DOCUMENTO_NUMERO_INVALIDO | Cédula con verificador incorrecto o pasaporte/otro con espacios interiores o más de 30 caracteres. | 400 |
+| DOCUMENTO_DUPLICADO | Crear dos identidades del mismo tipo y número normalizado; repetir tipo diferente como control positivo. | 409 |
+| DOCUMENTO_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
+| DOCUMENTO_ESTADO_NO_EDITABLE | Cambiar tipo/número del expediente enviado o resuelto sin devolverlo para corrección. | 409 |
+| PAGO_PRECIO_CAMBIO | Consultar plan de caja a una tarifa y cambiar la tarifa del tipo antes de confirmar la vista previa antigua. | 409 |
+| CONFIG_DEPENDENCIA_REQUERIDA | En una sola transacción intentar activar date_rules dejando reservations apagado; rollback automático del cambio de flags. | 409 |
+| CONFIG_OBSERVACION_INVALIDA | Enviar a la RPC de latido un nombre de trabajo o estado no perteneciente al catálogo cerrado. | 400 |
+| FACTURA_DEVOLUCION_DOCUMENTADA | Con facturación activa reducir montoAbonado en caja; debe pedir devolución documentada, sin sobrescribir el cobro. | 409 |

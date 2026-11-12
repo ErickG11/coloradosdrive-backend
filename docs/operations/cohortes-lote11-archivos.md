@@ -1,0 +1,82 @@
+# Archivos de integración del Lote 11
+
+Inventario de cambios locales; no acredita ejecución de pruebas.
+
+## coloradosdrive-backend
+
+- `docs/PRUEBAS_PENDIENTES.md`
+- `docs/operations/cohortes-errores.md`
+- `docs/operations/cohortes-lote11-integracion.sql`
+- `docs/operations/cohortes-lote11-preflight.sql`
+- `docs/operations/cohortes-lote11-rollback.sql`
+- `docs/operations/cohortes-lote11-verificacion.sql`
+- `docs/operations/cohortes-lote11.md`
+- `docs/operations/cohortes-manifiesto-despliegue.json`
+- `docs/operations/cohortes-progreso.md`
+- `src/app.ts`
+- `src/config/cohortErrors.ts`
+- `src/config/database.types.ts`
+- `src/index.ts`
+- `src/jobs/billingCron.ts`
+- `src/jobs/enrollmentMonitorCron.ts`
+- `src/jobs/paymentReconciliationCron.ts`
+- `src/jobs/paymentWelcomeCron.ts`
+- `src/jobs/practiceSlotCron.ts`
+- `src/jobs/requestEmailCron.ts`
+- `src/jobs/solicitudApprovalRecoveryCron.ts`
+- `src/jobs/solicitudCleanupCron.ts`
+- `src/jobs/studentScheduleExpiryCron.ts`
+- `src/middlewares/adminFinancialPrivacy.middleware.ts`
+- `src/middlewares/auth.middleware.ts`
+- `src/middlewares/enrollmentPermission.middleware.ts`
+- `src/middlewares/errorHandler.ts`
+- `src/middlewares/requestCorrelation.middleware.ts`
+- `src/middlewares/studentPrivacy.middleware.ts`
+- `src/models/manualEnrollment.model.ts`
+- `src/models/notification.model.ts`
+- `src/models/studentSchedule.model.ts`
+- `src/routes/adminDashboard.routes.ts`
+- `src/routes/adminPayment.routes.ts`
+- `src/routes/cohort.routes.ts`
+- `src/routes/cohortAssignment.routes.ts`
+- `src/routes/enrollment.routes.ts`
+- `src/routes/manualEnrollment.routes.ts`
+- `src/routes/notification.routes.ts`
+- `src/routes/practiceSlotGeneration.routes.ts`
+- `src/routes/solicitud.routes.ts`
+- `src/routes/studentAdmin.routes.ts`
+- `src/routes/studentSchedule.routes.ts`
+- `src/services/email.service.ts`
+- `src/services/enrollmentObservation.service.ts`
+- `src/services/manualEnrollment.service.ts`
+- `src/services/notification.service.ts`
+- `src/services/studentEnrollmentAccess.ts`
+- `src/services/studentEnrollmentStatus.service.ts`
+- `src/services/studentSchedule.service.ts`
+- `src/utils/manualPracticePlan.ts`
+
+## coloradosdrive-frontend
+
+- `app/(admin)/admin/cohorts/CohortRulesControls.tsx`
+- `app/(admin)/admin/enrollments/wizard/EnrollmentWizard.tsx`
+- `app/(admin)/admin/enrollments/wizard/StepCurso.tsx`
+- `app/(admin)/admin/enrollments/wizard/StepPracticas.tsx`
+- `app/(admin)/admin/enrollments/wizard/wizardTypes.ts`
+- `app/(admin)/admin/students/StudentDetail.tsx`
+- `components/admin-dashboard/AdminDashboard.tsx`
+- `components/notifications/NotificationBell.tsx`
+- `components/student-dashboard/DashboardWorkspace.tsx`
+- `components/student-enrollment/EnrollmentCard.tsx`
+- `components/student-enrollment/EnrollmentDetails.tsx`
+- `components/student-enrollment/EnrollmentWorkspace.tsx`
+- `components/student-enrollment/StudentPaymentStep.tsx`
+- `components/student-enrollment/StudentSchedulePicker.tsx`
+- `docs/PRUEBAS_PENDIENTES.md`
+- `docs/operations/cohortes-lote11.md`
+- `docs/operations/cohortes-progreso.md`
+- `lib/api/studentSchedule.ts`
+- `types/adminDashboard.ts`
+- `types/notification.ts`
+- `types/student.ts`
+- `types/studentEnrollment.ts`
+- `types/studentSchedule.ts`

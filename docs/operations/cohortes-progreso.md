@@ -15,7 +15,7 @@ Ramas: feat/cohortes-reglas-inscripcion en ambos repositorios. Sin push ni bases
 | 8 | Completo | 4 escenarios locales OK: único, fallo aislado, reintento, rollback/reaplicación; tipos ambos OK; proveedor fiscal pendiente. |
 | 9 | Completo | 4 escenarios nativos OK, dos revisores reales, aprobación/archivo, ambas revocaciones, retención heredada, rollback/reaplicación; tipos ambos OK. |
 | 10 | Completo | 2 escenarios locales agrupados OK: pares tipados, solicitud/aprobación real y representante, backfill trazable, rollback/reaplicación; tipos ambos OK. |
-| 11 | Pendiente | Integración, privacidad, permisos, errores/alertas y cierre |
+| 11 | Implementado; validación final aplazada | Integración, privacidad, permisos, métricas y alertas; cierre documental. Tipos/instalación al finalizar L12 por autorización posterior. |
 
 Los 14 indicadores enabled=false por defecto y al cierre. implemented solo cambia al pasar su lote.
 Precios y admins iniciales: plantillas sin valores reales. Vehículos: global no configurado hasta carga explícita.
@@ -29,3 +29,7 @@ Pruebas: solo obligatorias por lote y tipos; lint/build completos en 11.
 - Auditar todas las rutas heredadas de acceso y eliminar nombres/códigos de cohorte de respuestas de alumno.
 - Aplicar permisos separados a rutas heredadas, dependencias de activación, observación de leases/latidos y las alertas restantes; no afirmar que estén operativas todavía.
 - Ejecutar catálogo consistente, checks finales, lint/build y guías QA consolidadas; mantener todos los indicadores apagados.
+
+## Autorización de cierre y L12
+
+Solo chequeos finales de tipos e instalación local completa; ninguna suite, lint ni build. D1–D10 y L12b/L12c autorizados. Sin cohortes de demostración, sin bloqueo de disponibilidad y sin guía QA consolidada nueva. Todos los indicadores siguen apagados por defecto.
