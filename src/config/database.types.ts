@@ -22,7 +22,17 @@ import type {
 // para poder embeber instructor/estudiante tipado en el listado, en vez
 // de exponer un endpoint más amplio para resolver nombres por rol.
 
-import type { ContentData, ContentValue, ContentTable, CourseSubjectRow, CourseMaterialRow, SubjectItemRow, ItemAccessRuleRow, MaterialProgressRow, ContentAccessAuditRow } from '../models/content.model';
+import type {
+  ContentData,
+  ContentValue,
+  ContentTable,
+  CourseSubjectRow,
+  CourseMaterialRow,
+  SubjectItemRow,
+  ItemAccessRuleRow,
+  MaterialProgressRow,
+  ContentAccessAuditRow,
+} from '../models/content.model';
 import type { StudentPayment, PaymentRow } from '../models/studentPayment.model';
 import type { StudentScheduleReservation } from '../models/studentSchedule.model';
 import type { StudentListResult } from '../models/studentAdmin.model';
@@ -47,7 +57,11 @@ import type {
 import type { PracticeRecovery } from '../services/studentAccess.service';
 import type { StudentDeletionOperation } from '../services/studentDeletion.service';
 import type { StudentProfileResult } from '../services/studentProfile.service';
-import type { EnrollmentSummaryRow, EnrollmentReservation, EnrollmentDraftReservation } from '../models/enrollmentLimits.model';
+import type {
+  EnrollmentSummaryRow,
+  EnrollmentReservation,
+  EnrollmentDraftReservation,
+} from '../models/enrollmentLimits.model';
 
 export type UserRole = 'admin' | 'estudiante' | 'instructor';
 export type StudentStatus =
@@ -57,7 +71,8 @@ export type StudentStatus =
   | 'activo'
   | 'rechazado'
   | 'expirado';
-export type SolicitudEstado = 'pendiente_revision' | 'borrador' | 'enviada' | 'devuelta' | 'aprobada' | 'rechazada';
+export type SolicitudEstado =
+  'pendiente_revision' | 'borrador' | 'enviada' | 'devuelta' | 'aprobada' | 'rechazada';
 export type SolicitudTipoDocumento =
   'cedula' | 'papeleta_votacion' | 'tipo_sangre' | 'titulo_bachiller' | 'certificado_estudios';
 export type SolicitudDocumentoEstado = 'recibido' | 'aprobado' | 'rechazado';
@@ -85,30 +100,130 @@ export interface ManualOperation extends Record<string, unknown> {
 
 export interface Database {
   public: {
-    Views: {solicitudes_admin:{Row:Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {documentos_por_revisar:number;orden_grupo:number;pendiente_desde:string|null;decidida_at:string|null};Relationships:[]}};
+    Views: {
+      solicitudes_admin: {
+        Row: Database['public']['Tables']['solicitudes_inscripcion']['Row'] & {
+          documentos_por_revisar: number;
+          orden_grupo: number;
+          pendiente_desde: string | null;
+          decidida_at: string | null;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
-      exam_question_image: { Args: { p_actor: string; p_exam: string; p_question: string | null; p_action: string; p_data: ContentData }; Returns: ContentValue };
-      content_admin: { Args: { p_actor: string; p_action: string; p_data: ContentData }; Returns: ContentValue };
-      content_student: { Args: { p_student: string; p_action: string; p_data: ContentData }; Returns: ContentValue };
+      student_schedule_calendar_v2: {
+        Args: {
+          p_student: string;
+          p_enrollment: string;
+          p_month: string;
+          p_mode: string;
+          p_hours: number;
+        };
+        Returns: { serverNow: string; dias: { fecha: string; disponible: boolean }[] };
+      };
+
+      claim_payment_reconciliation: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          token: string;
+          reference: string | null;
+          dispatched: boolean;
+        } | null;
+      };
+      finish_payment_reconciliation: {
+        Args: { p_id: string; p_token: string; p_result: string };
+        Returns: boolean;
+      };
+
+      student_schedule_preview_v2: {
+        Args: {
+          p_student: string;
+          p_enrollment: string;
+          p_input: {
+            modalidad: string;
+            fechaInicio: string;
+            horasPorDia: number;
+            horaInicio: number;
+          };
+        };
+        Returns: {
+          factible: boolean;
+          diasFallan: string[];
+          serverNow: string;
+          precioCentavos: number | null;
+        };
+      };
+
+      exam_question_image: {
+        Args: {
+          p_actor: string;
+          p_exam: string;
+          p_question: string | null;
+          p_action: string;
+          p_data: ContentData;
+        };
+        Returns: ContentValue;
+      };
+      content_admin: {
+        Args: { p_actor: string; p_action: string; p_data: ContentData };
+        Returns: ContentValue;
+      };
+      content_student: {
+        Args: { p_student: string; p_action: string; p_data: ContentData };
+        Returns: ContentValue;
+      };
       content_start_attempt: { Args: { p_student: string; p_exam: string }; Returns: ContentValue };
-      content_attempt_state: { Args: { p_student: string; p_attempt: string }; Returns: ContentValue };
+      content_attempt_state: {
+        Args: { p_student: string; p_attempt: string };
+        Returns: ContentValue;
+      };
       content_exam_access: { Args: { p_student: string; p_exam: string }; Returns: ContentValue };
-      content_finish_attempt: { Args: { p_student: string; p_attempt: string; p_answers: ContentValue }; Returns: ContentValue };
+      content_finish_attempt: {
+        Args: { p_student: string; p_attempt: string; p_answers: ContentValue };
+        Returns: ContentValue;
+      };
       begin_student_payment: {
-        Args: { p_student: string; p_reserva: string; p_proveedor: string; p_attempt: string;
-          p_recargo: number; p_gracia: number; p_actor?: string; p_comprobante?: string };
+        Args: {
+          p_student: string;
+          p_reserva: string;
+          p_proveedor: string;
+          p_attempt: string;
+          p_recargo: number;
+          p_gracia: number;
+          p_actor?: string;
+          p_comprobante?: string;
+        };
         Returns: StudentPayment;
       };
       claim_payment_dispatch: { Args: { p_id: string }; Returns: boolean };
-      record_payment_reference: { Args: { p_id: string; p_proveedor: string; p_referencia: string }; Returns: undefined };
+      record_payment_reference: {
+        Args: { p_id: string; p_proveedor: string; p_referencia: string };
+        Returns: undefined;
+      };
       confirm_student_payment: {
-        Args: { p_id: string; p_proveedor: string; p_referencia: string | null; p_resultado: string;
-          p_total: number; p_moneda: string; p_event: string; p_hash: string };
+        Args: {
+          p_id: string;
+          p_proveedor: string;
+          p_referencia: string | null;
+          p_resultado: string;
+          p_total: number;
+          p_moneda: string;
+          p_event: string;
+          p_hash: string;
+        };
         Returns: StudentPayment;
       };
-      admin_release_student_reservation: { Args: { p_actor: string; p_reserva: string }; Returns: StudentScheduleReservation };
+      admin_release_student_reservation: {
+        Args: { p_actor: string; p_reserva: string };
+        Returns: StudentScheduleReservation;
+      };
       claim_payment_email: { Args: { p_id: string }; Returns: string | null };
-      finish_payment_email: { Args: { p_id: string; p_token: string; p_ok: boolean }; Returns: boolean };
+      finish_payment_email: {
+        Args: { p_id: string; p_token: string; p_ok: boolean };
+        Returns: boolean;
+      };
 
       student_schedule_free_slots: {
         Args: { p_slots: string[] };
@@ -141,83 +256,259 @@ export interface Database {
       };
       expire_student_reservations: { Args: { p_student: string }; Returns: number };
 
+      cohort_cupos_ocupados: {
+        Args: { p_cohorts: string[] };
+        Returns: { cohort_id: string; ocupados: number }[];
+      };
 
-      cohort_cupos_ocupados: { Args: {p_cohorts:string[]}; Returns:{cohort_id:string;ocupados:number}[] };
-
-      tomar_recuperacion_aprobacion: {Args:{p_intento:string;p_ttl:number;p_forzar?:boolean};Returns:{intentoId:string;solicitudId:string;token:string}|null};
-      cerrar_recuperacion_aprobacion: {Args:{p_intento:string;p_token:string};Returns:boolean};
-      liberar_reclamo_aprobacion_legacy: {Args:{p_id:string;p_claim:string;p_ttl:number};Returns:boolean};
+      tomar_recuperacion_aprobacion: {
+        Args: { p_intento: string; p_ttl: number; p_forzar?: boolean };
+        Returns: { intentoId: string; solicitudId: string; token: string } | null;
+      };
+      cerrar_recuperacion_aprobacion: {
+        Args: { p_intento: string; p_token: string };
+        Returns: boolean;
+      };
+      liberar_reclamo_aprobacion_legacy: {
+        Args: { p_id: string; p_claim: string; p_ttl: number };
+        Returns: boolean;
+      };
       // F14 (SQL050): verificaciones del admin y listado con búsqueda escapada.
       registrar_verificacion_inscripcion: {
-        Args: {p_id:string;p_actor:string;p_tipo:string;p_metodo:string;p_resultado:string;p_nota:string|null;p_habilita:boolean};
-        Returns: {id:string;tipo:'identidad'|'estudios';metodo:string;resultado:'verificado'|'no_coincide'|'no_encontrado';nota:string|null;createdAt:string}|null;
+        Args: {
+          p_id: string;
+          p_actor: string;
+          p_tipo: string;
+          p_metodo: string;
+          p_resultado: string;
+          p_nota: string | null;
+          p_habilita: boolean;
+        };
+        Returns: {
+          id: string;
+          tipo: 'identidad' | 'estudios';
+          metodo: string;
+          resultado: 'verificado' | 'no_coincide' | 'no_encontrado';
+          nota: string | null;
+          createdAt: string;
+        } | null;
       };
       // F15 (SQL051): decisiones del admin.
       devolver_solicitud_inscripcion: {
-        Args: {p_id:string;p_actor:string;p_motivo:string;p_mensaje:string;p_nota:string|null};
-        Returns: {id:string;estado:'devuelta';correo:string}|null;
+        Args: {
+          p_id: string;
+          p_actor: string;
+          p_motivo: string;
+          p_mensaje: string;
+          p_nota: string | null;
+        };
+        Returns: { id: string; estado: 'devuelta'; correo: string } | null;
       };
       rechazar_solicitud_inscripcion: {
-        Args: {p_id:string;p_actor:string;p_motivo:string;p_mensaje:string;p_nota:string|null;p_bloqueo_hash:string|null;p_bloqueo_dias:number|null};
-        Returns: {id:string;estado:'rechazada';correo:string}|null;
+        Args: {
+          p_id: string;
+          p_actor: string;
+          p_motivo: string;
+          p_mensaje: string;
+          p_nota: string | null;
+          p_bloqueo_hash: string | null;
+          p_bloqueo_dias: number | null;
+        };
+        Returns: { id: string; estado: 'rechazada'; correo: string } | null;
       };
       validar_aprobacion_inscripcion: {
-        Args: {p_id:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
+        Args: {
+          p_id: string;
+          p_verif_identidad: string | null;
+          p_verif_estudios: string | null;
+          p_version_aviso: string;
+          p_version_terminos: string;
+        };
         Returns: undefined;
       };
       // F16 (SQL052): aprobación en dos pasos.
       reclamar_aprobacion_inscripcion: {
-        Args: {p_id:string;p_actor:string;p_verif_identidad:string|null;p_verif_estudios:string|null;p_version_aviso:string;p_version_terminos:string};
-        Returns: {claim:string;correo:string;courseId:string;solicitadaAt:string;authUserId:string}|null;
+        Args: {
+          p_id: string;
+          p_actor: string;
+          p_verif_identidad: string | null;
+          p_verif_estudios: string | null;
+          p_version_aviso: string;
+          p_version_terminos: string;
+        };
+        Returns: {
+          claim: string;
+          correo: string;
+          courseId: string;
+          solicitadaAt: string;
+          authUserId: string;
+        } | null;
       };
       finalizar_aprobacion_inscripcion: {
-        Args: {p_id:string;p_actor:string;p_claim:string;p_student:string;p_cohort:string|null;p_estado:string;p_monto:number|null};
-        Returns: {studentId:string;enrollmentId:string}|null;
+        Args: {
+          p_id: string;
+          p_actor: string;
+          p_claim: string;
+          p_student: string;
+          p_cohort: string | null;
+          p_estado: string;
+          p_monto: number | null;
+        };
+        Returns: { studentId: string; enrollmentId: string } | null;
       };
       // F20 (SQL053): vencimientos y huérfanos.
       vencer_solicitudes_devueltas: {
-        Args: {p_dias:number;p_mensaje:string};
+        Args: { p_dias: number; p_mensaje: string };
         Returns: number | null;
       };
       listar_objetos_huerfanos_solicitudes: {
-        Args: {p_antes:string;p_limite:number};
+        Args: { p_antes: string; p_limite: number };
         Returns: string[] | null;
       };
       listar_solicitudes_admin: {
-        Args: {p_estado:string|null;p_q:string|null;p_page:number;p_size:number};
-        Returns: {items:Record<string,unknown>[];total:number;page:number;pageSize:number}|null;
+        Args: { p_estado: string | null; p_q: string | null; p_page: number; p_size: number };
+        Returns: {
+          items: Record<string, unknown>[];
+          total: number;
+          page: number;
+          pageSize: number;
+        } | null;
       };
       enviar_solicitud_inscripcion: {
-        Args: {p_id:string;p_modo:'enviar'|'reenviar';p_version_aviso:string;p_version_terminos:string};
-        Returns: {id:string;estado:'enviada';enviadaAt:string;transicion:boolean}|null;
+        Args: {
+          p_id: string;
+          p_modo: 'enviar' | 'reenviar';
+          p_version_aviso: string;
+          p_version_terminos: string;
+        };
+        Returns: { id: string; estado: 'enviada'; enviadaAt: string; transicion: boolean } | null;
       };
       guardar_certificado_inscripcion: {
-        Args: {p_id:string;p_nivel:string;p_marca:string;p_subtipo:string;p_ruta:string;p_mime:string;p_tamano:number;p_sha256:string;p_version_aviso:string;p_version_terminos:string};
-        Returns: {id:string;subtipo:string;mimeType:string;tamano:number;subidoAt:string;rutaAnterior:string|null}|null;
+        Args: {
+          p_id: string;
+          p_nivel: string;
+          p_marca: string;
+          p_subtipo: string;
+          p_ruta: string;
+          p_mime: string;
+          p_tamano: number;
+          p_sha256: string;
+          p_version_aviso: string;
+          p_version_terminos: string;
+        };
+        Returns: {
+          id: string;
+          subtipo: string;
+          mimeType: string;
+          tamano: number;
+          subidoAt: string;
+          rutaAnterior: string | null;
+        } | null;
       };
       guardar_datos_inscripcion: {
-        Args: {p_id:string;p_datos:Record<string,unknown>;p_version_aviso:string;p_version_terminos:string};
-        Returns: {id:string;datosActualizadosAt:string|null}|null;
+        Args: {
+          p_id: string;
+          p_datos: Record<string, unknown>;
+          p_version_aviso: string;
+          p_version_terminos: string;
+        };
+        Returns: { id: string; datosActualizadosAt: string | null } | null;
       };
       aceptar_consentimiento_inscripcion: {
-        Args: {p_id:string;p_version_aviso:string;p_version_terminos:string;p_representante?:boolean};
-        Returns: {version:string;versionAviso:string;versionTerminos:string;aceptadoAt:string}|null;
+        Args: {
+          p_id: string;
+          p_version_aviso: string;
+          p_version_terminos: string;
+          p_representante?: boolean;
+        };
+        Returns: {
+          version: string;
+          versionAviso: string;
+          versionTerminos: string;
+          aceptadoAt: string;
+        } | null;
       };
-      emitir_codigo_inscripcion:{Args:{p_correo:string;p_curso:string;p_codigo_hash:string;p_expira:string;p_correo_hash:string;p_topes:Record<string,number>};Returns:{emitir?:boolean;correo?:string;id?:string;motivo?:'cerradas'|'limite'}|null};
-      confirmar_codigo_inscripcion:{Args:{p_correo:string;p_codigo_hash:string;p_correo_hash:string;p_topes:Record<string,number>};Returns:{resultado:'valido'|'invalido'|'limite';id?:string;scope?:'edicion'|'estado'}|null};
-      enviar_solicitud: {Args:{p_id:string;p_version:string};Returns:{id:string;estado:string;enviadaAt:string}};
-      correo_tiene_cuenta: {Args:{p_correo:string};Returns:boolean};
-      resumen_solicitudes: {Args:Record<string,never>;Returns:EnrollmentSummaryRow|null};
-      reservar_limite_inscripcion:{Args:{p_operacion:string;p_ip_hash:string|null;p_correo_hash:string|null;p_topes:Record<string,number>;p_solicitud?:string|null};Returns:EnrollmentReservation|null};
-      crear_borrador_limitado:{Args:{p_correo:string;p_curso:string;p_codigo:string;p_expira:string;p_topes:Record<string,number>};Returns:EnrollmentDraftReservation|null};
-      actualizar_config_inscripcion:{Args:{p_actor:string;p_abiertas:boolean};Returns:{inscripcionesAbiertas:boolean}|null};
-      revisar_documento_solicitud: {Args:{p_solicitud:string;p_documento:string;p_actor:string;p_estado:string;p_motivo:string|null};Returns:{id:string;estado:'aprobado'|'rechazado'}};
+      emitir_codigo_inscripcion: {
+        Args: {
+          p_correo: string;
+          p_curso: string;
+          p_codigo_hash: string;
+          p_expira: string;
+          p_correo_hash: string;
+          p_topes: Record<string, number>;
+        };
+        Returns: {
+          emitir?: boolean;
+          correo?: string;
+          id?: string;
+          motivo?: 'cerradas' | 'limite';
+        } | null;
+      };
+      confirmar_codigo_inscripcion: {
+        Args: {
+          p_correo: string;
+          p_codigo_hash: string;
+          p_correo_hash: string;
+          p_topes: Record<string, number>;
+        };
+        Returns: {
+          resultado: 'valido' | 'invalido' | 'limite';
+          id?: string;
+          scope?: 'edicion' | 'estado';
+        } | null;
+      };
+      enviar_solicitud: {
+        Args: { p_id: string; p_version: string };
+        Returns: { id: string; estado: string; enviadaAt: string };
+      };
+      correo_tiene_cuenta: { Args: { p_correo: string }; Returns: boolean };
+      resumen_solicitudes: { Args: Record<string, never>; Returns: EnrollmentSummaryRow | null };
+      reservar_limite_inscripcion: {
+        Args: {
+          p_operacion: string;
+          p_ip_hash: string | null;
+          p_correo_hash: string | null;
+          p_topes: Record<string, number>;
+          p_solicitud?: string | null;
+        };
+        Returns: EnrollmentReservation | null;
+      };
+      crear_borrador_limitado: {
+        Args: {
+          p_correo: string;
+          p_curso: string;
+          p_codigo: string;
+          p_expira: string;
+          p_topes: Record<string, number>;
+        };
+        Returns: EnrollmentDraftReservation | null;
+      };
+      actualizar_config_inscripcion: {
+        Args: { p_actor: string; p_abiertas: boolean };
+        Returns: { inscripcionesAbiertas: boolean } | null;
+      };
+      revisar_documento_solicitud: {
+        Args: {
+          p_solicitud: string;
+          p_documento: string;
+          p_actor: string;
+          p_estado: string;
+          p_motivo: string | null;
+        };
+        Returns: { id: string; estado: 'aprobado' | 'rechazado' };
+      };
       eliminar_solicitud_reclamada: {
         Args: { p_solicitud: string; p_claim: string; p_actor: string | null; p_accion: string };
         Returns: undefined;
       };
       finalizar_aprobacion_solicitud: {
-        Args: { p_solicitud: string; p_actor: string; p_claim: string; p_student: string; p_enrollment: string };
+        Args: {
+          p_solicitud: string;
+          p_actor: string;
+          p_claim: string;
+          p_student: string;
+          p_enrollment: string;
+        };
         Returns: undefined;
       };
       list_student_pending_practice_ratings: {
@@ -426,7 +717,12 @@ export interface Database {
       };
       confirmar_identidad_presencial_admin: {
         Args: { p_student: string; p_actor: string; p_motivo: string };
-        Returns: { transicion: boolean; confirmadaAt: string; confirmadaPor: string; enrollmentId: string };
+        Returns: {
+          transicion: boolean;
+          confirmadaAt: string;
+          confirmadaPor: string;
+          enrollmentId: string;
+        };
       };
       // B2 · F19
       confirmar_identidad_presencial: {
@@ -450,28 +746,79 @@ export interface Database {
       subject_items: ContentTable<SubjectItemRow, 'subject_id' | 'kind'>;
       item_access_rules: ContentTable<ItemAccessRuleRow, 'item_id' | 'target_type'>;
       material_progress: ContentTable<MaterialProgressRow, 'student_id' | 'material_id'>;
-      content_access_audit: ContentTable<ContentAccessAuditRow, 'actor_id' | 'action' | 'item_id' | 'target_type' | 'target_id' | 'snapshot'>;
+      content_access_audit: ContentTable<
+        ContentAccessAuditRow,
+        'actor_id' | 'action' | 'item_id' | 'target_type' | 'target_id' | 'snapshot'
+      >;
       payments: { Row: PaymentRow; Insert: never; Update: never; Relationships: [] };
       payment_mail_outbox: {
-        Row: { payment_id: string; estado: 'pendiente' | 'enviando' | 'enviado' | 'fallido';
-          intentos: number; lease_token: string | null; lease_until: string | null;
-          next_attempt_at: string; sent_at: string | null };
-        Insert: never; Update: never; Relationships: [];
+        Row: {
+          payment_id: string;
+          estado: 'pendiente' | 'enviando' | 'enviado' | 'fallido';
+          intentos: number;
+          lease_token: string | null;
+          lease_until: string | null;
+          next_attempt_at: string;
+          sent_at: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
       };
 
       student_schedule_reservations: {
-        Row: FoundationFields<ReservationFoundationColumns> & { id: string; student_id: string; enrollment_id: string; cohort_id: string;
-          estado: StudentScheduleReservation['estado']; creada_at: string; expira_at: string;
-          extensiones: number; pago_iniciado_at: string | null; cerrada_at: string | null;
-          modalidad: 'entre_semana' | 'fin_de_semana'; fecha_inicio: string; horas_por_dia: number; margen_dias: number };
-        Insert: never; Update: never; Relationships: [];
+        Row: FoundationFields<ReservationFoundationColumns> & {
+          id: string;
+          student_id: string;
+          enrollment_id: string;
+          cohort_id: string;
+          course_type: 'A' | 'B';
+          estado: StudentScheduleReservation['estado'];
+          creada_at: string;
+          expira_at: string;
+          extensiones: number;
+          pago_iniciado_at: string | null;
+          cerrada_at: string | null;
+          modalidad: 'entre_semana' | 'fin_de_semana';
+          fecha_inicio: string;
+          horas_por_dia: number;
+          margen_dias: number;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
       };
 
       solicitud_aprobacion_intentos: {
-        Row:{id:string;solicitud_id:string;actor_id:string;claim:string;estado:'pendiente'|'recuperando'|'completado'|'compensado'|'revision_manual';updated_at:string;resuelto_at:string|null;recovery_token:string|null};
-        Insert:never;Update:never;Relationships:[];
+        Row: {
+          id: string;
+          solicitud_id: string;
+          actor_id: string;
+          claim: string;
+          estado: 'pendiente' | 'recuperando' | 'completado' | 'compensado' | 'revision_manual';
+          updated_at: string;
+          resuelto_at: string | null;
+          recovery_token: string | null;
+        };
+        Insert: never;
+        Update: never;
+        Relationships: [];
       };
-      app_settings:{Row:{id:boolean;inscripciones_abiertas:boolean;updated_by:string|null;updated_at:string};Insert:{id?:boolean;inscripciones_abiertas?:boolean;updated_by?:string|null};Update:{inscripciones_abiertas?:boolean;updated_by?:string|null;updated_at?:string};Relationships:[]};
+      app_settings: {
+        Row: {
+          id: boolean;
+          inscripciones_abiertas: boolean;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: { id?: boolean; inscripciones_abiertas?: boolean; updated_by?: string | null };
+        Update: {
+          inscripciones_abiertas?: boolean;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       practice_attendance_events: {
         Row: AttendanceEventRow & { transaction_id: number };
         Insert: Omit<AttendanceEventRow, 'id' | 'created_at'> & {
@@ -1023,30 +1370,69 @@ export interface Database {
       };
       solicitud_consentimientos: {
         Row: {
-          id: string; solicitud_id: string; version_aviso: string; version_terminos: string|null; acepto_terminos: boolean; representante_autoriza_tratamiento: boolean;
-          acepto_tratamiento: boolean; declara_veracidad: boolean; aceptado_at: string;
-          representante_nombre: string | null; representante_cedula: string | null; representante_acepta: boolean;
+          id: string;
+          solicitud_id: string;
+          version_aviso: string;
+          version_terminos: string | null;
+          acepto_terminos: boolean;
+          representante_autoriza_tratamiento: boolean;
+          acepto_tratamiento: boolean;
+          declara_veracidad: boolean;
+          aceptado_at: string;
+          representante_nombre: string | null;
+          representante_cedula: string | null;
+          representante_acepta: boolean;
         };
         Insert: {
-          solicitud_id: string; version_aviso: string; acepto_tratamiento: boolean; declara_veracidad: boolean;
-          version_terminos?:string|null;acepto_terminos?:boolean;representante_autoriza_tratamiento?:boolean;
-          representante_nombre?: string | null; representante_cedula?: string | null; representante_acepta?: boolean;
+          solicitud_id: string;
+          version_aviso: string;
+          acepto_tratamiento: boolean;
+          declara_veracidad: boolean;
+          version_terminos?: string | null;
+          acepto_terminos?: boolean;
+          representante_autoriza_tratamiento?: boolean;
+          representante_nombre?: string | null;
+          representante_cedula?: string | null;
+          representante_acepta?: boolean;
         };
         Update: Partial<Database['public']['Tables']['solicitud_consentimientos']['Insert']>;
         Relationships: [];
       };
       solicitud_auditoria: {
-        Row: { id: string; solicitud_id: string; actor_id: string | null; accion: string; documento_id: string | null; creado_at: string };
-        Insert: { solicitud_id: string; actor_id?: string | null; accion: string; documento_id?: string | null };
+        Row: {
+          id: string;
+          solicitud_id: string;
+          actor_id: string | null;
+          accion: string;
+          documento_id: string | null;
+          creado_at: string;
+        };
+        Insert: {
+          solicitud_id: string;
+          actor_id?: string | null;
+          accion: string;
+          documento_id?: string | null;
+        };
         Update: never;
         Relationships: [];
       };
       solicitudes_inscripcion: {
         Row: {
-          datos_actualizados_at:string|null;correo_normalizado:string;nombres:string|null;apellidos:string|null;nacionalidad_tipo:string|null;tipo_sangre:string|null;nivel_estudios:string|null;
-          devuelta_at:string|null;devolucion_motivo_codigo:string|null;devolucion_mensaje:string|null;
-          devuelta_por:string|null;devolucion_nota_interna:string|null;rechazo_nota_interna:string|null;
-          rechazo_motivo_codigo:string|null;documento_estudios_pendiente_por_cupo:boolean;
+          datos_actualizados_at: string | null;
+          correo_normalizado: string;
+          nombres: string | null;
+          apellidos: string | null;
+          nacionalidad_tipo: string | null;
+          tipo_sangre: string | null;
+          nivel_estudios: string | null;
+          devuelta_at: string | null;
+          devolucion_motivo_codigo: string | null;
+          devolucion_mensaje: string | null;
+          devuelta_por: string | null;
+          devolucion_nota_interna: string | null;
+          rechazo_nota_interna: string | null;
+          rechazo_motivo_codigo: string | null;
+          documento_estudios_pendiente_por_cupo: boolean;
           id: string;
           course_id: string;
           cedula: string | null;

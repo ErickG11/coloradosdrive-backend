@@ -90,9 +90,11 @@ export const MIGRATION_MANIFEST: readonly MigrationEntry[] = [
   { id: '068', file: '068_inscripcion_modelo_base.sql', operations: 'inscripcion-068' },
   { id: '069', file: '069_inscripcion_backfill_trazable.sql', operations: 'inscripcion-069' },
   { id: '070', file: '070_inscripcion_reglas_calendario.sql', operations: 'inscripcion-070' },
+  { id: '071', file: '071_inscripcion_reservas_capacidad.sql', operations: 'inscripcion-071' },
+  { id: '072', file: '072_inscripcion_pagos_conciliacion.sql', operations: 'inscripcion-072' },
 ];
 export const EXCLUDED_MIGRATIONS = ['064_precio_por_tipo_curso.sql'] as const;
-export const LATEST_MIGRATION = '070';
+export const LATEST_MIGRATION = '072';
 export function approvedMigrations(through = LATEST_MIGRATION): readonly MigrationEntry[] {
   if (through === '000') return [];
   const end = MIGRATION_MANIFEST.findIndex((entry) => entry.id === through);

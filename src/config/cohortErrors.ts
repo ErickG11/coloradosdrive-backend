@@ -1,13 +1,267 @@
 import { AppError } from '../utils/AppError';
 
 export const COHORT_ERRORS = {
-  PLAN_CONFIG_NO_DISPONIBLE: {status:503,cause:'No se pudo leer la configuración del plan',student:'No se pudo consultar el plan. Intenta nuevamente.',admin:'La configuración de reglas no está disponible.',action:'Verificar la configuración y reintentar.'},
-  PLAN_ENTRADA_INVALIDA: { status: 400, cause: 'Formato, modalidad u horas fuera de rango', student: 'Revisa la fecha, modalidad y horas de tu plan.', admin: 'El plan debe tener 15 horas, de 1 a 6 por día y franjas de 06:00 a 22:00.', action: 'Corregir los campos indicados y volver a consultar.' },
-  PLAN_INICIO_PASADO: { status: 409, cause: 'Primera fecha anterior al día de Guayaquil', student: 'Elige una fecha de inicio desde hoy.', admin: 'El inicio efectivo del plan está en el pasado.', action: 'Seleccionar una fecha vigente.' },
-  PLAN_FRANJA_PASADA: { status: 409, cause: 'Alguna franja ya comenzó', student: 'Esa hora ya pasó. Elige una hora posterior.', admin: 'Todas las franjas deben ser posteriores al instante del servidor.', action: 'Recargar disponibilidad y elegir otra hora.' },
-  COHORTE_FECHAS_INVALIDAS: { status: 422, cause: 'Cadena de fechas inválida', student: 'No se puede utilizar ese período de inscripción.', admin: 'Debe cumplirse inicio de matrícula ≤ fin de matrícula ≤ fin del curso e inicio del curso ≤ fin del curso.', action: 'Ajustar las fechas relacionadas en una sola operación.' },
+  PLAN_CONFIG_NO_DISPONIBLE: {
+    status: 503,
+    cause: 'No se pudo leer la configuración del plan',
+    student: 'No se pudo consultar el plan. Intenta nuevamente.',
+    admin: 'La configuración de reglas no está disponible.',
+    action: 'Verificar la configuración y reintentar.',
+  },
+  PLAN_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Formato, modalidad u horas fuera de rango',
+    student: 'Revisa la fecha, modalidad y horas de tu plan.',
+    admin: 'El plan debe tener 15 horas, de 1 a 6 por día y franjas de 06:00 a 22:00.',
+    action: 'Corregir los campos indicados y volver a consultar.',
+  },
+  PLAN_INICIO_PASADO: {
+    status: 409,
+    cause: 'Primera fecha anterior al día de Guayaquil',
+    student: 'Elige una fecha de inicio desde hoy.',
+    admin: 'El inicio efectivo del plan está en el pasado.',
+    action: 'Seleccionar una fecha vigente.',
+  },
+  PLAN_FRANJA_PASADA: {
+    status: 409,
+    cause: 'Alguna franja ya comenzó',
+    student: 'Esa hora ya pasó. Elige una hora posterior.',
+    admin: 'Todas las franjas deben ser posteriores al instante del servidor.',
+    action: 'Recargar disponibilidad y elegir otra hora.',
+  },
+  COHORTE_FECHAS_INVALIDAS: {
+    status: 422,
+    cause: 'Cadena de fechas inválida',
+    student: 'No se puede utilizar ese período de inscripción.',
+    admin:
+      'Debe cumplirse inicio de matrícula ≤ fin de matrícula ≤ fin del curso e inicio del curso ≤ fin del curso.',
+    action: 'Ajustar las fechas relacionadas en una sola operación.',
+  },
+  PLAN_OPCION_NO_OFERTADA: {
+    status: 422,
+    cause: 'La combinación de modalidad y horas no está habilitada.',
+    student: 'La combinación de modalidad y horas no está habilitada.',
+    admin: 'La combinación de modalidad y horas no está habilitada.',
+    action: 'Elegir otra combinación o aprobar su configuración.',
+  },
+  RESERVA_MATRICULA_AJENA: {
+    status: 403,
+    cause: 'No puedes operar sobre esa inscripción.',
+    student: 'No puedes operar sobre esa inscripción.',
+    admin: 'No puedes operar sobre esa inscripción.',
+    action: 'Comprobar el usuario autenticado y la pertenencia de la matrícula.',
+  },
+  RESERVA_CUENTA_NO_HABILITADA: {
+    status: 403,
+    cause: 'Tu cuenta no está habilitada para reservar.',
+    student: 'Tu cuenta no está habilitada para reservar.',
+    admin: 'Tu cuenta no está habilitada para reservar.',
+    action: 'Revisar el estado y la verificación de la cuenta.',
+  },
+  RESERVA_ESTADO_NO_PERMITIDO: {
+    status: 409,
+    cause: 'Tu inscripción no permite reservar en este momento.',
+    student: 'Tu inscripción no permite reservar en este momento.',
+    admin: 'Tu inscripción no permite reservar en este momento.',
+    action: 'Consultar la inscripción y su reserva vigente.',
+  },
+  RESERVA_LIMITE_EXPIRADAS: {
+    status: 429,
+    cause: 'Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar.',
+    student: 'Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar.',
+    admin: 'Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar.',
+    action: 'Revisar el límite diario y la espera configurada.',
+  },
+  RESERVA_RECURSO_OCUPADO: {
+    status: 409,
+    cause: 'Una hora acaba de ocuparse. Consulta otro horario.',
+    student: 'Una hora acaba de ocuparse. Consulta otro horario.',
+    admin: 'Una hora acaba de ocuparse. Consulta otro horario.',
+    action: 'Recargar la disponibilidad completa antes de reservar.',
+  },
+  RESERVA_SOLAPE_PROPIO: {
+    status: 409,
+    cause: 'Ya tienes una práctica en ese horario.',
+    student: 'Ya tienes una práctica en ese horario.',
+    admin: 'Ya tienes una práctica en ese horario.',
+    action: 'Elegir sesiones que no se solapen con tu agenda.',
+  },
+  RESERVA_SIN_HORARIOS: {
+    status: 409,
+    cause: 'No hay horarios disponibles para ese plan.',
+    student: 'No hay horarios disponibles para ese plan.',
+    admin: 'No hay horarios disponibles para ese plan.',
+    action: 'Cambiar fecha, modalidad u hora; solicitar aviso de apertura.',
+  },
+  RESERVA_ACCION_INVALIDA: {
+    status: 400,
+    cause: 'La acción solicitada no es válida.',
+    student: 'La acción solicitada no es válida.',
+    admin: 'La acción solicitada no es válida.',
+    action: 'Usar una operación de reserva permitida.',
+  },
+  RESERVA_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La nueva modalidad de reserva aún no está disponible.',
+    student: 'La nueva modalidad de reserva aún no está disponible.',
+    admin: 'La nueva modalidad de reserva aún no está disponible.',
+    action: 'Comprobar los indicadores y sus dependencias.',
+  },
+  RESERVA_NO_AMPLIABLE: {
+    status: 409,
+    cause: 'Esta reserva no permite ampliar el tiempo.',
+    student: 'Esta reserva no permite ampliar el tiempo.',
+    admin: 'Esta reserva no permite ampliar el tiempo.',
+    action: 'Continuar con el pago o elegir otro horario.',
+  },
+  RESERVA_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos esa reserva.',
+    student: 'No encontramos esa reserva.',
+    admin: 'No encontramos esa reserva.',
+    action: 'Consultar las reservas de esta inscripción.',
+  },
+  CAPACIDAD_CONFIG_REQUERIDA: {
+    status: 503,
+    cause: 'La escuela debe configurar la disponibilidad antes de reservar.',
+    student: 'La escuela debe configurar la disponibilidad antes de reservar.',
+    admin: 'La escuela debe configurar la disponibilidad antes de reservar.',
+    action: 'Configurar explícitamente el número global de vehículos.',
+  },
+  CAPACIDAD_CUPO_AGOTADO: {
+    status: 409,
+    cause: 'No hay disponibilidad durante todas las fechas del plan.',
+    student: 'No hay disponibilidad durante todas las fechas del plan.',
+    admin: 'No hay disponibilidad durante todas las fechas del plan.',
+    action: 'Consultar la ocupación por intervalo y elegir otras fechas.',
+  },
+  CAPACIDAD_HISTORICO_PENDIENTE: {
+    status: 409,
+    cause: 'La escuela debe revisar las fechas de esta inscripción.',
+    student: 'La escuela debe revisar las fechas de esta inscripción.',
+    admin: 'La escuela debe revisar las fechas de esta inscripción.',
+    action: 'Resolver el preflight con evidencia y excepción auditada.',
+  },
+  CAPACIDAD_INSTRUCTOR_NO_DISPONIBLE: {
+    status: 409,
+    cause: 'El instructor ya no está disponible. Consulta otro horario.',
+    student: 'El instructor ya no está disponible. Consulta otro horario.',
+    admin: 'El instructor ya no está disponible. Consulta otro horario.',
+    action: 'Revisar la vigencia y disponibilidad del instructor.',
+  },
+  CAPACIDAD_VEHICULOS_AGOTADA: {
+    status: 409,
+    cause: 'No quedan recursos disponibles en esa hora.',
+    student: 'No quedan recursos disponibles en esa hora.',
+    admin: 'No quedan recursos disponibles en esa hora.',
+    action: 'Revisar prácticas simultáneas y vehículos globales.',
+  },
+  PAGO_PRECIO_NO_CONFIGURADO: {
+    status: 503,
+    cause: 'El precio aún no está disponible. Contacta con la escuela.',
+    student: 'El precio aún no está disponible. Contacta con la escuela.',
+    admin: 'El precio aún no está disponible. Contacta con la escuela.',
+    action: 'Cargar el precio por tipo mediante el script explícito aprobado.',
+  },
+  PAGO_EN_PROCESO: {
+    status: 409,
+    cause: 'El pago sigue en proceso. Espera su resultado y no pagues de nuevo.',
+    student: 'El pago sigue en proceso. Espera su resultado y no pagues de nuevo.',
+    admin: 'El pago sigue en proceso. Espera su resultado y no pagues de nuevo.',
+    action: 'Consultar el proveedor o conciliar antes de liberar recursos.',
+  },
+  PAGO_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa los datos del intento de pago.',
+    student: 'Revisa los datos del intento de pago.',
+    admin: 'Revisa los datos del intento de pago.',
+    action: 'Verificar proveedor, identificador e importes.',
+  },
+  PAGO_CUENTA_NO_HABILITADA: {
+    status: 403,
+    cause: 'Tu cuenta no está habilitada para pagar.',
+    student: 'Tu cuenta no está habilitada para pagar.',
+    admin: 'Tu cuenta no está habilitada para pagar.',
+    action: 'Revisar la cuenta antes de iniciar un pago nuevo.',
+  },
+  PAGO_IDEMPOTENCIA_CONFLICTO: {
+    status: 409,
+    cause: 'El intento corresponde a otra operación. Consulta el estado del pago.',
+    student: 'El intento corresponde a otra operación. Consulta el estado del pago.',
+    admin: 'El intento corresponde a otra operación. Consulta el estado del pago.',
+    action: 'Comprobar la clave idempotente y sus entidades.',
+  },
+  PAGO_INTENTO_PENDIENTE: {
+    status: 409,
+    cause: 'Ya hay un pago pendiente o recibido. No pagues otra vez.',
+    student: 'Ya hay un pago pendiente o recibido. No pagues otra vez.',
+    admin: 'Ya hay un pago pendiente o recibido. No pagues otra vez.',
+    action: 'Resolver el intento existente antes de crear otro.',
+  },
+  PAGO_NO_ENCONTRADO: {
+    status: 404,
+    cause: 'No encontramos ese pago.',
+    student: 'No encontramos ese pago.',
+    admin: 'No encontramos ese pago.',
+    action: 'Consultar el intento asociado a la inscripción.',
+  },
+  PAGO_REFERENCIA_CONFLICTO: {
+    status: 409,
+    cause: 'La respuesta del pago requiere revisión. No pagues otra vez.',
+    student: 'La respuesta del pago requiere revisión. No pagues otra vez.',
+    admin: 'La respuesta del pago requiere revisión. No pagues otra vez.',
+    action: 'Conciliar la referencia con el intento original.',
+  },
+  PAGO_RESERVA_INVALIDA: {
+    status: 409,
+    cause: 'La reserva no permite iniciar este pago. Consulta su estado.',
+    student: 'La reserva no permite iniciar este pago. Consulta su estado.',
+    admin: 'La reserva no permite iniciar este pago. Consulta su estado.',
+    action: 'Comprobar retenciones, estado y precio fijado.',
+  },
+  PAGO_RESERVA_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos la reserva de ese pago.',
+    student: 'No encontramos la reserva de ese pago.',
+    admin: 'No encontramos la reserva de ese pago.',
+    action: 'Revisar la reserva y la pertenencia del intento.',
+  },
+  PAGO_APROBADO_SIN_RECURSOS: {
+    status: 409,
+    cause: 'Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo.',
+    student: 'Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo.',
+    admin: 'Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo.',
+    action: 'Resolver la asignación o documentar la devolución; no simular reembolsos.',
+  },
+  PAGO_ACTIVACION_REVISION: {
+    status: 409,
+    cause: 'La escuela está revisando la asignación de tu pago.',
+    student: 'La escuela está revisando la asignación de tu pago.',
+    admin: 'La escuela está revisando la asignación de tu pago.',
+    action: 'Revisar el pago y las prácticas retenidas antes de resolver.',
+  },
+  PERMISO_REQUERIDO: {
+    status: 403,
+    cause: 'No tienes permiso para realizar esta operación.',
+    student: 'No tienes permiso para realizar esta operación.',
+    admin: 'No tienes permiso para realizar esta operación.',
+    action: 'Solicitar el permiso específico a un administrador autorizado.',
+  },
 } as const;
 export type CohortErrorCode = keyof typeof COHORT_ERRORS;
 export function cohortError(code: CohortErrorCode): AppError {
   return new AppError(COHORT_ERRORS[code].student, COHORT_ERRORS[code].status, { code });
+}
+
+/** Solo códigos catalogados; nunca devuelve el detalle SQL ni su mensaje arbitrario. */
+export function translateCohortSqlError(error: unknown): AppError | null {
+  if (!error || typeof error !== 'object') return null;
+  const value = error as { code?: unknown; message?: unknown };
+  if (
+    value.code !== 'P7000' ||
+    typeof value.message !== 'string' ||
+    !(value.message in COHORT_ERRORS)
+  )
+    return null;
+  return cohortError(value.message as CohortErrorCode);
 }

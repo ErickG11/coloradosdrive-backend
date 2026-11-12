@@ -1,3 +1,4 @@
+import { startPaymentReconciliationCron } from './jobs/paymentReconciliationCron';
 import { startPaymentWelcomeCron } from './jobs/paymentWelcomeCron';
 import { startStudentScheduleExpiryCron } from './jobs/studentScheduleExpiryCron';
 import { createApp } from './app';
@@ -18,6 +19,7 @@ if (process.env.DISABLE_CRON !== 'true') {
   startPracticeSlotCron();
   startStudentScheduleExpiryCron();
   startPaymentWelcomeCron();
+  startPaymentReconciliationCron();
   startSolicitudCleanupCron();
   startSolicitudApprovalRecoveryCron();
 } else {

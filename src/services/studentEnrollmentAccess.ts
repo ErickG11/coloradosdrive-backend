@@ -35,9 +35,12 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
   const path = mountedPath.replace(/\/+$/, '');
   if (
     method === 'GET' &&
-    ['/estudiantes/estado-inscripcion', '/estudiantes/account-status', '/notifications', '/estudiantes/inscripcion/horario/config'].includes(
-      path,
-    )
+    [
+      '/estudiantes/estado-inscripcion',
+      '/estudiantes/account-status',
+      '/notifications',
+      '/estudiantes/inscripcion/horario/config',
+    ].includes(path)
   )
     return true;
   if (
@@ -45,10 +48,16 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
     ['/estudiantes/cambiar-password', '/notifications/read-all'].includes(path)
   )
     return true;
-  if (method === 'GET' && path === '/estudiantes/inscripcion/reserva') return true;
+  if (
+    method === 'GET' &&
+    (path === '/estudiantes/inscripcion/reserva' ||
+      /^\/estudiantes\/inscripcion\/reserva\/matricula\/[\da-f-]{36}$/i.test(path))
+  )
+    return true;
   if (
     method === 'POST' &&
     ([
+      '/estudiantes/inscripcion/horario/calendario',
       '/estudiantes/inscripcion/horario/opciones',
       '/estudiantes/inscripcion/horario/plan',
       '/estudiantes/inscripcion/reservas',

@@ -6,7 +6,7 @@ import type { EmbeddedPostgres } from './embeddedPostgres';
 export const enrollmentSql = (file: string): string =>
   readFileSync(resolve(__dirname, '../..', file), 'utf8');
 /** Superficies administradas, recreadas únicamente dentro de PGlite. */
-export async function setupManagedSurfaces(db: EmbeddedPostgres): Promise<void> {
+export async function setupManagedSurfaces(db: Pick<EmbeddedPostgres, 'exec'>): Promise<void> {
   await db.exec(`grant usage on schema public,auth,storage to service_role;
     grant usage on schema realtime to authenticated;
     grant select on realtime.messages to authenticated;
@@ -18,7 +18,7 @@ export async function setupManagedSurfaces(db: EmbeddedPostgres): Promise<void> 
     alter default privileges for role postgres in schema public grant all on tables to anon,authenticated;`);
 }
 export async function setupEnrollmentDatabase(
-  db: EmbeddedPostgres,
+  db: Pick<EmbeddedPostgres, 'exec'>,
   through: string,
 ): Promise<void> {
   await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
