@@ -1,7 +1,34 @@
--- Lote 1: expansión compatible. Aplicación MANUAL después de 067; NO aplicar 064.
--- Ninguna función de reserva, pago, admisión o acceso cambia en este lote.
+-- Lote 1: expansión compatible. MANUAL después de 067; NO aplicar 064.
+-- Reaplicación no destructiva únicamente tras rollback funcional de 068/069.
 begin;
-set local lock_timeout = '5s';
+set local lock_timeout='5s';
+do $resume_068$
+declare t text; pair record;
+begin
+ if to_regclass('public.enrollment_rule_flags') is not null then
+   foreach t in array array['public.course_type_prices','public.enrollment_plan_options',
+     'public.enrollment_admin_permissions','public.enrollment_domain_audit','public.enrollment_funnel_events',
+     'private.enrollment_backfill_069','private.lote1_enrollment_evidence',
+     'private.lote1_reservation_evidence','private.lote1_preflight_cases'] loop
+     if to_regclass(t) is null then raise exception '068: instalación parcial, falta %',t;end if;
+   end loop;
+   for pair in select * from (values
+     ('enrollments','practice_start_date'),('enrollments','practice_end_date'),('enrollments','access_end_date'),
+     ('enrollments','paid_amount_centavos'),('enrollments','individual_dates_source'),('enrollments','individual_dates_guard_ready'),
+     ('cohorts','codigo'),('cohorts','habilitada'),('cohorts','cancelled_at'),('cohorts','cancelled_by'),('cohorts','cancellation_reason'),
+     ('student_schedule_reservations','precio_snapshot_centavos'),('student_schedule_reservations','precio_snapshot_source'),
+     ('student_schedule_reservations','precio_snapshot_at'),('student_schedule_reservations','practice_start_date'),
+     ('student_schedule_reservations','practice_end_date'),('student_schedule_reservations','admission_at'),
+     ('student_schedule_reservations','admission_rule_version')) as x(tab,col) loop
+     if not exists(select 1 from information_schema.columns where table_schema='public' and table_name=pair.tab and column_name=pair.col) then
+       raise exception '068: columna ausente %.%',pair.tab,pair.col;end if;
+   end loop;
+   if (select count(*) from public.enrollment_rule_flags)<>14
+     or exists(select 1 from public.enrollment_rule_flags where enabled or implemented)
+     or exists(select 1 from private.enrollment_backfill_069 where rolled_back_at is null) then
+     raise exception '068: revertir primero 069/lotes posteriores y apagar indicadores';end if;
+ else
+   execute $foundation_068$
 do $$ begin
   if to_regclass('public.payments') is null or to_regclass('public.subject_items') is null
     or not exists(select 1 from information_schema.columns where table_schema='public'
@@ -303,4 +330,7 @@ revoke all on private.lote1_enrollment_evidence,private.lote1_reservation_eviden
 grant execute on function private.lote1_date(text) to service_role;
 grant select on private.lote1_enrollment_evidence,private.lote1_reservation_evidence,
  private.lote1_preflight_cases to service_role;
+$foundation_068$;
+ end if;
+end $resume_068$;
 commit;

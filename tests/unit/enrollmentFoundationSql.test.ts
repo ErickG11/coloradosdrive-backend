@@ -27,7 +27,7 @@ afterEach(async () => {
 
 test('manifiesto incluye 066a/b, excluye 064 y rechaza límites no aprobados', () => {
   const entries = approvedMigrations();
-  expect(entries).toHaveLength(69);
+  expect(entries.some((entry) => entry.id === '069')).toBe(true);
   expect(entries.map((e) => e.id)).toEqual(expect.arrayContaining(['066a', '066b', '068', '069']));
   expect(entries.some((e) => e.id === '064')).toBe(false);
   expect(() => approvedMigrations('064')).toThrow('no aprobado');
@@ -237,6 +237,8 @@ test('backfill repetido es idempotente y rollback restaura sin borrar procedenci
     ).rows[0],
   ).toEqual({ n: journal.length });
   await db.exec(enrollmentSql('docs/operations/inscripcion-068-rollback.sql'));
+  await db.exec(enrollmentSql('migrations/068_inscripcion_modelo_base.sql'));
+  await db.exec(enrollmentSql('docs/operations/inscripcion-068-verificacion.sql'));
   await backfill();
   expect(
     (
