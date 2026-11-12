@@ -217,4 +217,20 @@ Usar Node 22, conforme al rango de engines del backend.
 - **Recursos físicos:** sigue faltando confirmar si vehículos u otro recurso limitan
   concurrencia. No se inventa una capa paralela.
 
+## Alcance de pruebas actualizado
+
+Por instrucción del dueño, desde el ajuste solo se ejecutan tipos y pruebas
+obligatorias del lote autorizado. No se repiten lint/build completos ni regresión
+amplia por lote. Las ejecuciones previas se conservan como evidencia histórica.
+Las pruebas diferidas, riesgo y lote funcional están en
+[PRUEBAS_PENDIENTES.md](../PRUEBAS_PENDIENTES.md).
+
+Aprobaciones: **1 solo → 2+3 → 4+5 → 6+7 → 8+9+10 → 11**.
+Cada grupo requiere aprobación antes de empezar, entrega y parada al terminar.
+Las pruebas de fechas, reserva, permisos, privacidad API y demás invariantes obligatorios
+se ejecutarán en su grupo, sin reducirlas ni sustituir concurrencia real por promesas
+serializadas. Las 12 duraciones se comprobarán en una prueba parametrizada con
+los mismos vectores TypeScript/SQL en el grupo 2+3, sin implementar ese grupo aquí.
+Ante fallo de una prueba obligatoria se informa y se detiene, sin añadir skips.
+
 Al terminar lote 1 se detiene el trabajo. No se ejecuta ni implementa lote 2.

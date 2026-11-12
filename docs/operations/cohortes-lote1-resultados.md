@@ -17,10 +17,11 @@ pruebas preliminares, pero los resultados siguientes se confirmaron con Node 22.
 | F45 hasta 069 | 69/69 migraciones OK; 47 preflights OK; 40 verificaciones OK; 50 rollbacks OK |
 | Scripts históricos no existentes | 22 preflights, 29 verificaciones y 19 rollbacks N/D; no se presentan como comprobados |
 | Preflight/verificación/rollback 068 y 069 | Los seis OK, sin N/D |
-| `npm run build` backend | OK |
-| ESLint de archivos TypeScript cambiados | OK en ambos repositorios |
-| `tsc --noEmit --incremental false` frontend completo | OK |
-| Vitest: contratos de matrícula/reserva | 2/2 pruebas OK |
+| `npm run build` backend | OK antes del ajuste; no repetido |
+| ESLint de archivos TypeScript cambiados | OK antes del ajuste; no repetido |
+| `tsc --noEmit --incremental false` frontend completo | OK, confirmado tras el ajuste |
+| `tsc --noEmit -p tsconfig.json` backend (aplicación) | OK, confirmado tras el ajuste |
+| Vitest: contratos de matrícula/reserva | 2/2 OK antes del ajuste; pruebas retiradas después por redundancia con tipos |
 | Consola QA local | apply → verify → rollback → reset → export: OK |
 | Borrador 064 y sus tres scripts | SHA-256 intactos; excluidos de los cargadores |
 | Pruebas omitidas preexistentes | No modificadas ni incrementadas |
@@ -67,6 +68,7 @@ de nombre con acentos y de fechas de cohorte incompatibles, sin corregirlas auto
 
 Backend:
 
+- `docs/PRUEBAS_PENDIENTES.md`
 - `migrations/068_inscripcion_modelo_base.sql`
 - `migrations/069_inscripcion_backfill_trazable.sql`
 - `docs/operations/inscripcion-068-{preflight,verificacion,rollback}.sql`
@@ -88,10 +90,10 @@ Backend:
 
 Frontend:
 
+- `docs/PRUEBAS_PENDIENTES.md`
 - `types/enrollmentFoundation.ts`
 - `types/enrollment.ts`
 - `types/studentSchedule.ts`
-- `tests/types/enrollmentFoundation.test.ts`
 - `docs/operations/cohortes-lote1.md`
 
 ## Pendientes y riesgos
@@ -111,3 +113,16 @@ Frontend:
 Guion de respaldo, orden manual, ensayo, verificaciones, rollback y guía QA:
 [cohortes-lote1.md](cohortes-lote1.md). Incluye el cálculo eficiente de ocupación por
 intervalos y el estado PENDIENTE del adaptador de conciliación para el futuro lote 3.
+
+## Ajuste de pruebas recibido durante el cierre
+
+Desde la instrucción nueva solo se ejecutan tipos y las pruebas obligatorias del
+lote 1. Los lint/build y las 72 pruebas de regresión registrados arriba ocurrieron
+antes del ajuste, no se volverán a ejecutar por lote. Las dos pruebas de contratos
+frontend se retiraron del árbol actual; la cobertura de tipos permanece. No se
+modificaron ni incrementaron skips preexistentes. El test de backfill compara
+explícitamente IDs, relaciones, importes y versiones antes/después.
+
+Registro de pendientes: [PRUEBAS_PENDIENTES.md](../PRUEBAS_PENDIENTES.md).
+Aprobaciones futuras: lote 1 solo; 2+3; 4+5; 6+7; 8+9+10; lote 11 al final.
+El cambio de agrupación no autoriza iniciar el grupo siguiente.
