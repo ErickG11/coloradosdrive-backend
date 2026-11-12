@@ -1,4 +1,5 @@
 import type { ManualPracticeInput } from '../models/manualEnrollment.model';
+import { buildEnrollmentPlan } from './enrollmentRules';
 import { AppError } from './AppError';
 import { isFechaCivil } from './cohortRules';
 import { HORAS_POR_DIA_MESSAGE, isHorasPorDiaValid } from './practiceHours';
@@ -20,6 +21,10 @@ function invalid(message: string, field: string): AppError {
 
 // La interfaz consume este cálculo por HTTP; no hay una segunda fórmula en el navegador.
 export interface ManualPracticePlan {
+  rulesActive?: boolean;
+  franjas?: string[];
+  ultimaHoraFin?: string;
+  precioCentavos?: number;
   timezone: string;
   semanas: number;
   modalidad: ManualPracticeInput['modalidad'];
@@ -35,7 +40,36 @@ export interface ManualPracticePlan {
   horasPorDia: number;
   horaDeseada: string;
 }
-export function manualPracticePlan(input: ManualPracticeInput): ManualPracticePlan {
+export function manualPracticePlan(input: ManualPracticeInput, exact = false): ManualPracticePlan {
+  if (exact) {
+    const hour = parseHora(input.horaResuelta ?? input.horaDeseada);
+    if (hour.minute !== 0) throw invalid(PRACTICE_MESSAGES.horaDeseada, 'horaDeseada');
+    const plan = buildEnrollmentPlan({
+      modalidad: input.modalidad,
+      fechaInicio: input.fechaInicio,
+      horasPorDia: input.horasPorDia,
+      horaInicio: hour.hour,
+    });
+    return {
+      rulesActive: true,
+      franjas: plan.franjas,
+      ultimaHoraFin: plan.ultimaHoraFin,
+      timezone: SCHOOL_TIMEZONE,
+      semanas: input.semanas,
+      modalidad: input.modalidad,
+      fechaInicio: input.fechaInicio,
+      primerDiaEfectivo: plan.fechaInicioEfectiva,
+      fechaFin: plan.ultimaFecha,
+      fechaFinElegida: plan.ultimaFecha,
+      manual: false,
+      fechas: plan.dias.map((d) => d.fecha),
+      dias: plan.dias.length,
+      bloques: 15,
+      horas: 15,
+      horasPorDia: input.horasPorDia,
+      horaDeseada: input.horaDeseada,
+    };
+  }
   if (
     ![1, 2, 3].includes(input.semanas) ||
     !['entre_semana', 'fin_de_semana'].includes(input.modalidad)
@@ -46,7 +80,8 @@ export function manualPracticePlan(input: ManualPracticeInput): ManualPracticePl
   const hora = parseHora(input.horaResuelta ?? input.horaDeseada);
   const minutos = hora.hour * 60 + hora.minute;
   if (minutos < 360 || minutos > 1320) throw invalid(PRACTICE_MESSAGES.horaDeseada, 'horaDeseada');
-  if (minutos + input.horasPorDia * 60 > 1320) throw invalid(PRACTICE_MESSAGES.horaNoCabe, 'horaDeseada');
+  if (minutos + input.horasPorDia * 60 > 1320)
+    throw invalid(PRACTICE_MESSAGES.horaNoCabe, 'horaDeseada');
   if (!isFechaCivil(input.fechaInicio)) throw invalid(PRACTICE_MESSAGES.fechaInicio, 'fechaInicio');
   if (input.fechaFin !== undefined && !isFechaCivil(input.fechaFin))
     throw invalid(PRACTICE_MESSAGES.fechaFin, 'fechaFin');
@@ -62,8 +97,7 @@ export function manualPracticePlan(input: ManualPracticeInput): ManualPracticePl
       fechas.push(cursor.toFormat('yyyy-MM-dd'));
     cursor = cursor.plus({ days: 1 });
   }
-  if (fechas.length === 0)
-    throw invalid(PRACTICE_MESSAGES.rangoSinDias, 'fechaFin');
+  if (fechas.length === 0) throw invalid(PRACTICE_MESSAGES.rangoSinDias, 'fechaFin');
   return {
     timezone: SCHOOL_TIMEZONE,
     semanas: input.semanas,

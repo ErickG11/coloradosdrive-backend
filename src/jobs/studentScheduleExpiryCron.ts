@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 import { supabaseAdmin } from '../config/supabase';
 import { StudentScheduleExpiryService } from '../services/studentScheduleExpiry.service';
@@ -11,8 +12,7 @@ export function startStudentScheduleExpiryCron(): void {
     () => {
       if (running) return;
       running = true;
-      service
-        .run()
+      observeJob('expiry', () => service.run())
         .then((report) => {
           if (report.vencidas || report.fallos)
             console.warn(JSON.stringify({ event: 'student_schedule_expiry', ...report }));

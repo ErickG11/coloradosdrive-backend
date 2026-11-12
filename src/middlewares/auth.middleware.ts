@@ -104,6 +104,7 @@ export async function authenticate(
 
     const payload = await verifySupabaseJwt(token);
     const user = toAuthenticatedUser(payload);
+    req.user = user;
 
     if (user.role === 'estudiante') {
       await assertPasswordNotPendingChange(req, user.id);

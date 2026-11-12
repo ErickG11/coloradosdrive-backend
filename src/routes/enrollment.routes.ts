@@ -1,3 +1,7 @@
+import { supabaseAdmin } from '../config/supabase';
+import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
+import { cohortError } from '../config/cohortErrors';
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { Router } from 'express';
 import { assertBirthDate } from '../utils/birthDate';
 import { body } from 'express-validator';
@@ -13,6 +17,7 @@ export const enrollmentRouter = Router();
 
 // RF-01: solo el administrador puede crear matrículas.
 enrollmentRouter.use(asyncHandler(authenticate), requireRole('admin'));
+enrollmentRouter.use(requireEnrollmentPermission('reassign_schedules'));
 
 // Fase 10: cohortId es opcional (el admin puede sobreescribir la
 // asignación automática), pero si no se manda, courseId es obligatorio
@@ -87,4 +92,17 @@ const enrollValidators = [
     .withMessage('montoAbonado debe ser un número mayor o igual a 0'),
 ];
 
-enrollmentRouter.post('/', enrollValidators, validate, asyncHandler(createEnrollment));
+enrollmentRouter.post(
+  '/',
+  asyncHandler(async (_req, _res, next) => {
+    if (
+      (await enrollmentRuleEnabled(supabaseAdmin, 'date_rules')) ||
+      (await enrollmentRuleEnabled(supabaseAdmin, 'billing'))
+    )
+      throw cohortError('MATRICULA_PLAN_REQUERIDO');
+    next();
+  }),
+  enrollValidators,
+  validate,
+  asyncHandler(createEnrollment),
+);

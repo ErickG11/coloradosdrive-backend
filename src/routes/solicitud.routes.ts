@@ -1,3 +1,4 @@
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { requestReviewRouter } from './requestReview.routes';
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
@@ -113,6 +114,7 @@ solicitudRouter.post(
 export const solicitudAdminRouter = Router();
 
 solicitudAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
+solicitudAdminRouter.use(requireEnrollmentPermission('verify_identity'));
 solicitudAdminRouter.use(requestReviewRouter);
 
 solicitudAdminRouter.get(

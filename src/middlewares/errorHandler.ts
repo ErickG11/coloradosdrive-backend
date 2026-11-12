@@ -1,3 +1,5 @@
+import { supabaseAdmin } from '../config/supabase';
+import { COHORT_ERRORS, translateCohortSqlError } from '../config/cohortErrors';
 import type { NextFunction, Request, Response } from 'express';
 
 import { isProduction } from '../config/env';
@@ -21,6 +23,7 @@ interface ErrorResponseBody {
   field?: string;
   detalles?: Record<string, unknown>;
   faltantes?: unknown;
+  correlationId?: string;
 }
 
 export function notFoundHandler(req: Request, _res: Response, next: NextFunction): void {
@@ -33,10 +36,18 @@ export function errorHandler(
   res: Response<ErrorResponseBody>,
   _next: NextFunction,
 ): void {
+  err = translateCohortSqlError(err) ?? err;
+  res.locals.errorCode =
+    err instanceof AppError ? (err.code ?? 'OPERACION_RECHAZADA') : 'ERROR_INTERNO';
+  if (err instanceof AppError && err.statusCode === 403 && req.user) {
+    void supabaseAdmin.rpc('report_enrollment_security_v2', { p_actor: req.user.id }).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
   // Frontera de salida S1: tampoco revelar detalles/campos/stack por rutas hermanas.
   const identityError = normalizeSolicitudError(err);
-  const authenticatedAdmin =
-    req.user?.role === 'admin' && /^\/admin(?:\/|$|\?)/.test(req.originalUrl);
+  const authenticatedAdmin = req.user?.role === 'admin';
   if (!authenticatedAdmin && ADMIN_IDENTITY_CODES.has(solicitudErrorCode(identityError))) {
     res.status(409).json({
       status: 'error',
@@ -135,7 +146,25 @@ export function errorHandler(
     logSafeError('unhandled_request_error', err);
   }
 
-  const body: ErrorResponseBody = { status: 'error', message };
+  const code = err instanceof AppError ? err.code : undefined;
+  const catalog =
+    code && code in COHORT_ERRORS ? COHORT_ERRORS[code as keyof typeof COHORT_ERRORS] : undefined;
+  const body: ErrorResponseBody = {
+    status: 'error',
+    message: authenticatedAdmin && catalog && message === catalog.student ? catalog.admin : message,
+    correlationId: res.locals.correlationId as string | undefined,
+  };
+  if (authenticatedAdmin) {
+    const ids = Object.fromEntries(
+      Object.entries({ ...req.params, ...(req.body as Record<string, unknown>) }).filter(
+        ([key, value]) =>
+          ['id', 'studentId', 'enrollmentId', 'cohortId', 'reservationId'].includes(key) &&
+          typeof value === 'string' &&
+          /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value),
+      ),
+    );
+    if (Object.keys(ids).length) body.detalles = { entityIds: ids };
+  }
   if (err instanceof AppError && err.code) {
     body.code = err.code;
     if (err.field) body.field = err.field;

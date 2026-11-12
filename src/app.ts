@@ -1,3 +1,5 @@
+import { requestCorrelation } from './middlewares/requestCorrelation.middleware';
+import { studentPrivacy } from './middlewares/studentPrivacy.middleware';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
@@ -40,10 +42,12 @@ export function createApp(): Express {
   );
   // Las respuestas llevan datos personales o de sesión: nunca se cachean.
   app.use(noStore);
+  app.use(requestCorrelation);
   // Cuerpo pequeño en inscripción; el resto conserva el límite por defecto (100 kb).
   app.use(ENROLLMENT_JSON_PATHS, jsonBody(ENROLLMENT_JSON_LIMIT));
   app.use(express.json());
 
+  app.use(studentPrivacy);
   app.use(apiRouter);
 
   app.use(notFoundHandler);

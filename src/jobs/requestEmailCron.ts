@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 import { supabaseAdmin } from '../config/supabase';
 import { mailer } from '../config/mailer';
@@ -12,8 +13,7 @@ export function startRequestEmailCron(): void {
     () => {
       if (running) return;
       running = true;
-      void service
-        .run()
+      void observeJob('request_email', () => service.run())
         .catch((error: unknown) => logSafeError('request_email_failed', error))
         .finally(() => {
           running = false;

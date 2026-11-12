@@ -406,6 +406,35 @@ export interface Database {
         Returns: { vehiculos: number; horasSobreLimite: number };
       };
 
+      enrollment_metrics_v2: {
+        Args: { p_actor: string };
+        Returns: { active: boolean; counts?: Record<string, number>; serverNow?: string };
+      };
+      record_schedule_choice_v2: {
+        Args: { p_student: string; p_enrollment: string };
+        Returns: undefined;
+      };
+      enrollment_job_heartbeat_v2: {
+        Args: { p_job: string; p_result: string; p_disabled?: boolean };
+        Returns: undefined;
+      };
+      monitor_enrollment_rules_v2: { Args: Record<string, never>; Returns: number };
+      report_enrollment_security_v2: { Args: { p_actor: string }; Returns: undefined };
+      assert_enrollment_permission_v2: {
+        Args: { p_actor: string; p_permission: string };
+        Returns: undefined;
+      };
+      manual_plan_preview_v2: {
+        Args: { p_actor: string; p_type: CourseType; p_input: Json; p_student: string | null };
+        Returns: {
+          plan: Json;
+          cohort: Database['public']['Tables']['cohorts']['Row'];
+          courseId: string;
+          precioCentavos: number;
+          instructors: { id: string; nombreCompleto: string }[];
+          serverNow: string;
+        };
+      };
       student_schedule_calendar_v2: {
         Args: {
           p_student: string;
@@ -414,7 +443,11 @@ export interface Database {
           p_mode: string;
           p_hours: number;
         };
-        Returns: { serverNow: string; dias: { fecha: string; disponible: boolean }[] };
+        Returns: {
+          serverNow: string;
+          calendarEndDate?: string | null;
+          dias: { fecha: string; disponible: boolean }[];
+        };
       };
 
       claim_payment_reconciliation: {

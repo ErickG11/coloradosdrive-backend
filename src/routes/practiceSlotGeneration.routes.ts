@@ -1,5 +1,10 @@
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { Router } from 'express';
-import { HORAS_POR_DIA_MAX, HORAS_POR_DIA_MIN, HORAS_POR_DIA_MESSAGE } from '../utils/practiceHours';
+import {
+  HORAS_POR_DIA_MAX,
+  HORAS_POR_DIA_MIN,
+  HORAS_POR_DIA_MESSAGE,
+} from '../utils/practiceHours';
 import { body, param } from 'express-validator';
 import type { Meta, ValidationChain } from 'express-validator';
 
@@ -19,6 +24,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const practiceSlotGenerationRouter = Router();
 
 practiceSlotGenerationRouter.use(asyncHandler(authenticate), requireRole('admin'));
+practiceSlotGenerationRouter.use(requireEnrollmentPermission('reassign_schedules'));
 
 const enrollmentIdValidator = param('enrollmentId')
   .isUUID()

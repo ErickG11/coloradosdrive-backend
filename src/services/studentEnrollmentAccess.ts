@@ -13,7 +13,7 @@ export async function inscripcionIncompleta(
   studentId: string,
 ): Promise<boolean> {
   const access = await individualEnrollmentAccess(db, studentId);
-  if (access.active && access.enrollments.some((e) => e.eligible)) return false;
+  if (access.active) return !access.enrollments.some((e) => e.eligible);
   const { data, error } = await db
     .from('enrollments')
     .select('id,etapa_inscripcion,reserva_expira_at')

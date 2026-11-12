@@ -1,3 +1,4 @@
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { presentChangeReservation } from '../services/planChange.service';
 import { translateCohortSqlError, cohortError as domainCohortError } from '../config/cohortErrors';
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
@@ -29,6 +30,15 @@ export const cohortRouter = Router();
 
 // RF-01: solo el administrador puede crear y editar matrículas/cohortes.
 cohortRouter.use(asyncHandler(authenticate), requireRole('admin'));
+cohortRouter.use((req, res, next) => {
+  if (
+    ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) &&
+    !req.path.includes('reasign') &&
+    !req.path.includes('cambio')
+  )
+    return requireEnrollmentPermission('manage_cohorts_prices')(req, res, next);
+  next();
+});
 cohortRouter.get(
   '/configuracion',
   asyncHandler(async (req, res) => {
@@ -40,7 +50,7 @@ cohortRouter.get(
 cohortRouter.patch(
   '/configuracion/precio',
   body('tipo').isIn(['A', 'B']),
-  body('centavos').isInt({ min: 0, max: 999999 }).toInt(),
+  body('centavos').isInt({ min: 0, max: 999999999 }).toInt(),
   body('motivo').isString().isLength({ min: 1, max: 500 }),
   validateFields,
   asyncHandler(async (req, res) => {
@@ -61,7 +71,7 @@ cohortRouter.patch(
 );
 cohortRouter.patch(
   '/configuracion/vehiculos',
-  body('cantidad').isInt({ min: 0, max: 1000 }).toInt(),
+  body('cantidad').isInt({ min: 0, max: 2147483647 }).toInt(),
   body('motivo').isString().isLength({ min: 1, max: 500 }),
   validateFields,
   asyncHandler(async (req, res) => {

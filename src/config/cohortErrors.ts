@@ -789,6 +789,44 @@ export const COHORT_ERRORS = {
     action:
       'Devolver para corrección antes de modificar; conservar evidencia/verificaciones anteriores.',
   },
+  PAGO_PRECIO_CAMBIO: {
+    status: 409,
+    cause: 'El precio cambió desde la consulta. Revisa el precio y confirma nuevamente.',
+    student: 'El precio cambió desde la consulta. Revisa el precio y confirma nuevamente.',
+    admin: 'El precio cambió desde la consulta. Revisa el precio y confirma nuevamente.',
+    action: 'Recargar la vista previa; no aceptar un cobro distinto sin confirmación.',
+  },
+  CONFIG_DEPENDENCIA_REQUERIDA: {
+    status: 409,
+    cause: 'La configuración requiere activar sus dependencias en una misma transacción.',
+    student: 'La configuración requiere activar sus dependencias en una misma transacción.',
+    admin: 'La configuración requiere activar sus dependencias en una misma transacción.',
+    action:
+      'Revisar el orden del guion de activación y conservar todos los indicadores apagados si falla.',
+  },
+  CONFIG_OBSERVACION_INVALIDA: {
+    status: 400,
+    cause: 'El identificador o resultado del trabajo periódico no es válido.',
+    student: 'El identificador o resultado del trabajo periódico no es válido.',
+    admin: 'El identificador o resultado del trabajo periódico no es válido.',
+    action: 'Usar solo el catálogo cerrado de trabajos y estados.',
+  },
+  FACTURA_DEVOLUCION_DOCUMENTADA: {
+    status: 409,
+    cause: 'La reducción de un cobro requiere una devolución documentada.',
+    student: 'La reducción de un cobro requiere una devolución documentada.',
+    admin: 'La reducción de un cobro requiere una devolución documentada.',
+    action:
+      'Documentar importe, motivo y referencia; no sobrescribir el abono ni simular al proveedor.',
+  },
+  MATRICULA_PLAN_REQUERIDO: {
+    status: 409,
+    cause: 'La ruta anterior no recibe el plan individual requerido.',
+    student: 'El registro requiere el formulario actualizado de matrícula.',
+    admin: 'Usa la caja de matrícula manual con vista previa del plan individual y su precio.',
+    action:
+      'Usar /admin/manual-enrollments; no crear Auth ni una matrícula parcial desde la ruta anterior.',
+  },
 } as const;
 export type CohortErrorCode = keyof typeof COHORT_ERRORS;
 export function cohortError(code: CohortErrorCode): AppError {

@@ -1,3 +1,4 @@
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { paymentWithWelcome } from '../services/paymentWelcome';
 import { Router } from 'express';
 import { body, param, matchedData } from 'express-validator';
@@ -13,6 +14,7 @@ import { env } from '../config/env';
 import { paymentService, strictPaymentBody, paymentRateKey } from './studentPayment.routes';
 export const adminPaymentRouter = Router();
 adminPaymentRouter.use(asyncHandler(authenticate), requireRole('admin'));
+adminPaymentRouter.use(requireEnrollmentPermission('view_payments_invoices'));
 adminPaymentRouter.use((req, _res, next) => {
   if (Object.keys(req.query).length) {
     next(new AppError('No se admiten parámetros.', 400, { code: 'INVALID_FIELD' }));

@@ -1,3 +1,4 @@
+import { adminFinancialPrivacy } from '../middlewares/adminFinancialPrivacy.middleware';
 import { PlanChangeService } from '../services/planChange.service';
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
@@ -32,6 +33,7 @@ const accessService = new StudentAccessService(supabaseAdmin);
 const deletionService = new StudentDeletionService(supabaseAdmin);
 const cohortService = new StudentCohortService(supabaseAdmin);
 studentAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
+studentAdminRouter.use(adminFinancialPrivacy);
 
 function actor(req: Request): string {
   if (!req.user) throw new AppError('Authentication required', 401);

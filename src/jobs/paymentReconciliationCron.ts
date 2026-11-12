@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 import { supabaseAdmin } from '../config/supabase';
 import { PaymentReconciliationService } from '../services/paymentReconciliation.service';
@@ -14,8 +15,7 @@ export function startPaymentReconciliationCron(): void {
     () => {
       if (running) return;
       running = true;
-      void service
-        .run()
+      void observeJob('reconciliation', () => service.run())
         .catch((error: unknown) => logSafeError('payment_reconciliation_failed', error))
         .finally(() => {
           running = false;

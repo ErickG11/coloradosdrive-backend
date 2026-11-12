@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 
 import { supabaseAdmin } from '../config/supabase';
@@ -16,8 +17,7 @@ export function startSolicitudCleanupCron(): void {
     () => {
       if (running) return;
       running = true;
-      cleanupService
-        .runAll()
+      observeJob('cleanup', () => cleanupService.runAll())
         .then((report) => {
           console.warn(JSON.stringify({ event: 'solicitud_cleanup_done', ...report }));
         })
