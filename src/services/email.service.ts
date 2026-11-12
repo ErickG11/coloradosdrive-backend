@@ -213,6 +213,21 @@ export class EmailService {
     });
   }
 
+  async sendEnrollmentPlanChangedEmail(params: {
+    to: string;
+    summary: string;
+    messageId: string;
+  }): Promise<void> {
+    const url = new URL('/student/inscripcion', env.FRONTEND_URL).toString();
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      messageId: params.messageId,
+      subject: 'Tu plan de prácticas fue actualizado',
+      text: `${params.summary}\n${url}`,
+      html: `<p>${escapeHtml(params.summary)}</p><p><a href="${escapeHtml(url)}">Consultar mi plan</a></p>`,
+    });
+  }
   async sendWaitlistAvailabilityEmail(params: {
     to: string;
     type: 'A' | 'B';

@@ -12,6 +12,7 @@ export interface StudentScheduleSelection extends StudentScheduleInput {
   horaInicio: number;
 }
 export interface StudentScheduleReservation {
+  purpose?: 'initial' | 'plan_change';
   individualDates?: IndividualEnrollmentSnapshot;
   id: string;
   enrollmentId: string;
@@ -77,7 +78,14 @@ export interface StudentSchedulePreview {
 }
 
 export interface StudentPlanRules {
-  active: boolean; serverNow: string;
-  options: { modalidad: 'entre_semana'|'fin_de_semana'; horasPorDia: number; habilitada: boolean;
-    sesiones: number; primeraFecha: string; ultimaFecha: string; }[];
+  active: boolean;
+  serverNow: string;
+  options: {
+    modalidad: 'entre_semana' | 'fin_de_semana';
+    horasPorDia: number;
+    habilitada: boolean;
+    sesiones: number;
+    primeraFecha: string;
+    ultimaFecha: string;
+  }[];
 }

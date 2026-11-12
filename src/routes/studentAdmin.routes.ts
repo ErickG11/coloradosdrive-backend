@@ -1,3 +1,4 @@
+import { PlanChangeService } from '../services/planChange.service';
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router, type Request } from 'express';
@@ -134,6 +135,125 @@ studentAdminRouter.post(
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json({ retried: result.data });
+  }),
+);
+const changeService = new PlanChangeService(supabaseAdmin);
+studentAdminRouter.get(
+  '/:id/matriculas/:enrollmentId/cambio',
+  param('id').isUUID(),
+  param('enrollmentId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const state = await changeService.state(req.params.id, req.params.enrollmentId, actor(req));
+    res.json(state);
+  }),
+);
+for (const changeAction of ['preview', 'reservar'] as const)
+  studentAdminRouter.post(
+    `/:id/matriculas/:enrollmentId/cambio/${changeAction}`,
+    param('id').isUUID(),
+    param('enrollmentId').isUUID(),
+    body('modalidad').isIn(['entre_semana', 'fin_de_semana']),
+    body('fechaInicio').matches(/^\d{4}-\d{2}-\d{2}$/),
+    body('horasPorDia').isInt({ min: 1, max: 6 }).toInt(),
+    body('horaInicio').isInt({ min: 6, max: 21 }).toInt(),
+    body('motivo').isString().isLength({ min: 1, max: 500 }),
+    body('cohortId').optional().isUUID(),
+    validate,
+    asyncHandler(async (req, res) => {
+      const { motivo, cohortId, ...input } = req.body as {
+        motivo: string;
+        cohortId?: string;
+        modalidad: 'entre_semana' | 'fin_de_semana';
+        fechaInicio: string;
+        horasPorDia: number;
+        horaInicio: number;
+      };
+      const source = await supabaseAdmin.rpc('admin_plan_change_state_v2', {
+        p_actor: actor(req),
+        p_enrollment: req.params.enrollmentId,
+      });
+      if (source.error) throwStudentScheduleError(source.error);
+      // La RPC deriva el propietario: el id de URL se verifica antes de mutar.
+      const own = await supabaseAdmin
+        .from('enrollments')
+        .select('id')
+        .eq('id', req.params.enrollmentId)
+        .eq('student_id', req.params.id)
+        .maybeSingle();
+      if (own.error) throwStudentScheduleError(own.error);
+      if (!own.data)
+        throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
+      const admin = { id: actor(req), reason: motivo, target: cohortId };
+      res.json(
+        changeAction === 'preview'
+          ? await changeService.preview(req.params.id, req.params.enrollmentId, input, admin)
+          : await changeService.reserve(req.params.id, req.params.enrollmentId, input, admin),
+      );
+    }),
+  );
+studentAdminRouter.post(
+  '/:id/matriculas/cambio/:reservationId/confirmar',
+  param('id').isUUID(),
+  param('reservationId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const permission = await supabaseAdmin.rpc('assert_reassignment_permission_v2', {
+      p_actor: actor(req),
+    });
+    if (permission.error) throwStudentScheduleError(permission.error);
+    const own = await supabaseAdmin
+      .from('student_schedule_reservations')
+      .select('id')
+      .eq('id', req.params.reservationId)
+      .eq('student_id', req.params.id)
+      .maybeSingle();
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data)
+      throw new AppError('Reserva no encontrada.', 404, { code: 'RESERVA_NO_ENCONTRADA' });
+    res.json(await changeService.confirm(req.params.id, req.params.reservationId, actor(req)));
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/cambio/:reservationId/liberar',
+  param('id').isUUID(),
+  param('reservationId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const result = await supabaseAdmin.rpc('release_admin_plan_change_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_reservation: req.params.reservationId,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json({ reserva: result.data, serverNow: result.data.serverNow });
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/:enrollmentId/cambio/calendario',
+  param('id').isUUID(),
+  param('enrollmentId').isUUID(),
+  body('fechaInicio').matches(/^\d{4}-\d{2}-\d{2}$/),
+  body('modalidad').isIn(['entre_semana', 'fin_de_semana']),
+  body('horasPorDia').isInt({ min: 1, max: 6 }).toInt(),
+  body('cohortId').optional().isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const { cohortId, ...input } = req.body as {
+      cohortId?: string;
+      fechaInicio: string;
+      modalidad: 'entre_semana' | 'fin_de_semana';
+      horasPorDia: number;
+    };
+    await changeService.state(req.params.id, req.params.enrollmentId, actor(req));
+    res.json(
+      await changeService.calendar(
+        req.params.id,
+        req.params.enrollmentId,
+        { ...input, horaInicio: 6 },
+        { id: actor(req), target: cohortId },
+      ),
+    );
   }),
 );
 const listFields = [

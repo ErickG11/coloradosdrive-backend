@@ -11,7 +11,7 @@ Ramas: feat/cohortes-reglas-inscripcion en ambos repositorios. Sin push ni bases
 | 4 | Completo | 6 escenarios SQL OK, manifiesto limpio 073 y rollback/reaplicación OK; tipos ambos OK. |
 | 5 | Completo | 6 escenarios nativos OK, tipos ambos OK, instalación y rollback/reaplicación 074 OK. |
 | 6 | Completo | 4 escenarios SQL OK, tipos ambos OK; instalación limpia 075, recuperación de correo y rollback/reaplicación OK. |
-| 7 | En preparación | Cambios y reasignaciones |
+| 7 | Completo | 5 escenarios SQL OK, calendario y guard de pago incluidos; tipos ambos OK; rollback/reaplicación 076–077 OK. |
 | 8 | Pendiente | Facturación cola/manual |
 | 9 | Pendiente | Solicitudes, archivo y revocación |
 | 10 | Pendiente | Documento por tipo/número |

@@ -1,3 +1,10 @@
+import type {
+  PlanChangeState,
+  PlanChangePreview,
+  BulkReassignmentResult,
+  AdminReassignmentSource,
+  PlanChangeCalendar,
+} from '../models/planChange.model';
 import type { IndividualEnrollmentAccess } from '../models/individualEnrollmentAccess.model';
 import type {
   FoundationFields,
@@ -114,6 +121,95 @@ export interface Database {
       };
     };
     Functions: {
+      student_plan_change_calendar_v2: {
+        Args: {
+          p_student: string;
+          p_enrollment: string;
+          p_month: string;
+          p_mode: string;
+          p_hours: number;
+        };
+        Returns: PlanChangeCalendar;
+      };
+      admin_plan_change_calendar_v2: {
+        Args: {
+          p_actor: string;
+          p_enrollment: string;
+          p_month: string;
+          p_mode: string;
+          p_hours: number;
+          p_target: string | null;
+        };
+        Returns: PlanChangeCalendar;
+      };
+      release_admin_plan_change_v2: {
+        Args: { p_actor: string; p_student: string; p_reservation: string };
+        Returns: StudentScheduleReservation;
+      };
+      preview_admin_plan_change_v2: {
+        Args: {
+          p_actor: string;
+          p_enrollment: string;
+          p_input: Record<string, unknown>;
+          p_reason: string;
+          p_target: string | null;
+        };
+        Returns: PlanChangePreview;
+      };
+
+      assert_reassignment_permission_v2: { Args: { p_actor: string }; Returns: undefined };
+      cohort_reassignment_source_v2: {
+        Args: { p_actor: string; p_cohort: string };
+        Returns: AdminReassignmentSource;
+      };
+      student_plan_change_state_v2: {
+        Args: { p_student: string; p_enrollment: string };
+        Returns: PlanChangeState;
+      };
+      admin_plan_change_state_v2: {
+        Args: { p_actor: string; p_enrollment: string };
+        Returns: PlanChangeState;
+      };
+      preview_student_plan_change_v2: {
+        Args: { p_student: string; p_enrollment: string; p_input: Record<string, unknown> };
+        Returns: PlanChangePreview;
+      };
+      reserve_student_plan_change_v2: {
+        Args: { p_student: string; p_enrollment: string; p_input: Record<string, unknown> };
+        Returns: StudentScheduleReservation;
+      };
+      reserve_admin_plan_change_v2: {
+        Args: {
+          p_actor: string;
+          p_enrollment: string;
+          p_input: Record<string, unknown>;
+          p_reason: string;
+          p_target: string | null;
+        };
+        Returns: StudentScheduleReservation;
+      };
+      confirm_student_plan_change_v2: {
+        Args: { p_student: string; p_reservation: string };
+        Returns: StudentScheduleReservation;
+      };
+      confirm_admin_plan_change_v2: {
+        Args: { p_actor: string; p_reservation: string };
+        Returns: StudentScheduleReservation;
+      };
+      bulk_reassign_enrollments_v2: {
+        Args: {
+          p_actor: string;
+          p_changes: Record<string, unknown>[];
+          p_reason: string;
+          p_preview: boolean;
+        };
+        Returns: BulkReassignmentResult;
+      };
+      cancel_cohort_v2: {
+        Args: { p_actor: string; p_cohort: string; p_version: string; p_reason: string };
+        Returns: { id: string; cancelled: boolean };
+      };
+
       retry_waitlist_emails_v2: {
         Args: { p_actor: string; p_type: 'A' | 'B'; p_reason: string };
         Returns: number;
@@ -852,6 +948,7 @@ export interface Database {
 
       student_schedule_reservations: {
         Row: FoundationFields<ReservationFoundationColumns> & {
+          replacement_enrollment_id: string | null;
           id: string;
           student_id: string;
           enrollment_id: string;

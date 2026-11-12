@@ -1,6 +1,7 @@
 export const NOTIFICATION_TYPES = [
   'recordatorio_practica',
   'espera_apertura',
+  'plan_cambiado',
   'resultado_cancelacion',
   'cupo_disponible',
   'sin_practica_instructor',
