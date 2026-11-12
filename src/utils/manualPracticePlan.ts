@@ -10,9 +10,9 @@ export const PRACTICE_MESSAGES = {
   fechaFin: 'La fecha final no es válida.',
   fechaFinAnterior: 'La fecha final no puede ser anterior al inicio.',
   rangoSinDias: 'El rango elegido no contiene días de práctica de la modalidad seleccionada.',
-  horaDeseada: 'La hora deseada debe estar entre 06:00 y 22:00.',
+  horaDeseada: 'Elige una hora válida desde las 06:00, dentro del horario de la escuela.',
   horaNoCabe:
-    'Con las horas por día elegidas, la práctica debe terminar a más tardar a las 22:00. Elige una hora más temprana o menos horas por día.',
+    'Con las horas por día elegidas, la práctica debe terminar dentro del horario de la escuela. Elige una hora más temprana o menos horas por día.',
 } as const;
 
 function invalid(message: string, field: string): AppError {
@@ -86,8 +86,9 @@ export function manualPracticePlan(
   if (!isHorasPorDiaValid(input.horasPorDia)) throw invalid(HORAS_POR_DIA_MESSAGE, 'horasPorDia');
   const hora = parseHora(input.horaResuelta ?? input.horaDeseada);
   const minutos = hora.hour * 60 + hora.minute;
-  if (minutos < 360 || minutos > 1320) throw invalid(PRACTICE_MESSAGES.horaDeseada, 'horaDeseada');
-  if (minutos + input.horasPorDia * 60 > 1320)
+  if (minutos < 360 || minutos > endHour * 60)
+    throw invalid(PRACTICE_MESSAGES.horaDeseada, 'horaDeseada');
+  if (minutos + input.horasPorDia * 60 > endHour * 60)
     throw invalid(PRACTICE_MESSAGES.horaNoCabe, 'horaDeseada');
   if (!isFechaCivil(input.fechaInicio)) throw invalid(PRACTICE_MESSAGES.fechaInicio, 'fechaInicio');
   if (input.fechaFin !== undefined && !isFechaCivil(input.fechaFin))

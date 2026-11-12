@@ -201,17 +201,21 @@ export class StudentScheduleService {
     await this.expire(studentId);
     const { courseId, required } = await this.context(studentId, enrollmentId);
     const start = this.startDate(input.fechaInicio);
+    const endHour = await planEndHour(this.db);
     const plans = new Map<number, FixedPlan>();
     for (const hour of hours)
       plans.set(
         hour,
-        buildFixedPlan({
-          modalidad: input.modalidad,
-          fechaInicio: start,
-          horaInicio: hour,
-          horasPorDia: input.horasPorDia,
-          totalHoras: required,
-        }),
+        buildFixedPlan(
+          {
+            modalidad: input.modalidad,
+            fechaInicio: start,
+            horaInicio: hour,
+            horasPorDia: input.horasPorDia,
+            totalHoras: required,
+          },
+          endHour,
+        ),
       );
     const sample = firstPlan(plans);
     const today = DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-LL-dd');
@@ -252,13 +256,16 @@ export class StudentScheduleService {
       for (const c of withRoom) {
         const from = c.fecha_inicio_curso > tomorrow ? c.fecha_inicio_curso : tomorrow;
         try {
-          const alt = buildFixedPlan({
-            modalidad: input.modalidad,
-            fechaInicio: from,
-            horaInicio: 6,
-            horasPorDia: input.horasPorDia,
-            totalHoras: required,
-          });
+          const alt = buildFixedPlan(
+            {
+              modalidad: input.modalidad,
+              fechaInicio: from,
+              horaInicio: 6,
+              horasPorDia: input.horasPorDia,
+              totalHoras: required,
+            },
+            endHour,
+          );
           if (this.fits(c, alt.fechaInicioEfectiva, alt.ultimaFecha, today)) {
             first = alt.fechaInicioEfectiva;
             break;
@@ -379,7 +386,7 @@ export class StudentScheduleService {
       studentId,
       enrollmentId,
       input,
-      possibleStartHours(input.horasPorDia),
+      possibleStartHours(input.horasPorDia, await planEndHour(this.db)),
     );
     const first = firstPlan(ev.plans);
     return {

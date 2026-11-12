@@ -383,7 +383,7 @@ export class ManualEnrollmentService {
         },
       };
     }
-    const plan = manualPracticePlan(input.practice);
+    const plan = manualPracticePlan(input.practice, false, await planEndHour(this.db));
     const { courseId } = await this.resolveCourse(input);
     const suggestion = input.cohortId
       ? await this.generator.suggestForCourse(courseId, {
@@ -478,7 +478,8 @@ export class ManualEnrollmentService {
         throw cohortError('PAGO_PRECIO_CAMBIO');
       if (current && input.cohortId !== current.cohort.id)
         throw cohortError('RESERVA_RECURSO_OCUPADO');
-      const plan = current?.plan ?? manualPracticePlan(input.practice);
+      const plan =
+        current?.plan ?? manualPracticePlan(input.practice, false, await planEndHour(this.db));
       const { courseId, price } = current
         ? { courseId: current.courseId, price: current.precioCentavos / 100 }
         : await this.resolveCourse(input);

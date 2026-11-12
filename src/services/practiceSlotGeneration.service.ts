@@ -1,3 +1,4 @@
+import { planEndHour } from './planEndHour.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DateTime } from 'luxon';
 
@@ -21,7 +22,6 @@ import { formatHora, parseFechaCivil, parseHora, toScheduledAtUTC } from '../uti
 import type { HoraDelDia } from '../utils/schoolTimezone';
 
 const WINDOW_START_MINUTES = 6 * 60; // 06:00
-const WINDOW_END_MINUTES = 22 * 60; // 22:00
 const SLOT_DURATION_MINUTES = PRACTICE_DURATION_MINUTES;
 
 interface SessionPlan {
@@ -33,12 +33,12 @@ function horaToMinutes(hora: HoraDelDia): number {
   return hora.hour * 60 + hora.minute;
 }
 
-function assertWithinDayWindow(hora: HoraDelDia, horasPorDia: number): void {
+function assertWithinDayWindow(hora: HoraDelDia, horasPorDia: number, endHour: number): void {
   const start = horaToMinutes(hora);
   const end = start + horasPorDia * SLOT_DURATION_MINUTES;
-  if (start < WINDOW_START_MINUTES || end > WINDOW_END_MINUTES) {
+  if (start < WINDOW_START_MINUTES || end > endHour * 60) {
     throw new AppError(
-      `El horario solicitado (${formatHora(hora)}, ${String(horasPorDia)}h) no cabe entero dentro de la ventana 06:00-22:00`,
+      `El horario solicitado (${formatHora(hora)}, ${String(horasPorDia)}h) no cabe entero dentro de la ventana 06:00-${String(endHour).padStart(2, '0')}:00`,
       400,
     );
   }
@@ -58,7 +58,7 @@ export class PracticeSlotGenerationService {
   async sugerir(enrollmentId: string, input: SugerirPracticaInput): Promise<SugerirPracticaResult> {
     effectivePracticeDuration(input.durationMinutes);
     const horaDeseada = parseHora(input.horaDeseada);
-    assertWithinDayWindow(horaDeseada, input.horasPorDia);
+    assertWithinDayWindow(horaDeseada, input.horasPorDia, await planEndHour(this.supabase));
 
     // getEnrollmentContext ya valida que la matrícula exista y esté
     // activa; aquí solo hace falta el dato de horas requeridas del curso.
@@ -85,7 +85,7 @@ export class PracticeSlotGenerationService {
   ): Promise<SugerirPracticaResult> {
     effectivePracticeDuration(input.durationMinutes);
     const horaDeseada = parseHora(input.horaDeseada);
-    assertWithinDayWindow(horaDeseada, input.horasPorDia);
+    assertWithinDayWindow(horaDeseada, input.horasPorDia, await planEndHour(this.supabase));
     const plan = this.buildSessionPlan(input);
 
     const candidato = await this.buscarHoraConInstructorLibre(
@@ -95,7 +95,7 @@ export class PracticeSlotGenerationService {
     );
     if (!candidato) {
       throw new AppError(
-        'Ningún instructor está completamente libre para este rango dentro de la ventana 06:00-22:00. Ajusta la fecha, la modalidad o las horas por día.',
+        'Ningún instructor está completamente libre para este rango dentro del horario configurado de la escuela. Ajusta la fecha, la modalidad o las horas por día.',
         409,
       );
     }
@@ -119,7 +119,7 @@ export class PracticeSlotGenerationService {
   ): Promise<ConfirmarPracticaResult> {
     effectivePracticeDuration(input.durationMinutes);
     const horaResuelta = parseHora(input.horaResuelta);
-    assertWithinDayWindow(horaResuelta, input.horasPorDia);
+    assertWithinDayWindow(horaResuelta, input.horasPorDia, await planEndHour(this.supabase));
 
     const { studentId, cohortId, horasRequeridas } = await this.getEnrollmentContext(enrollmentId);
     await this.assertInstructorExists(input.instructorId);
@@ -162,7 +162,7 @@ export class PracticeSlotGenerationService {
   // transaccional de confirmación (no crea una matrícula al consultar).
   async prepareForTransaction(input: ConfirmarPracticaInput): Promise<string[]> {
     const hora = parseHora(input.horaResuelta);
-    assertWithinDayWindow(hora, input.horasPorDia);
+    assertWithinDayWindow(hora, input.horasPorDia, await planEndHour(this.supabase));
     await this.assertInstructorExists(input.instructorId);
     const plan = this.buildSessionPlan(input);
     const scheduled = this.buildScheduledAtsForHour(plan.fechasCiviles, hora, input.horasPorDia);
@@ -261,11 +261,12 @@ export class PracticeSlotGenerationService {
     horaDeseada: HoraDelDia,
     horasPorDia: number,
   ): Promise<{ hora: HoraDelDia; instructores: InstructorSugerido[] } | null> {
-    for (const offset of this.horasCandidatas(horaDeseada)) {
+    const endHour = await planEndHour(this.supabase);
+    for (const offset of this.horasCandidatas(horaDeseada, endHour)) {
       if (horaToMinutes(offset) < WINDOW_START_MINUTES) {
         continue;
       }
-      if (horaToMinutes(offset) + horasPorDia * SLOT_DURATION_MINUTES > WINDOW_END_MINUTES) {
+      if (horaToMinutes(offset) + horasPorDia * SLOT_DURATION_MINUTES > endHour * 60) {
         continue;
       }
 
@@ -280,11 +281,11 @@ export class PracticeSlotGenerationService {
 
   // Genera las horas candidatas a partir de horaDeseada, expandiendo de a
   // una hora en ambas direcciones (0, -1, +1, -2, +2, ...) sin salirse
-  // nunca de un rango razonable — el filtro real de 06:00-22:00 se aplica
+  // nunca de un rango razonable — el filtro del horario configurado se aplica
   // en buscarHoraConInstructorLibre para poder seguir expandiendo del lado
   // que todavía tenga margen aunque el otro ya se haya salido de rango.
-  private horasCandidatas(horaDeseada: HoraDelDia): HoraDelDia[] {
-    const maxOffsetHoras = (WINDOW_END_MINUTES - WINDOW_START_MINUTES) / 60;
+  private horasCandidatas(horaDeseada: HoraDelDia, endHour: number): HoraDelDia[] {
+    const maxOffsetHoras = endHour - WINDOW_START_MINUTES / 60;
     const candidatas: HoraDelDia[] = [{ ...horaDeseada }];
     for (let delta = 1; delta <= maxOffsetHoras; delta += 1) {
       candidatas.push({ hour: horaDeseada.hour - delta, minute: horaDeseada.minute });

@@ -446,7 +446,7 @@ export interface Database {
         Returns: {
           serverNow: string;
           calendarEndDate?: string | null;
-          dias: { fecha: string; disponible: boolean }[];
+          dias: { fecha: string; disponible: boolean; motivo?: string | null }[];
         };
       };
 

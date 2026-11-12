@@ -126,7 +126,7 @@ export const COHORT_ERRORS = {
     cause: 'La escuela debe configurar la disponibilidad antes de reservar.',
     student: 'La escuela debe configurar la disponibilidad antes de reservar.',
     admin: 'La escuela debe configurar la disponibilidad antes de reservar.',
-    action: 'Configurar explícitamente el número global de vehículos.',
+    action: 'RETIRADO por D3; no configurar vehículos.',
   },
   CAPACIDAD_CUPO_AGOTADO: {
     status: 409,
@@ -154,7 +154,7 @@ export const COHORT_ERRORS = {
     cause: 'No quedan recursos disponibles en esa hora.',
     student: 'No quedan recursos disponibles en esa hora.',
     admin: 'No quedan recursos disponibles en esa hora.',
-    action: 'Revisar prácticas simultáneas y vehículos globales.',
+    action: 'RETIRADO por D3; los vehículos no limitan reservas.',
   },
   PAGO_PRECIO_NO_CONFIGURADO: {
     status: 503,

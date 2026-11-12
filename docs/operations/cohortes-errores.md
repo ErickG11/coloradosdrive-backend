@@ -21,11 +21,11 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | RESERVA_REGLAS_INACTIVAS | La nueva modalidad de reserva aún no está disponible. | 409 | La nueva modalidad de reserva aún no está disponible. | La nueva modalidad de reserva aún no está disponible. | Comprobar los indicadores y sus dependencias. |
 | RESERVA_NO_AMPLIABLE | Esta reserva no permite ampliar el tiempo. | 409 | Esta reserva no permite ampliar el tiempo. | Esta reserva no permite ampliar el tiempo. | Continuar con el pago o elegir otro horario. |
 | RESERVA_NO_ENCONTRADA | No encontramos esa reserva. | 404 | No encontramos esa reserva. | No encontramos esa reserva. | Consultar las reservas de esta inscripción. |
-| CAPACIDAD_CONFIG_REQUERIDA | La escuela debe configurar la disponibilidad antes de reservar. | 503 | La escuela debe configurar la disponibilidad antes de reservar. | La escuela debe configurar la disponibilidad antes de reservar. | Configurar explícitamente el número global de vehículos. |
+| CAPACIDAD_CONFIG_REQUERIDA | La escuela debe configurar la disponibilidad antes de reservar. | 503 | La escuela debe configurar la disponibilidad antes de reservar. | La escuela debe configurar la disponibilidad antes de reservar. | RETIRADO por D3; no configurar vehículos. |
 | CAPACIDAD_CUPO_AGOTADO | No hay disponibilidad durante todas las fechas del plan. | 409 | No hay disponibilidad durante todas las fechas del plan. | No hay disponibilidad durante todas las fechas del plan. | Consultar la ocupación por intervalo y elegir otras fechas. |
 | CAPACIDAD_HISTORICO_PENDIENTE | La escuela debe revisar las fechas de esta inscripción. | 409 | La escuela debe revisar las fechas de esta inscripción. | La escuela debe revisar las fechas de esta inscripción. | Resolver el preflight con evidencia y excepción auditada. |
 | CAPACIDAD_INSTRUCTOR_NO_DISPONIBLE | El instructor ya no está disponible. Consulta otro horario. | 409 | El instructor ya no está disponible. Consulta otro horario. | El instructor ya no está disponible. Consulta otro horario. | Revisar la vigencia y disponibilidad del instructor. |
-| CAPACIDAD_VEHICULOS_AGOTADA | No quedan recursos disponibles en esa hora. | 409 | No quedan recursos disponibles en esa hora. | No quedan recursos disponibles en esa hora. | Revisar prácticas simultáneas y vehículos globales. |
+| CAPACIDAD_VEHICULOS_AGOTADA | No quedan recursos disponibles en esa hora. | 409 | No quedan recursos disponibles en esa hora. | No quedan recursos disponibles en esa hora. | RETIRADO por D3; los vehículos no limitan reservas. |
 | PAGO_PRECIO_NO_CONFIGURADO | El precio aún no está disponible. Contacta con la escuela. | 503 | El precio aún no está disponible. Contacta con la escuela. | El precio aún no está disponible. Contacta con la escuela. | Cargar el precio por tipo mediante el script explícito aprobado. |
 | PAGO_EN_PROCESO | El pago sigue en proceso. Espera su resultado y no pagues de nuevo. | 409 | El pago sigue en proceso. Espera su resultado y no pagues de nuevo. | El pago sigue en proceso. Espera su resultado y no pagues de nuevo. | Consultar el proveedor o conciliar antes de liberar recursos. |
 | PAGO_ENTRADA_INVALIDA | Revisa los datos del intento de pago. | 400 | Revisa los datos del intento de pago. | Revisa los datos del intento de pago. | Verificar proveedor, identificador e importes. |
@@ -164,11 +164,11 @@ L10: DOCUMENTO_* se reproduce/restablece en [QA de documento tipado](cohortes-lo
 | RESERVA_REGLAS_INACTIVAS | Con el admin de fixture autorizado y los indicadores apagados, intentar la operación nueva de escritura de este dominio. | 409 |
 | RESERVA_NO_AMPLIABLE | Intentar ampliar una reserva del régimen nuevo, que no admite extensiones. | 409 |
 | RESERVA_NO_ENCONTRADA | En la operación de este dominio sustituir únicamente el UUID de la entidad por uno inexistente, manteniendo actor y formato válidos. | 404 |
-| CAPACIDAD_CONFIG_REQUERIDA | Dejar vehículos globales NULL o sin la carga A/B e intentar activar el grupo de reservas. | 503 |
+| CAPACIDAD_CONFIG_REQUERIDA | RETIRADO por D3; NULL no impide activar reservas. | 503 |
 | CAPACIDAD_CUPO_AGOTADO | Con el último cupo ocupado un día del rango, confirmar otra matrícula en ese intervalo. | 409 |
 | CAPACIDAD_HISTORICO_PENDIENTE | Usar matrícula histórica activa sin fechas demostrables al intentar la operación que exige prueba del intervalo. | 409 |
 | CAPACIDAD_INSTRUCTOR_NO_DISPONIBLE | Entre vista previa y confirmación desactivar el instructor propuesto, y confirmar. | 409 |
-| CAPACIDAD_VEHICULOS_AGOTADA | Con N instructores libres y un vehículo, ocupar la hora y escribir una segunda práctica concurrente. | 409 |
+| CAPACIDAD_VEHICULOS_AGOTADA | RETIRADO por D3; no ejecutar escenarios de límite de vehículos. | 409 |
 | PAGO_PRECIO_NO_CONFIGURADO | En la copia sin activar reglas, retirar la tarifa del tipo; solicitar vista previa nueva después de preparar la activación válida o llamar al flujo interno desde el backend local. | 503 |
 | PAGO_EN_PROCESO | Despachar un intento y solicitar liberar o vencer su reserva antes de un resultado definitivo. | 409 |
 | PAGO_ENTRADA_INVALIDA | Enviar proveedor no admitido, importe con formato inválido o recargo fuera del rango. | 400 |
@@ -196,7 +196,7 @@ L10: DOCUMENTO_* se reproduce/restablece en [QA de documento tipado](cohortes-lo
 | COHORTE_VERSION_CONFLICTO | Guardar desde dos pestañas usando el mismo updatedAt; repetir el guardado de la pestaña antigua. | 409 |
 | PAGO_PRECIO_INVALIDO | Editar tarifa con centavos negativos o motivo vacío. | 400 |
 | PAGO_PRECIO_CARGA_INICIAL | Intentar crear desde la interfaz una tarifa A/B ausente; debe exigir el script explícito de carga inicial. | 409 |
-| CAPACIDAD_ENTRADA_INVALIDA | Guardar vehículos negativos o motivo vacío. | 400 |
+| CAPACIDAD_ENTRADA_INVALIDA | RETIRADO para vehículos; el motivo sigue validándose en operaciones vigentes. | 400 |
 | MATRICULA_TIPO_VIGENTE | Confirmar dos matrículas activas del mismo tipo para el mismo alumno; conservar A y B en el control positivo. | 409 |
 | MATRICULA_REPETICION_REQUIERE_EXCEPCION | Con una matrícula finalizada intentar otra del mismo tipo sin excepción auditada. | 409 |
 | MATRICULA_CUENTA_NO_HABILITADA | Desactivar el alumno del fixture y ejecutar la operación de este dominio desde el backend local; restaurar la cuenta después. | 403 |
