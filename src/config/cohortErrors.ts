@@ -1,6 +1,13 @@
 import { AppError } from '../utils/AppError';
 
 export const COHORT_ERRORS = {
+  ESPERA_YA_MATRICULADO: {
+    status: 409,
+    cause: 'Ya existe matrícula del tipo.',
+    student: 'Ya tienes una matrícula de este tipo.',
+    admin: 'Consulta la matrícula vigente o finalizada.',
+    action: 'No duplicar la marca de espera.',
+  },
   PLAN_CONFIG_NO_DISPONIBLE: {
     status: 503,
     cause: 'No se pudo leer la configuración del plan',

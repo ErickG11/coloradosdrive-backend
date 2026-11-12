@@ -217,7 +217,7 @@ studentScheduleRouter.post(
   '/espera',
   changeLimit,
   body('tipo').isIn(['A', 'B']),
-  body('preferencia').optional({ values: 'null' }).isObject(),
+  body('preferencia').not().exists(),
   body('quitar').optional().isBoolean(),
   validateFields,
   asyncHandler(async (req, res) => {

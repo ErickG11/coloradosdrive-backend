@@ -41,7 +41,12 @@ export interface StudentScheduleOptions {
   ajustada: boolean;
   cohorte: { id: string; nombre: string } | null;
   sinCohorte: {
-    codigo: 'SIN_COHORTE_ELEGIBLE';
+    codigo:
+      | 'SIN_COHORTE_ELEGIBLE'
+      | 'SIN_CURSOS_ABIERTOS'
+      | 'SIN_FECHAS_COMPATIBLES'
+      | 'SIN_HORAS_LIBRES';
+    ultimaFechaInicioPosible?: string | null;
     mensaje: string;
     primeraFechaPosible: string | null;
   } | null;
