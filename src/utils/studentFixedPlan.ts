@@ -8,7 +8,6 @@ import { SCHOOL_TIMEZONE, parseFechaCivil, toScheduledAtUTC } from './schoolTime
 // base de datos ni reloj, así que es determinista y reutilizable. Limitación conocida:
 // no se consideran feriados.
 export const PLAN_FIRST_HOUR = 6;
-export const PLAN_LAST_START_HOUR = 21;
 export const PLAN_END_LIMIT_HOUR = 22;
 
 export interface FixedPlanInput {
@@ -50,15 +49,15 @@ function isModalityDay(date: DateTime, modalidad: Modalidad): boolean {
   const weekend = date.weekday === 6 || date.weekday === 7;
   return modalidad === 'fin_de_semana' ? weekend : !weekend;
 }
-function invalidHour(): AppError {
+function invalidHour(endHour: number): AppError {
   return new AppError(
-    'Elige una hora de inicio entera entre las 06:00 y las 21:00 que permita terminar a las 22:00.',
+    `Elige una hora de inicio entera desde las 06:00 que permita terminar a más tardar a las ${hourLabel(endHour)}.`,
     400,
     { code: 'HORA_INICIO_INVALIDA', field: 'horaInicio' },
   );
 }
 
-/** Horas de inicio posibles para N horas por día: de las 06 a las (22 − N). */
+/** Horas de inicio posibles para N horas por día: de las 06 a las (tope configurado − N). */
 export function possibleStartHours(horasPorDia: number, endHour = PLAN_END_LIMIT_HOUR): number[] {
   const last = Math.min(23, endHour - horasPorDia);
   return Array.from(
@@ -81,7 +80,7 @@ export function buildFixedPlan(input: FixedPlanInput, endHour = PLAN_END_LIMIT_H
     horaInicio > Math.min(23, endHour - 1) ||
     horaInicio + horasPorDia > endHour
   )
-    throw invalidHour();
+    throw invalidHour(endHour);
   const requested = parseFechaCivil(input.fechaInicio);
   const days: FixedPlanDay[] = [];
   let remaining = totalHoras;
