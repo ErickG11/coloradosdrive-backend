@@ -1,3 +1,4 @@
+import {createInterface} from 'node:readline';
 import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { approvedMigrations } from '../helpers/migrationManifest';
@@ -36,6 +37,25 @@ async function scriptOnCopy(snapshot: Uint8Array, path: string, rollback = false
   } finally {
     await copy.close();
   }
+}
+// Instalación autorizada: incluye 003, verifica scripts existentes y no escribe reportes.
+async function smokeInstallation():Promise<void>{
+ let db=new EmbeddedPostgres({btreeGist:true});const terminal=createInterface({input:process.stdin,output:process.stdout});
+ const retry=()=>new Promise<void>(resolve=>terminal.question('REINTENTAR: ',()=>resolve()));
+ let installed=0,verified=0,unavailable=0;
+ try{
+  await setupEnrollmentDatabase(db,'000');await setupManagedSurfaces(db);
+  for(const entry of approvedMigrations(process.env.MIGRATIONS_THROUGH)){
+   const before=await db.snapshot();
+   for(;;){try{await db.exec(enrollmentSql(`migrations/${entry.file}`).replace(/create extension if not exists "pgcrypto";/gi,''));break;}
+   catch(error){process.stdout.write(`ERROR SQL ${entry.id}: ${String(error)}\n`);await db.close();db=new EmbeddedPostgres({btreeGist:true,snapshot:before});await retry();}}
+   installed++;process.stdout.write(`MIGRACION ${entry.id} OK\n`);
+   const file=entry.operations?`docs/operations/${entry.operations}-verificacion.sql`:null;
+   if(file&&existsSync(resolve(root,file))){const after=await db.snapshot();for(;;){const result=await scriptOnCopy(after,file);if(result==='OK'){verified++;break;}process.stdout.write(`VERIFICACION ${entry.id} ${result}\n`);await retry();}}else unavailable++;
+  }
+  const flags=await db.query('select key,enabled,implemented from public.enrollment_rule_flags order by key');
+  process.stdout.write(JSON.stringify({installed,verified,verificationUnavailable:unavailable,flags:flags.rows})+'\n');
+ }finally{terminal.close();await db.close();}
 }
 async function main(): Promise<void> {
   const db = new EmbeddedPostgres({ btreeGist: true });
@@ -101,7 +121,7 @@ async function main(): Promise<void> {
   )
     process.exitCode = 1;
 }
-void main().catch((error: unknown) => {
+void (process.env.MIGRATION_SMOKE_ONLY==='true'?smokeInstallation():main()).catch((error: unknown) => {
   process.stderr.write(String(error) + '\n');
   process.exitCode = 1;
 });
