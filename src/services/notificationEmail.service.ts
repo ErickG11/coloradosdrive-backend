@@ -52,6 +52,14 @@ export class NotificationEmailService {
     );
     if (authError) throw authError;
     if (!auth.user.email) throw new Error('Correo del usuario no disponible');
+    if (notification.tipo === 'plan_cambiado') {
+      await this.email.sendEnrollmentPlanChangedEmail({
+        to: auth.user.email,
+        summary: notification.mensaje,
+        messageId: `<${notification.id}@notifications.coloradosdrive>`,
+      });
+      return;
+    }
     if (notification.tipo === 'espera_apertura') {
       if (notification.waitlist_type !== 'A' && notification.waitlist_type !== 'B')
         throw new Error('Tipo de aviso inválido');

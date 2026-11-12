@@ -101,13 +101,19 @@ export class StudentPaymentService {
     await expireStudentSchedule(this.db, studentId);
     const r = await this.db
       .from('student_schedule_reservations')
-      .select('cohort_id,estado,admission_rule_version,precio_snapshot_centavos')
+      .select(
+        'cohort_id,estado,admission_rule_version,precio_snapshot_centavos,replacement_enrollment_id',
+      )
       .eq('id', reservationId)
       .eq('student_id', studentId)
       .maybeSingle();
     if (r.error) throwStudentPaymentError(r.error);
     if (!r.data || !['vigente', 'pago_en_curso'].includes(r.data.estado))
       throw new AppError('Reserva vencida o no encontrada.', 409, { code: 'RESERVA_VENCIDA' });
+    if (r.data.replacement_enrollment_id)
+      throw new AppError('El cambio de plan no requiere un pago.', 409, {
+        code: 'PLAN_CAMBIO_SIN_COBRO',
+      });
     if (r.data.admission_rule_version === '070') {
       const subtotalCentavos = r.data.precio_snapshot_centavos;
       if (subtotalCentavos === null)

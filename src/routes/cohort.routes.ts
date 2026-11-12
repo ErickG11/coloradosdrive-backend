@@ -1,3 +1,4 @@
+import { presentChangeReservation } from '../services/planChange.service';
 import { translateCohortSqlError, cohortError as domainCohortError } from '../config/cohortErrors';
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { supabaseAdmin } from '../config/supabase';
@@ -88,7 +89,10 @@ cohortRouter.post(
       p_actor: req.user!.id,
       p_cohort: req.params.id,
     });
-    if (result.error) throw translateCohortSqlError(result.error)??domainCohortError('ESPERA_PREVIEW_NO_DISPONIBLE');
+    if (result.error)
+      throw (
+        translateCohortSqlError(result.error) ?? domainCohortError('ESPERA_PREVIEW_NO_DISPONIBLE')
+      );
     res.json(result.data);
   }),
 );
@@ -105,6 +109,84 @@ cohortRouter.post(
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json({ queued: result.data });
+  }),
+);
+cohortRouter.get(
+  '/:id/reasignacion',
+  param('id').isUUID(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'schedule_changes'))) {
+      res.json({ active: false });
+      return;
+    }
+    const result = await supabaseAdmin.rpc('cohort_reassignment_source_v2', {
+      p_actor: req.user!.id,
+      p_cohort: req.params.id,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+for (const action of ['preview', 'aplicar'] as const)
+  cohortRouter.post(
+    `/:id/reasignacion/${action}`,
+    param('id').isUUID(),
+    body('changes').isArray({ min: 1, max: 100 }),
+    body('changes.*.enrollmentId').isUUID(),
+    body('changes.*.cohortId').isUUID(),
+    body('changes.*.updatedAt').isISO8601({ strict: true }),
+    body('changes.*.fechaInicio').matches(/^\d{4}-\d{2}-\d{2}$/),
+    body('changes.*.modalidad').isIn(['entre_semana', 'fin_de_semana']),
+    body('changes.*.horasPorDia').isInt({ min: 1, max: 6 }),
+    body('changes.*.horaInicio').isInt({ min: 6, max: 21 }),
+    body('motivo').isString().isLength({ min: 1, max: 500 }),
+    validateFields,
+    asyncHandler(async (req, res) => {
+      const source = await supabaseAdmin.rpc('cohort_reassignment_source_v2', {
+        p_actor: req.user!.id,
+        p_cohort: req.params.id,
+      });
+      if (source.error) throwStudentScheduleError(source.error);
+      const { changes, motivo } = req.body as {
+        changes: Record<string, unknown>[];
+        motivo: string;
+      };
+      if (!source.data.active) throw domainCohortError('PLAN_CAMBIO_REGLAS_INACTIVAS');
+      if (changes.some((row) => !source.data.enrollments?.some((e) => e.id === row.enrollmentId)))
+        throw domainCohortError('MATRICULA_AJENA');
+      const result = await supabaseAdmin.rpc('bulk_reassign_enrollments_v2', {
+        p_actor: req.user!.id,
+        p_changes: changes,
+        p_reason: motivo,
+        p_preview: action === 'preview',
+      });
+      if (result.error) throwStudentScheduleError(result.error);
+      res.json({
+        ...result.data,
+        plans: result.data.plans.map((p) => ({
+          ...p,
+          reservation: presentChangeReservation(p.reservation),
+        })),
+      });
+    }),
+  );
+cohortRouter.post(
+  '/:id/cancelar',
+  param('id').isUUID(),
+  body('updatedAt').isISO8601({ strict: true }),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const { updatedAt, motivo } = req.body as { updatedAt: string; motivo: string };
+    const result = await supabaseAdmin.rpc('cancel_cohort_v2', {
+      p_actor: req.user!.id,
+      p_cohort: req.params.id,
+      p_version: updatedAt,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
   }),
 );
 type Mode = 'create' | 'update';

@@ -46,7 +46,11 @@ adminPaymentRouter.get(
       throwStudentPaymentError(payments.error ?? reservation.error);
     let reserva = reservation.data;
     let cotizacion: Awaited<ReturnType<typeof paymentService.quote>> | null = null;
-    if (reserva && ['vigente', 'pago_en_curso'].includes(reserva.estado)) {
+    if (
+      reserva &&
+      !reserva.replacement_enrollment_id &&
+      ['vigente', 'pago_en_curso'].includes(reserva.estado)
+    ) {
       try {
         cotizacion = await paymentService.quote(data.id, reserva.id);
       } catch (error) {
@@ -54,7 +58,13 @@ adminPaymentRouter.get(
         else throw error;
       }
     }
-    res.json({ pagos: payments.data, reserva, cotizacion });
+    res.json({
+      pagos: payments.data,
+      reserva: reserva
+        ? { ...reserva, purpose: reserva.replacement_enrollment_id ? 'plan_change' : 'initial' }
+        : null,
+      cotizacion,
+    });
   }),
 );
 adminPaymentRouter.post(

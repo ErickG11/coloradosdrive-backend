@@ -451,6 +451,99 @@ export const COHORT_ERRORS = {
     action:
       'La cohorte puede estar guardada: recargar y comprobar disponibilidad antes de notificar.',
   },
+  MATRICULA_AJENA: {
+    status: 403,
+    cause: 'No puedes operar sobre esa matrícula.',
+    student: 'No puedes operar sobre esa matrícula.',
+    admin: 'No puedes operar sobre esa matrícula.',
+    action: 'Usar una matrícula que corresponda al sujeto de la operación.',
+  },
+  PLAN_CAMBIO_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'Los cambios de plan todavía no están habilitados.',
+    student: 'Los cambios de plan todavía no están habilitados.',
+    admin: 'Los cambios de plan todavía no están habilitados.',
+    action: 'Revisar el indicador y las dependencias antes de activar.',
+  },
+  PLAN_CAMBIO_ESTADO_INVALIDO: {
+    status: 409,
+    cause: 'Esta matrícula requiere revisión antes de cambiar su plan.',
+    student: 'Esta matrícula requiere revisión antes de cambiar su plan.',
+    admin: 'Esta matrícula requiere revisión antes de cambiar su plan.',
+    action: 'Comprobar estado pagado, fechas demostradas y plan actual.',
+  },
+  PLAN_CAMBIO_FUERA_PLAZO: {
+    status: 409,
+    cause: 'El plazo para cambiar este plan ya terminó. Conservamos tu horario actual.',
+    student: 'El plazo para cambiar este plan ya terminó. Conservamos tu horario actual.',
+    admin: 'El plazo para cambiar este plan ya terminó. Conservamos tu horario actual.',
+    action:
+      'Comparar el instante del servidor con la primera práctica menos la ventana configurada (48 horas iniciales).',
+  },
+  PLAN_CAMBIO_LIMITE: {
+    status: 409,
+    cause: 'Ya utilizaste los cambios de plan disponibles. Conservamos tu horario actual.',
+    student: 'Ya utilizaste los cambios de plan disponibles. Conservamos tu horario actual.',
+    admin: 'Ya utilizaste los cambios de plan disponibles. Conservamos tu horario actual.',
+    action: 'Revisar el límite configurado; no crear un cobro alternativo.',
+  },
+  PLAN_CAMBIO_MOTIVO_REQUERIDO: {
+    status: 400,
+    cause: 'Escribe el motivo de la reasignación.',
+    student: 'Escribe el motivo de la reasignación.',
+    admin: 'Escribe el motivo de la reasignación.',
+    action: 'Indicar un motivo de 1 a 500 caracteres.',
+  },
+  PLAN_CAMBIO_RESERVA_VENCIDA: {
+    status: 409,
+    cause: 'La propuesta venció. Tu horario original se conserva.',
+    student: 'La propuesta venció. Tu horario original se conserva.',
+    admin: 'La propuesta venció. Tu horario original se conserva.',
+    action: 'Consultar el estado y elegir otra propuesta si sigue dentro del plazo.',
+  },
+  PLAN_CAMBIO_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'La matrícula cambió mientras revisabas la propuesta. Conservamos el plan actual.',
+    student: 'La matrícula cambió mientras revisabas la propuesta. Conservamos el plan actual.',
+    admin: 'La matrícula cambió mientras revisabas la propuesta. Conservamos el plan actual.',
+    action: 'Recargar matrícula y capacidad antes de confirmar.',
+  },
+  PLAN_CAMBIO_RETENCION_INCOMPLETA: {
+    status: 409,
+    cause: 'La propuesta ya no tiene todas las horas disponibles. Tu horario actual se conserva.',
+    student: 'La propuesta ya no tiene todas las horas disponibles. Tu horario actual se conserva.',
+    admin: 'La propuesta ya no tiene todas las horas disponibles. Tu horario actual se conserva.',
+    action: 'Liberar la propuesta y consultar un plan completo.',
+  },
+  PLAN_CAMBIO_SIN_COBRO: {
+    status: 409,
+    cause: 'El cambio de plan no requiere otro pago.',
+    student: 'El cambio de plan no requiere otro pago.',
+    admin: 'El cambio de plan no requiere otro pago.',
+    action: 'Confirmar desde la operación de cambio; no usar caja ni pasarela.',
+  },
+  PLAN_REASIGNACION_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa las inscripciones, fechas, versiones y el motivo de la reasignación.',
+    student: 'Revisa las inscripciones, fechas, versiones y el motivo de la reasignación.',
+    admin: 'Revisa las inscripciones, fechas, versiones y el motivo de la reasignación.',
+    action: 'Seleccionar de 1 a 100 matrículas distintas con versiones actuales y planes válidos.',
+  },
+  MATRICULA_ROLLBACK_HISTORIAL: {
+    status: 409,
+    cause: 'El historial necesita una revisión antes de restituir la restricción anterior.',
+    student: 'El historial necesita una revisión antes de restituir la restricción anterior.',
+    admin: 'El historial necesita una revisión antes de restituir la restricción anterior.',
+    action:
+      'Conservar filas y desplegar un rollback compatible; no borrar historia para forzar el índice.',
+  },
+  PLAN_CAMBIO_SIN_CAMBIOS: {
+    status: 400,
+    cause: 'La propuesta conserva las mismas franjas y asignación',
+    student: 'Ese es tu horario actual. Elige una propuesta distinta.',
+    admin: 'No hay cambios en las franjas ni en la asignación.',
+    action: 'Conservar el plan o elegir una alternativa; no consumir un cambio gratis.',
+  },
 } as const;
 export type CohortErrorCode = keyof typeof COHORT_ERRORS;
 export function cohortError(code: CohortErrorCode): AppError {
