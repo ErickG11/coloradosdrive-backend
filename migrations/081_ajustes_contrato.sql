@@ -540,7 +540,7 @@ set local lock_timeout='5s';
 do $$declare r record;backup text;definition text;begin
  for r in select p.oid,p.proname,n.nspname,pg_get_function_identity_arguments(p.oid) args from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private') and p.prokind='f' and p.proname not like 'backup081_%' and not exists(select 1 from pg_depend d where d.objid=p.oid and d.deptype='e') loop
  backup:='backup081_'||md5(r.nspname||'.'||r.proname||'('||r.args||')');
- if to_regprocedure('private.'||backup||'('||r.args||')') is null then
+ if not exists(select 1 from pg_proc bp join pg_namespace bn on bn.oid=bp.pronamespace where bn.nspname='private' and bp.proname=backup) then
  definition:=replace(pg_get_functiondef(r.oid),format('FUNCTION %I.%I(',r.nspname,r.proname),format('FUNCTION private.%I(',backup));execute definition;
  execute format('comment on function private.%I(%s) is %L',backup,r.args,jsonb_build_object('schema',r.nspname,'name',r.proname)::text);
  execute format('revoke all on function private.%I(%s) from public,anon,authenticated',backup,r.args);end if;
@@ -592,7 +592,7 @@ do $$declare r record;def text;student_arg text;begin
  end loop;end $$;
 -- Retirar el límite físico y la exigencia de configuración de TODAS sus vías.
 do $$declare r record;def text;begin
- for r in select p.oid,p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private') and position('vehiculos_disponibles' in p.prosrc)>0 loop
+ for r in select p.oid,p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private') and p.proname not like 'backup081_%' and position('vehiculos_disponibles' in p.prosrc)>0 loop
  def:=pg_get_functiondef(r.oid);
  def:=replace(def,'if cfg.vehiculos_disponibles is null then perform private.raise_cohort_error(''CAPACIDAD_CONFIG_REQUERIDA'');end if;','');
  def:=replace(def,'if vehicles is null then perform private.raise_cohort_error(''CAPACIDAD_CONFIG_REQUERIDA'');end if;','if vehicles is null then vehicles:=2147483647;end if;');
@@ -609,7 +609,7 @@ do $$declare def text;begin
  def:=replace(def,' IMMUTABLE',' STABLE');def:=replace(def,'v_n int;','v_limit int:=coalesce((select practicas_hora_fin from public.app_settings where id),22);v_n int;');
  def:=replace(def,'2[01]','2[0-3]');def:=replace(def,'v_hour+v_hours>22','v_hour+v_hours>v_limit');execute def;
  -- Los barridos de horas de calendario/espera usan el mismo tope.
- for def in select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private') and(p.prosrc like '%6..22-%') loop
+ for def in select pg_get_functiondef(p.oid) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('public','private') and p.proname not like 'backup081_%' and(p.prosrc like '%6..22-%') loop
  execute replace(def,'6..22-','6..coalesce((select practicas_hora_fin from public.app_settings where id),22)-');end loop;
 end $$;
 -- Comprobar el plan completo antes de retener; cambio ignora únicamente su plan original.
