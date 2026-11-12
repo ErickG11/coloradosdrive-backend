@@ -1,6 +1,27 @@
 -- L9. Revisión exclusiva, evidencia presencial y archivo enlazado. Sin borrado de aprobaciones.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.content_student_eligible(uuid,uuid)','6b57447f6541933c8ce31c203331b41e'),
+  ('private.enrollment_has_access_v2(uuid)','38bf860ac739e73b9f22dd9569f7bcc1'),
+  ('public.devolver_solicitud_inscripcion(uuid,uuid,text,text,text)','c29d830b72d35cb3223eb9439fa481bc'),
+  ('public.finalizar_aprobacion_inscripcion(uuid,uuid,timestamp with time zone,uuid,uuid,text,numeric)','60f35dec8eea6de946e62f2a13bc6f7e'),
+  ('public.impedir_cambio_verificacion()','4e0c71681e986008de2a02e18313b6de'),
+  ('public.listar_objetos_huerfanos_solicitudes(timestamp with time zone,integer)','72787a32c27ea5e26c6f04bfa49399e2'),
+  ('public.listar_solicitudes_admin(text,text,integer,integer)','03ea8db1312bfd9cbc452e66d346da82'),
+  ('public.protect_solicitud_date()','9f9b4e0efb270c89d00d6e8123a795c8'),
+  ('public.rechazar_solicitud_inscripcion(uuid,uuid,text,text,text,text,integer)','38565498f1a8d0c92b7b7d2330e89d7d'),
+  ('public.reclamar_aprobacion_inscripcion(uuid,uuid,uuid,uuid,text,text)','4e8a12999367beba0fd2fe43941c6713'),
+  ('public.registrar_verificacion_inscripcion(uuid,uuid,text,text,text,text,boolean)','c77178c3d7fd5690c52ae7d2ba47fb70')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_079: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter table public.app_settings add column if not exists solicitud_retention_policy jsonb not null default
  '{"borradorDias":7,"devueltaDias":15,"certificadoVerificadoDias":30,"huerfanoDias":1,"rechazadaDias":null,"aprobadaDias":null,"archivadaDias":null}'::jsonb,
  add column if not exists solicitud_review_minutes integer not null default 5 check(solicitud_review_minutes between 1 and 60);

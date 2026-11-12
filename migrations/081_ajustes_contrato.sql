@@ -3,6 +3,80 @@
 -- Expansión compatible; activación independiente y apagada por defecto.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.assert_notification_owner(uuid)','6fcda1fd97019c16ad65f07771a59e30'),
+  ('private.book_practice_slot(uuid,uuid,text)','f8eebdeec47b78ff7c1d59f22aca52f5'),
+  ('private.change_calendar_v2(uuid,uuid,date,text,integer,uuid,uuid)','6f664a211ac4d277c44858abdba0c38e'),
+  ('private.change_free_instructors_v2(timestamp with time zone,uuid,uuid)','033ceb90d646219796cf4eb9c19cce3e'),
+  ('private.confirm_plan_change_v2(uuid,uuid,uuid)','e3a83a4e7c62d6319326b7c20c10f418'),
+  ('private.confirm_student_reservation(uuid,uuid)','fc7f4b0687207f122bb0a822fac32589'),
+  ('private.enrollment_access_activation()','af91ef6bdcaf7b65127144be2366cacd'),
+  ('private.enrollment_current_guard()','31496fb4ef52edf3119c82677bd2ffb1'),
+  ('private.enrollment_plan_v2(jsonb)','e9ee26dc86f5cf0a61d911e29bee65bd'),
+  ('private.expire_reservations_v2(uuid)','3bc6dee8aaeb93315b20830930ab4040'),
+  ('private.free_instructors_v2(timestamp with time zone[],uuid,uuid)','e72bb77f43664c72cf9e912dbbbf174a'),
+  ('private.legacy071_expire_student_reservations(uuid)','dee7f7a6bd097bd1b62b49467981e3db'),
+  ('private.legacy071_manage_student_reservation(uuid,text,uuid,integer,integer,integer)','e5c6872eb70629565ff7fe838ae74109'),
+  ('private.legacy071_reserve_student_schedule(uuid,uuid,timestamp with time zone[],text,date,integer,integer,integer,integer)','520896c23a6fdb334f072af836011bde'),
+  ('private.legacy079_enrollment_has_access_v2(uuid)','38bf860ac739e73b9f22dd9569f7bcc1'),
+  ('private.lock_rateable_practice(uuid,uuid)','e7b4f0f8473d38db0aab33bc6b0d5855'),
+  ('private.manage_reservation_v2(uuid,text,uuid)','f096dc536a6dd811f6ce661b723b6f7c'),
+  ('private.plan_change_state_v2(uuid,uuid,uuid)','5b5bab474d5f2f50f0ddb44039b9d675'),
+  ('private.reserve_plan_change_v2(uuid,uuid,jsonb,uuid,text,boolean,uuid)','644ea1aff74fa72532c30f6df9f1b320'),
+  ('private.reserve_schedule_v2(uuid,uuid,jsonb)','2f96ba34d1652d4c11a1e34b46b0ec61'),
+  ('private.vehicle_occupation_v2(timestamp with time zone,uuid,uuid)','bfa36dd10da275dbb7793be15f312535'),
+  ('private.waitlist_cohort_available_v2(uuid)','16971d06aba2ca08dda8688fabb796af'),
+  ('public.act_on_practice_slot(uuid,uuid,text)','05aaa6b0767598766644055037deef2e'),
+  ('public.admin_release_student_reservation(uuid,uuid)','35168fbbf0043abf941dfa5f83364e36'),
+  ('public.assign_pending_enrollment_cohort(uuid,uuid,uuid,uuid,timestamp with time zone,date)','5b939e177c1736cb32ac428816004493'),
+  ('public.begin_student_deletion(uuid,uuid,text)','968d432d3862b1ad251c913b17d75bcc'),
+  ('public.begin_student_payment(uuid,uuid,text,uuid,integer,integer,uuid,text)','52ad120f6a5fa71118805eb8ec4cac09'),
+  ('public.cancel_practice_slot_with_reason(uuid,uuid,text,text)','e1a6920c3570eb280ff5081f966b881f'),
+  ('public.commit_manual_enrollment(uuid,uuid,uuid,jsonb,uuid,uuid,jsonb,timestamp with time zone[],uuid,jsonb,jsonb)','c965d35594d6f386aad74311e52ec9ef'),
+  ('public.confirmar_identidad_presencial_admin(uuid,uuid,text)','b61d0d566a41f0e8ae93f7184804ec7e'),
+  ('public.delete_student_data(uuid,uuid,timestamp with time zone,text[])','d8ce262575d1e5b76d78d7d01441c909'),
+  ('public.devolver_solicitud_inscripcion(uuid,uuid,text,text,text)','85fbc65bc3f53fa2fb4f19fd6393366f'),
+  ('public.expire_student_reservations(uuid)','a4e4ddd2c1e691e75539d2c2bf66035d'),
+  ('public.finalizar_aprobacion_inscripcion(uuid,uuid,timestamp with time zone,uuid,uuid,text,numeric)','99b3b9a128b6744904647b0aaaa338db'),
+  ('public.finalizar_aprobacion_solicitud(uuid,uuid,timestamp with time zone,uuid,uuid)','33015d55d7d63702c82ded3b4e18fdaa'),
+  ('public.find_manual_students(uuid,text)','03a8d9aef327fd2e5c603b37451d2911'),
+  ('public.find_manual_students_v2(uuid,text)','f499f24894667005517585857433755b'),
+  ('public.guard_practice_schedule_holds()','6a5840c8113b589a21e4a26470c021e1'),
+  ('public.legacy076_expire_student_reservations(uuid)','17f30340195b89179a34cd84b4a7e1fe'),
+  ('public.legacy076_manage_student_reservation(uuid,text,uuid,integer,integer,integer)','8e7cad50762dcc196c936e3decdc32ee'),
+  ('public.list_student_pending_practice_ratings(uuid,integer,integer)','43e9aeea9f9dd72ac27c8a0de08357b2'),
+  ('public.manage_student_reservation(uuid,text,uuid,integer,integer,integer)','dafd775b93171fa8bf6f77e51623e4fe'),
+  ('public.pending_practice_slots_for_student(uuid)','56c7f360beff78b9f766dc636a84df40'),
+  ('public.preview_practice_slot_cancellation(uuid,uuid)','aa685e8f03f5fc12a98f11cfae130333'),
+  ('public.preview_student_plan_change_v2(uuid,uuid,jsonb)','b2086896ca6562aa16a18bcea7fa05e6'),
+  ('public.rechazar_solicitud_inscripcion(uuid,uuid,text,text,text,text,integer)','acedc5bdc273bd7c308db29b2215d988'),
+  ('public.reclamar_aprobacion_inscripcion(uuid,uuid,uuid,uuid,text,text)','01075bece58db61aa20509d772cfb47a'),
+  ('public.registrar_verificacion_inscripcion(uuid,uuid,text,text,text,text,boolean)','610a6d1473167da8ab6d3af77b5c2d4e'),
+  ('public.release_admin_plan_change_v2(uuid,uuid,uuid)','92ef02303114ccf261777c2b3fbdc921'),
+  ('public.released_practice_slots_for_student(uuid)','7fc6de8053751dfef2f75f69a9ce0746'),
+  ('public.reserve_manual_enrollment(uuid,uuid,text,uuid)','a519e4256452175f56157a802f8a56a0'),
+  ('public.reserve_student_schedule(uuid,uuid,timestamp with time zone[],text,date,integer,integer,integer,integer)','a91601f1e41b0ea7d628cb4d06e28870'),
+  ('public.restore_student_practice(uuid,uuid,uuid)','09de645b2bb475b85102361028bc4a4a'),
+  ('public.revisar_documento_solicitud(uuid,uuid,uuid,text,text)','492761d607f709745d45bfb7bd412a52'),
+  ('public.save_student_profile(uuid,uuid,uuid,timestamp with time zone,jsonb,boolean)','d9ef932bf7181543cf3a17b925e2b50f'),
+  ('public.set_course_type_price_v2(uuid,public.course_type,bigint,text)','09d0dcc6242308589009703982129374'),
+  ('public.set_student_active(uuid,uuid,boolean)','6fc4403d52176dab3150aa0bb3bad45c'),
+  ('public.set_vehicle_capacity_v2(uuid,integer,text)','bc0b051fd4feff7aaabf288d62b7eb21'),
+  ('public.student_practice_history(uuid,uuid,integer,integer)','2f6e8df75c2fe5b9e49918d46f1e54cd'),
+  ('public.student_schedule_calendar_v2(uuid,uuid,date,text,integer)','548adc3efe819593d63f2c9e3ade6171'),
+  ('public.student_schedule_preview_v2(uuid,uuid,jsonb)','6a1a54c922343d3596aea7bc25ddbb35'),
+  ('public.submit_practice_rating(uuid,uuid,numeric,text)','b3de5cc406677461114fe069a741038b'),
+  ('public.swap_practice_slot(uuid,uuid,uuid)','24ed3f3b17801d8e5de3d6ab037c3725'),
+  ('public.update_manual_enrollment_details(uuid,uuid,jsonb,jsonb)','3b9018621fc8029e2f2c5c4c80899294')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_081: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 -- Copias inmutables de funciones para rollback funcional, sin borrar evidencia.
 do $$declare r record;begin
  for r in select p.proname,pg_get_function_identity_arguments(p.oid) args from pg_proc p join pg_namespace n on n.oid=p.pronamespace

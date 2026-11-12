@@ -282,31 +282,38 @@
     },
     {
       "id": "071",
-      "file": "migrations/071_inscripcion_reservas_capacidad.sql"
+      "file": "migrations/071_inscripcion_reservas_capacidad.sql",
+      "guards": 6
     },
     {
       "id": "072",
-      "file": "migrations/072_inscripcion_pagos_conciliacion.sql"
+      "file": "migrations/072_inscripcion_pagos_conciliacion.sql",
+      "guards": 3
     },
     {
       "id": "073",
-      "file": "migrations/073_cohortes_administracion.sql"
+      "file": "migrations/073_cohortes_administracion.sql",
+      "guards": 2
     },
     {
       "id": "074",
-      "file": "migrations/074_matriculas_acceso_individual.sql"
+      "file": "migrations/074_matriculas_acceso_individual.sql",
+      "guards": 1
     },
     {
       "id": "075",
-      "file": "migrations/075_lista_espera_notificaciones.sql"
+      "file": "migrations/075_lista_espera_notificaciones.sql",
+      "guards": 1
     },
     {
       "id": "076",
-      "file": "migrations/076_cambio_plan_atomico.sql"
+      "file": "migrations/076_cambio_plan_atomico.sql",
+      "guards": 5
     },
     {
       "id": "077",
-      "file": "migrations/077_reasignacion_masiva_cancelacion.sql"
+      "file": "migrations/077_reasignacion_masiva_cancelacion.sql",
+      "guards": 1
     },
     {
       "id": "078",
@@ -314,11 +321,33 @@
     },
     {
       "id": "079",
-      "file": "migrations/079_solicitudes_identidad_archivo.sql"
+      "file": "migrations/079_solicitudes_identidad_archivo.sql",
+      "guards": 11
     },
     {
       "id": "080",
-      "file": "migrations/080_identidad_tipo_numero.sql"
+      "file": "migrations/080_identidad_tipo_numero.sql",
+      "guards": 7
+    },
+    {
+      "id": "081",
+      "file": "migrations/081_ajustes_contrato.sql",
+      "guards": 64
+    },
+    {
+      "id": "082",
+      "file": "migrations/082_solapes_alumno_todas_vias.sql",
+      "guards": 10
+    },
+    {
+      "id": "083",
+      "file": "migrations/083_espera_por_tipo_avisos_diarios.sql",
+      "guards": 7
+    },
+    {
+      "id": "084",
+      "file": "migrations/084_gestion_documentos_fechas_cohorte.sql",
+      "guards": 4
     }
   ],
   "excluded": [

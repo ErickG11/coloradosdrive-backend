@@ -1,6 +1,20 @@
 -- L12d C -> A -> B. Sin activación automática; auditoría en el mecanismo existente.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.cohort_admin_guard()','c47edcf1bc0cf6e0d6e106af3ef4cc5d'),
+  ('private.integrated_manual_commit_v2(uuid,uuid,uuid,jsonb,uuid,uuid,jsonb,timestamp with time zone[],uuid,jsonb,jsonb)','5343364b66d6112baf38f319a077d64f'),
+  ('private.integrated_manual_details_v2(uuid,uuid,jsonb,jsonb)','c10f66a211e2f3d01accda0f25a842dd'),
+  ('private.practice_replacement_balance(uuid)','47f323f017e56b147f78031f1d93fd4e')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_084: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 create or replace function public.set_enrollment_document_v12(p_actor uuid,p_student uuid,p_enrollment uuid,p_type text,p_status text,p_expected text) returns jsonb language plpgsql security invoker set search_path='' as $$declare previous public.enrollment_documents;begin
  perform private.require_enrollment_permission(p_actor,'verify_identity');
  if not private.enrollment_rule_enabled('identity') then perform private.raise_cohort_error('IDENTIDAD_REGLAS_INACTIVAS');end if;

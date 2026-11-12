@@ -1,5 +1,16 @@
 -- L5. El valor enum se conserva en rollback funcional; no reescribir tablas históricas.
 begin;
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('private.content_student_eligible(uuid,uuid)','adcd592c94981d508d86d6700921529f')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_074: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter type public.enrollment_status add value if not exists 'anulada';
 commit;
 begin;

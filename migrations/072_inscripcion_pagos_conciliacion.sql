@@ -1,6 +1,19 @@
 -- L3. Confirmación idempotente sin revalidar cierre ni precio actual. Cola de conciliación por puerto.
 begin;
 set local lock_timeout='5s';
+-- GUARDA-MD5 INICIO (hash congelado de la instalación local; md5(replace(prosrc,chr(13),'')))
+do $guard$declare g record;begin
+ for g in select * from (values
+  ('public.begin_student_payment(uuid,uuid,text,uuid,integer,integer,uuid,text)','b45d2bcd91e6a25c2b41caaadaa632bd'),
+  ('public.claim_payment_dispatch(uuid)','a123a4d21df49fa7ddb374d5d182d225'),
+  ('public.confirm_student_payment(uuid,text,text,text,bigint,text,text,text)','9f35fccc54d2dbbeef3480ecd69e165e')
+ ) v(sig,h) loop
+  if to_regprocedure(g.sig) is null or (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure(g.sig)) is distinct from g.h then
+   raise exception 'GUARDA_072: % no coincide con el cuerpo esperado; no se aplica la migración',g.sig;
+  end if;
+ end loop;
+end $guard$;
+-- GUARDA-MD5 FIN
 alter table public.app_settings add column if not exists conciliacion_intervalo_minutos integer not null default 15 check(conciliacion_intervalo_minutos>0),
  add column if not exists conciliacion_ventana_horas integer not null default 24 check(conciliacion_ventana_horas>0),
  add column if not exists pago_tardio_politica text not null default 'revision' check(pago_tardio_politica in ('revision','equivalente','devolucion_documentada'));
