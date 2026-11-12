@@ -27,19 +27,19 @@ select 'enrollment',e.id,jsonb_build_object(
    e.individual_dates_guard_ready),jsonb_build_object(
    'practice_start_date',
    case when v.date_issue is null then v.proposed_start end,
-   
+
    'practice_end_date',
    case when v.date_issue is null then v.proposed_end end,
-   
+
    'access_end_date',
    case when v.date_issue is null then v.proposed_end end,
-   
+
    'paid_amount_centavos',
    v.proposed_paid_amount,
-   
+
    'individual_dates_source',
    case when v.date_issue is null then v.proposed_source end,
-   
+
    'individual_dates_guard_ready',
    false),jsonb_build_object(
    'performedBy',
@@ -111,13 +111,13 @@ select 'reservation',e.id,jsonb_build_object(
    v.proposed_start,
    'practice_end_date',
    v.proposed_end,
-   
+
    'precio_snapshot_centavos',
    case when v.price_count=1 then v.proposed_price end,
-   
+
    'precio_snapshot_source',
    case when v.price_count=1 then 'payment_snapshot' end,
-   
+
    'precio_snapshot_at',
    case when v.price_count=1 then v.price_evidence_at end),jsonb_build_object(
    'performedBy',
