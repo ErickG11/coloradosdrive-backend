@@ -39,6 +39,21 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | PAGO_APROBADO_SIN_RECURSOS | Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo. | 409 | Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo. | Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo. | Resolver la asignación o documentar la devolución; no simular reembolsos. |
 | PAGO_ACTIVACION_REVISION | La escuela está revisando la asignación de tu pago. | 409 | La escuela está revisando la asignación de tu pago. | La escuela está revisando la asignación de tu pago. | Revisar el pago y las prácticas retenidas antes de resolver. |
 | PERMISO_REQUERIDO | No tienes permiso para realizar esta operación. | 403 | No tienes permiso para realizar esta operación. | No tienes permiso para realizar esta operación. | Solicitar el permiso específico a un administrador autorizado. |
+| COHORTE_NOMBRE_DUPLICADO | Ya existe una cohorte con ese nombre. | 409 | Ya existe una cohorte con ese nombre. | Ya existe una cohorte con ese nombre. | Renombrar la cohorte indicada; se ignoran acentos, mayúsculas y espacios exteriores. |
+| COHORTE_TERMINADA | Ese período ya terminó y es de solo lectura. | 409 | Ese período ya terminó y es de solo lectura. | Ese período ya terminó y es de solo lectura. | Crear un período nuevo; no reabrir el terminado. |
+| COHORTE_INICIO_INMUTABLE | El inicio ya tiene inscripciones asociadas. | 409 | El inicio ya tiene inscripciones asociadas. | El inicio ya tiene inscripciones asociadas. | Conservar el inicio; gestionar una reasignación si corresponde. |
+| COHORTE_CODIGO_INMUTABLE | El código ya tiene inscripciones asociadas. | 409 | El código ya tiene inscripciones asociadas. | El código ya tiene inscripciones asociadas. | Conservar el código autogenerado. |
+| COHORTE_FIN_CON_COMPROMISOS | El fin dejaría prácticas fuera del período. | 409 | El fin dejaría prácticas fuera del período. | El fin dejaría prácticas fuera del período. | Revisar el último fin individual de matrículas y reservas. |
+| COHORTE_CUPO_INFERIOR | El cupo es inferior a la ocupación del período. | 409 | El cupo es inferior a la ocupación del período. | El cupo es inferior a la ocupación del período. | Mantener al menos el máximo ocupado por intervalo. |
+| COHORTE_CANCELACION_BLOQUEADA | Hay matrículas que deben resolverse antes de cancelar. | 409 | Hay matrículas que deben resolverse antes de cancelar. | Hay matrículas que deben resolverse antes de cancelar. | Reasignar o documentar una devolución antes de cancelar. |
+| COHORTE_REGLAS_INACTIVAS | La operación aún no está habilitada. | 409 | La operación aún no está habilitada. | La operación aún no está habilitada. | Verificar los indicadores y sus dependencias antes de activar. |
+| COHORTE_ENTRADA_INVALIDA | Revisa los datos y el motivo de la operación. | 400 | Revisa los datos y el motivo de la operación. | Revisa los datos y el motivo de la operación. | Corregir formato, campos permitidos, rangos y motivo. |
+| COHORTE_NO_ENCONTRADA | No encontramos el período solicitado. | 404 | No encontramos el período solicitado. | No encontramos el período solicitado. | Recargar el listado. |
+| COHORTE_CURSO_NO_ENCONTRADO | No encontramos el curso seleccionado. | 404 | No encontramos el curso seleccionado. | No encontramos el curso seleccionado. | Seleccionar un curso existente. |
+| COHORTE_VERSION_CONFLICTO | Los datos cambiaron mientras los editabas. | 409 | Los datos cambiaron mientras los editabas. | Los datos cambiaron mientras los editabas. | Recargar los datos actuales antes de volver a guardar. |
+| PAGO_PRECIO_INVALIDO | Revisa el importe y el motivo del cambio. | 400 | Revisa el importe y el motivo del cambio. | Revisa el importe y el motivo del cambio. | Indicar centavos enteros dentro de 0–999999 y un motivo. |
+| PAGO_PRECIO_CARGA_INICIAL | El precio inicial requiere una carga revisada. | 409 | El precio inicial requiere una carga revisada. | El precio inicial requiere una carga revisada. | Usar exclusivamente la plantilla explícita de precios A/B; nunca 064. |
+| CAPACIDAD_ENTRADA_INVALIDA | Revisa la cantidad de recursos y el motivo. | 400 | Revisa la cantidad de recursos y el motivo. | Revisa la cantidad de recursos y el motivo. | Indicar un entero de 0–1000 y un motivo. |
 
 ## Alertas implementadas (L3)
 
@@ -48,3 +63,5 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | PAGO_DESPACHADO_INCIERTO | Alta | view_payments_invoices | Despacho sin resultado; no liberar ni volver a cobrar | Usuario+código+pago; 1 día, RESUELTO cierra |
 
 Reproducción manual y restablecimiento: [guía L3](cohortes-lote3.md). Las alertas de causas introducidas en lotes posteriores se añadirán con sus reglas; no hay un módulo paralelo de alertas.
+
+L4: CAPACIDAD_HORAS_SOBRE_LIMITE (alta, manage_cohorts_prices), una notificación abierta por usuario/código/configuración; al corregir flota se cierra. Reproducción y restablecimiento de los códigos nuevos: [QA L4](cohortes-lote4.md). El nombre duplicado se identifica solo en la respuesta administrativa.

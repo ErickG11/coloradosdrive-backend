@@ -1,3 +1,5 @@
+import { translateCohortSqlError } from '../config/cohortErrors';
+import { cohortCalendar } from '../utils/enrollmentRules';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
 
@@ -66,6 +68,26 @@ const COHORT_CONSTRAINTS: Record<string, PostgresErrorOverride> = {
 };
 
 export function cohortError(error: unknown): unknown {
+  const domain = translateCohortSqlError(error);
+  if (
+    domain?.code === 'COHORTE_NOMBRE_DUPLICADO' &&
+    error &&
+    typeof error === 'object' &&
+    'details' in error &&
+    typeof error.details === 'string'
+  ) {
+    try {
+      const detail = JSON.parse(error.details) as { nombre?: unknown };
+      if (typeof detail.nombre === 'string')
+        return new AppError(`Ya existe la cohorte «${detail.nombre}».`, 409, {
+          code: domain.code,
+          field: 'nombre',
+        });
+    } catch {
+      /* El catálogo sigue siendo el mensaje seguro. */
+    }
+  }
+  if (domain) return domain;
   if (error && typeof error === 'object' && 'code' in error && error.code === 'IR413')
     return new AppError(
       'La cohorte tiene reservas vigentes. Conserva el curso, el precio y las fechas compatibles.',
@@ -218,7 +240,56 @@ export class CohortService {
     }
   }
 
-  async createCohort(input: CreateCohortInput): Promise<Cohort> {
+  private async enabled(): Promise<boolean> {
+    const result = await this.supabase
+      .from('enrollment_rule_flags')
+      .select('enabled,implemented')
+      .eq('key', 'cohort_admin')
+      .single();
+    if (result.error) throw cohortError(result.error);
+    return result.data.enabled && result.data.implemented;
+  }
+  private decorated(row: CohortRow, active: boolean): Cohort {
+    if (!active) return toCohort(row);
+    const calendar = cohortCalendar(
+      {
+        enrollmentStart: row.fecha_inicio_matricula,
+        enrollmentEnd: row.fecha_fin_matricula,
+        practiceStart: row.fecha_inicio_curso,
+        practiceEnd: row.fecha_fin_curso,
+        enabled: row.habilitada,
+      },
+      new Date(),
+    );
+    return {
+      ...toCohort(row),
+      codigo: row.codigo,
+      habilitada: row.habilitada,
+      estado: calendar.state,
+      cierreMatricula: calendar.cutoff,
+      rulesActive: true,
+    };
+  }
+  private async writeNew(
+    actor: string,
+    input: CreateCohortInput | UpdateCohortInput,
+    id: string | null = null,
+    version: string | null = null,
+  ): Promise<Cohort> {
+    const { reason, ...payload } = input;
+    if ('updatedAt' in payload) delete (payload as Partial<UpdateCohortInput>).updatedAt;
+    const result = await this.supabase.rpc('write_cohort_v2', {
+      p_actor: actor,
+      p_id: id,
+      p_version: version,
+      p_input: payload,
+      p_reason: reason ?? 'Edición administrativa',
+    });
+    if (result.error) throw cohortError(result.error);
+    return this.decorated(result.data, true);
+  }
+  async createCohort(input: CreateCohortInput, actor?: string): Promise<Cohort> {
+    if (await this.enabled()) return this.writeNew(actor ?? '', input);
     assertCohortDates(input);
 
     const { data: course, error: courseError } = await this.supabase
@@ -277,7 +348,8 @@ export class CohortService {
       throw error;
     }
 
-    return data.map(toCohort);
+    const active = await this.enabled();
+    return data.map((row) => this.decorated(row, active));
   }
 
   private async readCohort(id: string): Promise<CohortRow> {
@@ -310,7 +382,7 @@ export class CohortService {
 
   async getCohort(id: string): Promise<CohortDetail> {
     const row = await this.readCohort(id);
-    return { ...toCohort(row), alumnos: await this.studentCounts(id) };
+    return { ...this.decorated(row, await this.enabled()), alumnos: await this.studentCounts(id) };
   }
 
   // Franjas de práctica que estaban DENTRO de la ventana de curso guardada y
@@ -345,7 +417,8 @@ export class CohortService {
     }
   }
 
-  async updateCohort(id: string, input: UpdateCohortInput): Promise<Cohort> {
+  async updateCohort(id: string, input: UpdateCohortInput, actor?: string): Promise<Cohort> {
+    if (await this.enabled()) return this.writeNew(actor ?? '', input, id, input.updatedAt);
     const updatePayload = toUpdatePayload(input);
     if (Object.keys(updatePayload).length === 0) {
       throw new AppError(M.sinCambios, 400, { code: 'NO_CHANGES' });

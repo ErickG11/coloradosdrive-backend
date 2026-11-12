@@ -80,3 +80,5 @@ una prueba manual como ejecutada sin haberla realizado.
 
 Lotes 2 al 11 autorizados sin paradas por grupos. Esta instrucción sustituye la
 agrupación anterior. Mantener solo pruebas obligatorias y tipos; no activar indicadores.
+
+Lote 4: automatización de formulario (código/estado/cierre, habilitación, motivo, solo lectura, ayuda de extensión, edición de precios y flota) diferida; riesgo de interacción, accesibilidad y recarga visual cubierto por la guía QA manual del lote 4.

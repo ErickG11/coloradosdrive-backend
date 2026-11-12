@@ -1,3 +1,5 @@
+import { supabaseAdmin } from '../config/supabase';
+import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router } from 'express';
 import { body, param, type ValidationChain } from 'express-validator';
 
@@ -24,6 +26,52 @@ export const cohortRouter = Router();
 
 // RF-01: solo el administrador puede crear y editar matrículas/cohortes.
 cohortRouter.use(asyncHandler(authenticate), requireRole('admin'));
+cohortRouter.get(
+  '/configuracion',
+  asyncHandler(async (req, res) => {
+    const result = await supabaseAdmin.rpc('cohort_admin_config_v2', { p_actor: req.user!.id });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+cohortRouter.patch(
+  '/configuracion/precio',
+  body('tipo').isIn(['A', 'B']),
+  body('centavos').isInt({ min: 0, max: 999999 }).toInt(),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const { tipo, centavos, motivo } = req.body as {
+      tipo: 'A' | 'B';
+      centavos: number;
+      motivo: string;
+    };
+    const result = await supabaseAdmin.rpc('set_course_type_price_v2', {
+      p_actor: req.user!.id,
+      p_type: tipo,
+      p_cents: centavos,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json({ updated: true });
+  }),
+);
+cohortRouter.patch(
+  '/configuracion/vehiculos',
+  body('cantidad').isInt({ min: 0, max: 1000 }).toInt(),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const { cantidad, motivo } = req.body as { cantidad: number; motivo: string };
+    const result = await supabaseAdmin.rpc('set_vehicle_capacity_v2', {
+      p_actor: req.user!.id,
+      p_count: cantidad,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
 
 type Mode = 'create' | 'update';
 
@@ -79,6 +127,8 @@ export function cohortValidators(mode: Mode): ValidationChain[] {
       .withMessage(message);
 
   return [
+    body('habilitada').optional().isBoolean(),
+    body('reason').optional().isString().isLength({ min: 1, max: 500 }),
     ...(mode === 'update'
       ? [
           idParam(),

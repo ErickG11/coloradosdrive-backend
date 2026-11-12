@@ -1,0 +1,22 @@
+begin;
+set local lock_timeout='5s';
+do $$ begin
+ if exists(select 1 from public.enrollment_rule_flags where enabled or(implemented and key not in('date_rules','capacity','reservations','prices','payments','cohort_admin'))) then raise exception 'Apagar indicadores y revertir lotes posteriores';end if;
+end $$;
+drop trigger cohorts_00_admin_rules on public.cohorts;
+drop trigger cohorts_admin_audit on public.cohorts;
+drop function public.cohort_admin_config_v2(uuid);
+drop function public.write_cohort_v2(uuid,uuid,timestamptz,jsonb,text);
+drop function public.set_course_type_price_v2(uuid,public.course_type,bigint,text);
+drop function public.set_vehicle_capacity_v2(uuid,integer,text);
+drop trigger cohorts_reserved_capacity on public.cohorts;
+drop function public.guard_cohort_reserved_capacity();
+alter function public.legacy073_guard_cohort_reserved_capacity() rename to guard_cohort_reserved_capacity;
+create trigger cohorts_reserved_capacity before update of cupo_maximo on public.cohorts for each row execute function public.guard_cohort_reserved_capacity();
+drop trigger cohorts_schedule_reservations on public.cohorts;
+drop function public.guard_cohort_schedule_reservations();
+alter function public.legacy073_guard_cohort_schedule_reservations() rename to guard_cohort_schedule_reservations;
+create trigger cohorts_schedule_reservations before update of course_id,precio,fecha_inicio_curso,fecha_fin_curso on public.cohorts for each row execute function public.guard_cohort_schedule_reservations();
+update public.enrollment_rule_flags set enabled=false,implemented=false where key='cohort_admin';
+notify pgrst,'reload schema';
+commit;
