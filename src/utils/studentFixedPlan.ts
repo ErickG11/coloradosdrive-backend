@@ -59,15 +59,15 @@ function invalidHour(): AppError {
 }
 
 /** Horas de inicio posibles para N horas por día: de las 06 a las (22 − N). */
-export function possibleStartHours(horasPorDia: number): number[] {
-  const last = Math.min(PLAN_LAST_START_HOUR, PLAN_END_LIMIT_HOUR - horasPorDia);
+export function possibleStartHours(horasPorDia: number, endHour = PLAN_END_LIMIT_HOUR): number[] {
+  const last = Math.min(23, endHour - horasPorDia);
   return Array.from(
     { length: Math.max(0, last - PLAN_FIRST_HOUR + 1) },
     (_, i) => PLAN_FIRST_HOUR + i,
   );
 }
 
-export function buildFixedPlan(input: FixedPlanInput): FixedPlan {
+export function buildFixedPlan(input: FixedPlanInput, endHour = PLAN_END_LIMIT_HOUR): FixedPlan {
   const { modalidad, horaInicio, horasPorDia, totalHoras } = input;
   if (!['entre_semana', 'fin_de_semana'].includes(modalidad))
     throw new AppError('Selecciona la modalidad.', 400, { code: 'PLAN_INVALIDO' });
@@ -78,8 +78,8 @@ export function buildFixedPlan(input: FixedPlanInput): FixedPlan {
   if (
     !Number.isInteger(horaInicio) ||
     horaInicio < PLAN_FIRST_HOUR ||
-    horaInicio > PLAN_LAST_START_HOUR ||
-    horaInicio + Math.min(horasPorDia, totalHoras) > PLAN_END_LIMIT_HOUR
+    horaInicio > Math.min(23, endHour - 1) ||
+    horaInicio + horasPorDia > endHour
   )
     throw invalidHour();
   const requested = parseFechaCivil(input.fechaInicio);

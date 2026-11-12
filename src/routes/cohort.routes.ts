@@ -69,22 +69,6 @@ cohortRouter.patch(
     res.json({ updated: true });
   }),
 );
-cohortRouter.patch(
-  '/configuracion/vehiculos',
-  body('cantidad').isInt({ min: 0, max: 2147483647 }).toInt(),
-  body('motivo').isString().isLength({ min: 1, max: 500 }),
-  validateFields,
-  asyncHandler(async (req, res) => {
-    const { cantidad, motivo } = req.body as { cantidad: number; motivo: string };
-    const result = await supabaseAdmin.rpc('set_vehicle_capacity_v2', {
-      p_actor: req.user!.id,
-      p_count: cantidad,
-      p_reason: motivo,
-    });
-    if (result.error) throwStudentScheduleError(result.error);
-    res.json(result.data);
-  }),
-);
 
 cohortRouter.post(
   '/:id/espera/preview',
@@ -149,7 +133,7 @@ for (const action of ['preview', 'aplicar'] as const)
     body('changes.*.fechaInicio').matches(/^\d{4}-\d{2}-\d{2}$/),
     body('changes.*.modalidad').isIn(['entre_semana', 'fin_de_semana']),
     body('changes.*.horasPorDia').isInt({ min: 1, max: 6 }),
-    body('changes.*.horaInicio').isInt({ min: 6, max: 21 }),
+    body('changes.*.horaInicio').isInt({ min: 6, max: 23 }),
     body('motivo').isString().isLength({ min: 1, max: 500 }),
     validateFields,
     asyncHandler(async (req, res) => {

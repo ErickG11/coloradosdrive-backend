@@ -1,3 +1,4 @@
+import { planEndHour } from './planEndHour.service';
 import { cohortCalendar } from '../utils/enrollmentRules';
 import { normalizeIdentityDocument, type IdentityDocumentType } from '../utils/identityDocument';
 import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
@@ -330,7 +331,11 @@ export class ManualEnrollmentService {
     return { courseId: cohort.course_id, price: Number(cohort.precio) };
   }
   async plan(input: ManualPracticeInput): Promise<ManualPracticePlan> {
-    return manualPracticePlan(input, await enrollmentRuleEnabled(this.db, 'date_rules'));
+    return manualPracticePlan(
+      input,
+      await enrollmentRuleEnabled(this.db, 'date_rules'),
+      await planEndHour(this.db),
+    );
   }
   private async exactPreview(
     actor: string,
@@ -338,7 +343,7 @@ export class ManualEnrollmentService {
     input: ManualPracticeInput,
     student?: string,
   ): Promise<ExactManualPreview> {
-    const plan = manualPracticePlan(input, true);
+    const plan = manualPracticePlan(input, true, await planEndHour(this.db));
     const result = await this.db.rpc('manual_plan_preview_v2', {
       p_actor: actor,
       p_type: type,

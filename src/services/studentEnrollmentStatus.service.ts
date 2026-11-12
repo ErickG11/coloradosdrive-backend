@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { DOCUMENTOS_FISICOS, EDAD_EXENCION_VOTACION } from '../config/enrollmentCatalog';
 import { schoolDaysBetween } from '../utils/cohortEligibility';
-import { parseFechaCivil } from '../utils/schoolTimezone';
+import { parseFechaCivil, SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
 import { calcularEdad } from '../utils/solicitudAge';
 import { AppError } from '../utils/AppError';
 import { logSafeError } from '../utils/safeLog';
@@ -199,11 +199,6 @@ export class StudentEnrollmentStatusService {
     });
     const requisitosVerificados =
       principal.origen === 'manual' || principal.requisitos_verificados_at !== null;
-    const bloqueaPorDocumento = DEFINICIONES.some(
-      (def) =>
-        def.bloqueaPago &&
-        documentosFisicos.some((d) => d.tipo === def.tipo && d.estado === 'pendiente'),
-    );
     const latestReservation = access.active
       ? await this.db
           .from('student_schedule_reservations')
@@ -230,22 +225,17 @@ export class StudentEnrollmentStatusService {
         : null;
     // R8 para solicitudes; las matrículas manuales mantienen su plazo histórico.
     const fechaLimite =
-      principal.origen === 'solicitud'
-        ? practice.data
-          ? DateTime.fromISO(practice.data.scheduled_at, { zone: 'America/Guayaquil' }).toISODate()
-          : null
-        : (principal.cohorts?.fecha_fin_matricula ?? null);
-    const puedePagar =
-      requisitosVerificados &&
-      !bloqueaPorDocumento &&
-      (principal.origen === 'manual' || reservaVigente);
+      principal.cohort_id && principal.cohorts
+        ? DateTime.fromISO(principal.cohorts.fecha_fin_matricula, { zone: SCHOOL_TIMEZONE })
+            .minus({ days: 5 })
+            .toISODate()
+        : null;
+    const puedePagar = requisitosVerificados && (principal.origen === 'manual' || reservaVigente);
     const motivoBloqueo = !requisitosVerificados
       ? MOTIVO_REQUISITOS_PENDIENTES
-      : bloqueaPorDocumento
-        ? 'Tienes documentos físicos pendientes que bloquean el pago.'
-        : incompleta
-          ? MENSAJE_INSCRIPCION_INCOMPLETA
-          : null;
+      : incompleta
+        ? MENSAJE_INSCRIPCION_INCOMPLETA
+        : null;
     return {
       enrollmentId: principal.id,
       ...(access.active

@@ -33,3 +33,8 @@ Pruebas: solo obligatorias por lote y tipos; lint/build completos en 11.
 ## Autorización de cierre y L12
 
 Solo chequeos finales de tipos e instalación local completa; ninguna suite, lint ni build. D1–D10 y L12b/L12c autorizados. Sin cohortes de demostración, sin bloqueo de disponibilidad y sin guía QA consolidada nueva. Todos los indicadores siguen apagados por defecto.
+
+| 12a | Implementado; cierre global pendiente | D1–D8/D10, 081 incorpora L11. Guardas congeladas y chequeos solo al final. |
+| 12b | Pendiente | Lista de espera sin preferencia, 60 días, avisos confirmados y tope diario. |
+| 12c | Pendiente | Segundo curso sin repetir datos/documentos; origen adicional. |
+| 12d | Pendiente | Fechas, traslado de cohorte y checklist universal. |

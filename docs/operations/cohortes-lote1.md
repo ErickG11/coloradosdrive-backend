@@ -1,3 +1,5 @@
+> Contrato vigente D3 (12/11/2026): los vehículos no limitan. Las referencias a límites físicos en resultados históricos describen versiones anteriores; no se activan ni se configuran. La capacidad actual son los instructores libres compartidos entre A y B.
+
 # Lote 1 — modelo aditivo y backfill 068/069
 
 Partida autorizada: backend `bcceca93badf9c6dfee7008ef27f37611baca5ff` y frontend
@@ -72,7 +74,7 @@ distintos y actor aprobador. Comprueba que sean admins activos, concede exactame
 cuatro permisos por cada uno y escribe diez auditorías. No incorpora un tercero,
 ni usa emails para elegir personas, ni activa indicadores. Una recarga aborta.
 
-Los marcadores `[PRECIO A]`, `[PRECIO B]`, `[ADMIN 1]`, `[ADMIN 2]` no son valores.
+Los marcadores `150.00 USD (D7)`, `200.00 USD (D7)`, `administradores existentes (D8)`, `administradores existentes (D8)` no son valores.
 No fueron sustituidos por ejemplos. Transferencias/depósitos están fuera del alcance.
 
 ## Guion de despliegue manual

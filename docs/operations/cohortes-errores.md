@@ -262,3 +262,7 @@ L10: DOCUMENTO_* se reproduce/restablece en [QA de documento tipado](cohortes-lo
 | CONFIG_DEPENDENCIA_REQUERIDA | En una sola transacción intentar activar date_rules dejando reservations apagado; rollback automático del cambio de flags. | 409 |
 | CONFIG_OBSERVACION_INVALIDA | Enviar a la RPC de latido un nombre de trabajo o estado no perteneciente al catálogo cerrado. | 400 |
 | FACTURA_DEVOLUCION_DOCUMENTADA | Con facturación activa reducir montoAbonado en caja; debe pedir devolución documentada, sin sobrescribir el cobro. | 409 |
+
+## Ajustes D1–D10
+
+RESERVA_SOLAPE_PROPIO indica el curso, fecha y hora de la práctica o reserva propia incompatible, nunca nombre/código de cohorte. CAPACIDAD_VEHICULOS_AGOTADA y CAPACIDAD_VEHICULOS_EXCEDIDA quedan retirados del flujo vigente por D3. MATRICULA_PLAN_REQUERIDO (409): la ruta antigua no recibe el plan individual; usar la caja actualizada. No se requiere configurar vehículos.

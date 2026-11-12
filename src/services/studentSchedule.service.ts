@@ -1,3 +1,4 @@
+import { planEndHour } from './planEndHour.service';
 import { buildEnrollmentPlan } from '../utils/enrollmentRules';
 import { cohortError } from '../config/cohortErrors';
 import { DateTime } from 'luxon';
@@ -75,7 +76,7 @@ export class StudentScheduleService {
     input: StudentScheduleSelection,
   ): Promise<StudentSchedulePreview> {
     await this.expire(studentId);
-    const plan = buildEnrollmentPlan(input);
+    const plan = buildEnrollmentPlan(input, await planEndHour(this.db));
     const result = await this.db.rpc('student_schedule_preview_v2', {
       p_student: studentId,
       p_enrollment: enrollmentId,
@@ -107,7 +108,7 @@ export class StudentScheduleService {
         ? null
         : {
             codigo: 'SIN_COHORTE_ELEGIBLE',
-            mensaje: 'No hay horarios disponibles para ese plan.',
+            mensaje: state.conflict?.message ?? 'No hay horarios disponibles para ese plan.',
             primeraFechaPosible: null,
           },
       diasFallan: state.diasFallan,
@@ -116,7 +117,10 @@ export class StudentScheduleService {
         ...day,
         disponible: !state.diasFallan.includes(day.fecha),
         motivo: state.diasFallan.includes(day.fecha)
-          ? { codigo: 'DIA_SIN_INSTRUCTOR', mensaje: 'Sin disponibilidad en esta fecha.' }
+          ? {
+              codigo: 'DIA_SIN_INSTRUCTOR',
+              mensaje: state.conflict?.message ?? 'Sin disponibilidad en esta fecha.',
+            }
           : null,
       })),
     };
@@ -158,15 +162,15 @@ export class StudentScheduleService {
     return { courseId: data.course_id, required };
   }
 
-  /** Mañana (Guayaquil) como mínimo y 365 días como máximo. */
+  /** Hoy (Guayaquil) como mínimo y 365 días como máximo. */
   private startDate(value: unknown): string {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
       throw dateError('Selecciona una fecha de inicio válida.');
     const date = DateTime.fromISO(value, { zone: SCHOOL_TIMEZONE });
     if (!date.isValid) throw dateError('Selecciona una fecha de inicio válida.');
     const today = DateTime.now().setZone(SCHOOL_TIMEZONE).startOf('day');
-    if (date < today.plus({ days: 1 }))
-      throw dateError('La fecha de inicio debe ser desde mañana.');
+    if (date < today)
+      throw dateError('La fecha de inicio debe ser desde hoy y sus franjas deben ser futuras.');
     if (date > today.plus({ days: 365 }))
       throw dateError('La fecha de inicio no puede superar un año.');
     return value;
@@ -333,7 +337,7 @@ export class StudentScheduleService {
       const rows: StudentScheduleOptions['horas'] = [];
       let first: StudentSchedulePreview | null = null;
       // Secuencial y acotado: evita saturar la base al consultar todas las horas.
-      for (const hour of possibleStartHours(input.horasPorDia)) {
+      for (const hour of possibleStartHours(input.horasPorDia, await planEndHour(this.db))) {
         try {
           const p = await this.previewNew(studentId, enrollmentId, { ...input, horaInicio: hour });
           first ??= p;
@@ -353,7 +357,7 @@ export class StudentScheduleService {
             throw error;
         }
       }
-      const plan = buildEnrollmentPlan({ ...input, horaInicio: 6 });
+      const plan = buildEnrollmentPlan({ ...input, horaInicio: 6 }, await planEndHour(this.db));
       return {
         enrollmentId,
         serverNow: first?.serverNow ?? new Date().toISOString(),
@@ -454,7 +458,7 @@ export class StudentScheduleService {
     input: StudentScheduleSelection,
   ): Promise<StudentScheduleReservation> {
     if (await this.newRules()) {
-      const plan = buildEnrollmentPlan(input);
+      const plan = buildEnrollmentPlan(input, await planEndHour(this.db));
       const result = await this.db.rpc('reserve_student_schedule', {
         p_student: studentId,
         p_enrollment: enrollmentId,
