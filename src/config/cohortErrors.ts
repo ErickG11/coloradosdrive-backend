@@ -1,6 +1,56 @@
 import { AppError } from '../utils/AppError';
 
 export const COHORT_ERRORS = {
+  DOCUMENTO_ESTADO_INVALIDO: {
+    status: 400,
+    cause: 'Selecciona un documento y un estado válidos.',
+    student: 'Selecciona un documento y un estado válidos.',
+    admin: 'Selecciona un documento y un estado válidos.',
+    action: 'Recargar y revisar la operación.',
+  },
+  DOCUMENTO_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'El documento cambió. Recarga la ficha antes de guardar.',
+    student: 'El documento cambió. Recarga la ficha antes de guardar.',
+    admin: 'El documento cambió. Recarga la ficha antes de guardar.',
+    action: 'Recargar y revisar la operación.',
+  },
+  IDENTIDAD_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La gestión de documentos aún no está activada.',
+    student: 'La gestión de documentos aún no está activada.',
+    admin: 'La gestión de documentos aún no está activada.',
+    action: 'Recargar y revisar la operación.',
+  },
+  MATRICULA_RESERVA_EN_CURSO: {
+    status: 409,
+    cause: 'Resuelve primero la reserva o el pago en curso.',
+    student: 'Resuelve primero la reserva o el pago en curso.',
+    admin: 'Resuelve primero la reserva o el pago en curso.',
+    action: 'Recargar y revisar la operación.',
+  },
+  COHORTE_TIPO_INCOMPATIBLE: {
+    status: 409,
+    cause: 'El destino debe ser del mismo tipo de curso.',
+    student: 'El destino debe ser del mismo tipo de curso.',
+    admin: 'El destino debe ser del mismo tipo de curso.',
+    action: 'Recargar y revisar la operación.',
+  },
+  COHORTE_EXCEPCION_REQUERIDA: {
+    status: 409,
+    cause: 'El plan no cabe o la matrícula está cerrada. Confirma una excepción con motivo.',
+    student: 'El plan no cabe o la matrícula está cerrada. Confirma una excepción con motivo.',
+    admin: 'El plan no cabe o la matrícula está cerrada. Confirma una excepción con motivo.',
+    action: 'Recargar y revisar la operación.',
+  },
+  COHORTE_MATRICULA_FUERA_DE_CURSO: {
+    status: 422,
+    cause: 'El fin de matrícula supera el fin del curso.',
+    student: 'No se puede utilizar ese período de inscripción.',
+    admin:
+      'El fin de matrícula no puede superar el fin del curso. Extiende también el fin del curso o ajusta ambas fechas.',
+    action: 'Ajustar ambas fechas en la misma operación.',
+  },
   ESPERA_YA_MATRICULADO: {
     status: 409,
     cause: 'Ya existe matrícula del tipo.',
@@ -850,6 +900,23 @@ export function translateCohortSqlError(error: unknown): AppError | null {
     !(value.message in COHORT_ERRORS)
   )
     return null;
+  if (
+    value.message === 'COHORTE_FIN_CON_COMPROMISOS' &&
+    'details' in error &&
+    typeof error.details === 'string'
+  ) {
+    try {
+      const detail = JSON.parse(error.details) as { ultimoFin?: string; cantidad?: number };
+      if (detail.ultimoFin && Number.isInteger(detail.cantidad))
+        return new AppError(
+          `No puedes acortar: ${detail.cantidad} compromisos requieren prácticas hasta el ${detail.ultimoFin}.`,
+          409,
+          { code: 'COHORTE_FIN_CON_COMPROMISOS' },
+        );
+    } catch {
+      /* Usar catálogo si no hay detalle válido. */
+    }
+  }
   if (
     value.message === 'RESERVA_SOLAPE_PROPIO' &&
     'details' in error &&

@@ -41,6 +41,66 @@ function actor(req: Request): string {
 }
 
 studentAdminRouter.get(
+  '/:id/matriculas/:enrollment/gestion',
+  param('id').isUUID(),
+  param('enrollment').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const result = await supabaseAdmin.rpc('admin_enrollment_management_v12', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_enrollment: req.params.enrollment,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/:enrollment/documento',
+  param('id').isUUID(),
+  param('enrollment').isUUID(),
+  body('tipo').isIn(['cedula', 'papeleta_votacion', 'tipo_sangre', 'titulo_bachiller']),
+  body('estado').isIn(['pendiente', 'entregado', 'no_aplica']),
+  body('anterior').optional({ values: 'null' }).isIn(['pendiente', 'entregado', 'no_aplica']),
+  validate,
+  asyncHandler(async (req, res) => {
+    const result = await supabaseAdmin.rpc('set_enrollment_document_v12', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_enrollment: req.params.enrollment,
+      p_type: req.body.tipo as string,
+      p_status: req.body.estado as string,
+      p_expected: (req.body.anterior as string | null) ?? null,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/:enrollment/cohorte',
+  param('id').isUUID(),
+  param('enrollment').isUUID(),
+  body('cohortId').isUUID(),
+  body('version').isISO8601(),
+  body('motivo').isString().trim().isLength({ min: 1, max: 500 }),
+  body('excepcion').isBoolean({ strict: true }),
+  validate,
+  asyncHandler(async (req, res) => {
+    const result = await supabaseAdmin.rpc('transfer_enrollment_cohort_v12', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_enrollment: req.params.enrollment,
+      p_target: req.body.cohortId as string,
+      p_version: req.body.version as string,
+      p_reason: req.body.motivo as string,
+      p_exception: req.body.excepcion as boolean,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+
+studentAdminRouter.get(
   '/:id/matriculas/acceso',
   param('id').isUUID(),
   validate,
