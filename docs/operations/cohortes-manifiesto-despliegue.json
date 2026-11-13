@@ -378,6 +378,12 @@
       "file": "migrations/089_asistencia_bloques.sql",
       "guards": 2,
       "guardInventory": "docs/operations/inscripcion-089-guardas.json"
+    },
+    {
+      "id": "090",
+      "file": "migrations/090_reposicion_bloques.sql",
+      "guards": 3,
+      "guardInventory": "docs/operations/inscripcion-090-guardas.json"
     }
   ],
   "excluded": [
