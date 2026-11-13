@@ -6,7 +6,7 @@ El alumno elige solo cuatro datos: modalidad (entre_semana o fin_de_semana), fec
 inicio, horas por día (1–6) y hora de inicio (entera, 06–21). El servidor calcula el
 plan con `src/utils/studentFixedPlan.ts`, función pura y determinista:
 
-- totalHoras = `courses.horas_requeridas` de la matrícula (hoy 15).
+- totalHoras = `courses.horas_requeridas` de la matrícula (10 en planes nuevos; las matrículas anteriores mantienen su objetivo individual).
 - Días: desde la fecha de inicio, solo los de la modalidad (lunes a viernes, o sábado
   y domingo). Si la fecha elegida no es un día de la modalidad, el primer día es el
   siguiente válido y la respuesta lo informa (`ajustada`, `fechaInicioEfectiva`).

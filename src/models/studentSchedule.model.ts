@@ -91,6 +91,7 @@ export interface StudentPlanRules {
     modalidad: 'entre_semana' | 'fin_de_semana';
     horasPorDia: number;
     habilitada: boolean;
+    totalHoras?: number;
     sesiones: number;
     primeraFecha: string;
     ultimaFecha: string;

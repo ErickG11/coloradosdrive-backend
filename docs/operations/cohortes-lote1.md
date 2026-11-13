@@ -20,7 +20,7 @@ Partida autorizada: backend `bcceca93badf9c6dfee7008ef27f37611baca5ff` y fronten
 - Cada lote futuro implementará y probará su indicador antes de ofrecer activación.
   No hay fallback que active reglas si falta configuración. No usar NEXT_PUBLIC
   para tomar decisiones de autorización.
-- Las 12 combinaciones de modalidad/horas están parametrizadas con objetivo 15.
+- Las 12 combinaciones de modalidad/horas están parametrizadas con objetivo 10 desde C08; las matrículas anteriores conservan 15.
   Fin de semana/1 hora queda deshabilitada en el catálogo futuro, pendiente de negocio.
   Esto no cambia las opciones del flujo legacy mientras sus indicadores estén apagados.
 - `cohorts.precio` sigue atendiendo al código legacy. No se elimina ni se sustituye

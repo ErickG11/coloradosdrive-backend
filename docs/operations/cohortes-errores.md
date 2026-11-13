@@ -5,7 +5,7 @@ SQL P7000 transporta solo códigos del catálogo. El backend devuelve código, H
 | Código | Causa | HTTP | Alumno | Administrador | Acción |
 | --- | --- | --- | --- | --- | --- |
 | PLAN_CONFIG_NO_DISPONIBLE | No se pudo leer la configuración del plan | 503 | No se pudo consultar el plan. Intenta nuevamente. | La configuración de reglas no está disponible. | Verificar la configuración y reintentar. |
-| PLAN_ENTRADA_INVALIDA | Formato, modalidad u horas fuera de rango | 400 | Revisa la fecha, modalidad y horas de tu plan. | El plan debe tener 15 horas, de 1 a 6 por día y franjas de 06:00 a 22:00. | Corregir los campos indicados y volver a consultar. |
+| PLAN_ENTRADA_INVALIDA | Formato, modalidad u horas fuera de rango | 400 | Revisa la fecha, modalidad y horas de tu plan. | El plan debe tener 10 horas, con una opción habilitada y dentro del tope horario configurado. | Corregir los campos indicados y volver a consultar. |
 | PLAN_INICIO_PASADO | Primera fecha anterior al día de Guayaquil | 409 | Elige una fecha de inicio desde hoy. | El inicio efectivo del plan está en el pasado. | Seleccionar una fecha vigente. |
 | PLAN_FRANJA_PASADA | Alguna franja ya comenzó | 409 | Esa hora ya pasó. Elige una hora posterior. | Todas las franjas deben ser posteriores al instante del servidor. | Recargar disponibilidad y elegir otra hora. |
 | COHORTE_FECHAS_INVALIDAS | Cadena de fechas inválida | 422 | No se puede utilizar ese período de inscripción. | Debe cumplirse inicio de matrícula ≤ fin de matrícula ≤ fin del curso e inicio del curso ≤ fin del curso. | Ajustar las fechas relacionadas en una sola operación. |

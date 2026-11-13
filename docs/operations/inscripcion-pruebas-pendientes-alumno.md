@@ -240,7 +240,7 @@
   sigue403; dosmatrículas incompletas exigen cerrar ambas antes de accesoacadémico.
 - Horarios muestraTODAS las propias asignadas coninstructor (sin instructor antes
   delpago ni franjas de otrosalumnos); confirmación/asistencia/reprogramación
-  conserva límites; historialpropio y objetivo15h sin contarhoras noasistidas.
+  conserva límites; historialpropio y objetivo individual de la matrícula (10 h en planes nuevos; 15 h en anteriores) sin contarhoras noasistidas.
 - Documentos primera práctica Guayaquil conUTC/fecha cambiada/reprogramación/
   sinpráctica/completada, exención65, no_sabe resaltado; sin botón de subir.
 - IC409 en reducción cupo conholdvivo: mensajeespañol y foco campocupo; vencido
@@ -289,7 +289,7 @@
   reporte nuevo, total esperado intacto. Nuevo aprobado discordante conserva revisión.
 
 ## I15 — hora fija y plan automático (pendiente, no se escribieron pruebas)
-- Plan de 15 horas con 1, 2, 3 y 6 horas por día: 15, 8, 5 y 3 días; último día parcial
+- Plan nuevo de 10 horas: entre semana 1 o 2 h/día (10 o 5 días); fin de semana 2 h/día (5 días)
   (2 h/día → 7×2+1; 6 h/día → 6, 6, 3). Bloques consecutivos desde la hora de inicio.
 - Fecha de inicio en sábado/domingo con entre_semana (y entre semana con fin_de_semana):
   primer día = siguiente día válido, `ajustada` true, `fechaInicioEfectiva` correcta.

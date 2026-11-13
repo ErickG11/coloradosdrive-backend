@@ -105,9 +105,10 @@ export const MIGRATION_MANIFEST: readonly MigrationEntry[] = [
   { id: '083', file: '083_espera_por_tipo_avisos_diarios.sql', operations: 'inscripcion-083' },
   { id: '084', file: '084_gestion_documentos_fechas_cohorte.sql', operations: 'inscripcion-084' },
   { id: '085', file: '085_alumnos_sin_cohorte_orden.sql', operations: 'inscripcion-085' },
+  { id: '086', file: '086_plan_diez_horas.sql', operations: 'inscripcion-086' },
 ];
 export const EXCLUDED_MIGRATIONS = ['064_precio_por_tipo_curso.sql'] as const;
-export const LATEST_MIGRATION = '085';
+export const LATEST_MIGRATION = '086';
 export function approvedMigrations(through = LATEST_MIGRATION): readonly MigrationEntry[] {
   if (through === '000') return [];
   const end = MIGRATION_MANIFEST.findIndex((entry) => entry.id === through);

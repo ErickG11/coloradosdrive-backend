@@ -142,7 +142,7 @@ Usar proyecto/cuentas de ensayo y datos ficticios. Correo:
 postulante-prueba-<sufijo>@example.com; mayor de 18, sangre O+, nivel bachiller y
 cédula ficticia válida según el validador del proyecto. No publicar datos reales.
 
-1. Preparar curso de 15 horas, cohorte con matrícula abierta hoy, cupo mínimo 1 y
+1. Preparar curso de 10 horas, cohorte con matrícula abierta hoy, cupo mínimo 1 y
    fechas que contengan el plan más margen de 5 días. Instructor habilitado y libre.
 2. Completar el formulario público, leer código en consola, confirmar, aceptar
    versiones vigentes, completar datos/estudios y enviar la solicitud.

@@ -1,0 +1,13 @@
+# Flujo vigente de matrícula y pagos
+
+Desde C08 (decisión del dueño del 12/11/2026), los planes nuevos de A y B completan diez horas. La configuración habilita entre semana una hora por día (diez días hábiles consecutivos) o dos horas por día (cinco días hábiles consecutivos); fin de semana habilita dos horas por día (cinco días consecutivos de sábado y domingo). Las otras combinaciones permanecen registradas y deshabilitadas.
+
+1. El alumno completa los requisitos del Paso 1. La selección del Paso 2 consulta las opciones habilitadas, el calendario y la disponibilidad del servidor. Elige modalidad, horas por día cuando corresponda, fecha y hora. Todos los días del plan tienen la misma hora de inicio; el fin debe caber en el tope configurable de la escuela. Se permiten fechas desde hoy, con franjas futuras.
+2. La vista previa calcula todos los días de práctica y muestra el precio del tipo de curso. No retiene cupos ni asigna un instructor definitivo. El servidor entrega las fechas; el navegador las pinta sin reconstruir el calendario del plan.
+3. Continuar crea la reserva de quince minutos con las comprobaciones vigentes de cupo y solapamientos. En esa operación se fija el precio y el objetivo individual de horas. No se elige una cohorte por nombre o código en el flujo del alumno.
+4. El Paso 3 conserva el flujo de pago y conciliación. Confirmar comprueba las franjas retenidas contra el objetivo individual de la matrícula, no contra una constante global. Una reserva antigua de quince horas continúa siendo pagable con su objetivo original aunque la oferta nueva tenga diez.
+5. La matrícula manual reutiliza la misma oferta y el mismo selector. El cambio de plan conserva el plan actual hasta confirmar la propuesta completa, con sus permisos, ventana temporal y auditoría vigentes. Una propuesta nueva guarda su objetivo en la instantánea; confirmarla explícitamente reemplaza el objetivo individual sin cambiar el importe pagado ni crear otro pago.
+
+La migración 086 no modifica las matrículas, prácticas, reservas ni pagos existentes. Las matrículas anteriores mantienen sus quince horas y su plan. `courses.horas_requeridas=10` para A y B es el requisito RF-07 para nuevos planes; el objetivo individual conserva la evidencia histórica.
+
+Aplicación manual, después de 085: preflight `inscripcion-086-preflight.sql` → migración `086_plan_diez_horas.sql` → verificación `inscripcion-086-verificacion.sql` (termina con ROLLBACK). La prueba local ejecuta también `inscripcion-086-rollback.sql`, compara oferta, motivos, restricción, valor predeterminado y hashes originales, y reaplica 086. No activa indicadores automáticamente.

@@ -34,7 +34,7 @@ No se enviaron mensajes SMTP ni se ejecutó la exploración de navegador descrit
 
 ## Guía QA manual
 
-Preparar copia local: alumno(s) ficticios con matrícula A/B, admin con `manage_cohorts_prices`, instructor activo, un vehículo y cohorte abierta que contenga un plan de 15 horas. Proveedor de correo exclusivamente de pruebas/local. Restaurar fixture completo entre escenarios; no ejecutar estas alteraciones en producción.
+Preparar copia local: alumno(s) ficticios con matrícula A/B, admin con `manage_cohorts_prices`, instructor activo, un vehículo y cohorte abierta que contenga un plan de 10 horas. Proveedor de correo exclusivamente de pruebas/local. Restaurar fixture completo entre escenarios; no ejecutar estas alteraciones en producción.
 
 | Pasos y datos | Resultado esperado | Restablecimiento |
 | --- | --- | --- |

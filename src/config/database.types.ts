@@ -135,6 +135,26 @@ export interface Database {
       };
     };
     Functions: {
+      manual_plan_calendar_v13: {
+        Args: {
+          p_actor: string;
+          p_type: 'A' | 'B';
+          p_month: string;
+          p_mode: string;
+          p_hours: number;
+        };
+        Returns: {
+          serverNow: string;
+          dias: {
+            fecha: string;
+            disponible: boolean;
+            motivo: string | null;
+            planDays: { fecha: string; horas: number }[];
+            horas: { hora: string; factible: boolean; motivo: { mensaje: string } | null }[];
+          }[];
+        };
+      };
+
       set_enrollment_document_v12: {
         Args: {
           p_actor: string;

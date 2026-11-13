@@ -1,3 +1,9 @@
+import { configuredEnrollmentPlan } from './studentPlanRules.service';
+import { planEndHour } from './planEndHour.service';
+import { possibleStartHours } from '../utils/studentFixedPlan';
+import { AppError } from '../utils/AppError';
+import type { StudentScheduleStartOption } from '../models/studentSchedule.model';
+import { calendarWithPlans } from './planCalendar.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { cohortError, COHORT_ERRORS, type CohortErrorCode } from '../config/cohortErrors';
@@ -68,6 +74,52 @@ export class PlanChangeService {
     if (result.error) throwStudentScheduleError(result.error);
     return { ...result.data, plan: summarizeSlots(result.data.franjas.map((f) => f.scheduledAt)) };
   }
+  async options(
+    student: string,
+    enrollment: string,
+    input: StudentScheduleSelection,
+    admin?: { id: string; reason: string; target?: string },
+  ): Promise<StudentScheduleStartOption[]> {
+    await configuredEnrollmentPlan(this.db, { ...input, horaInicio: 6 });
+    const hours: StudentScheduleStartOption[] = [];
+    for (const horaInicio of possibleStartHours(input.horasPorDia, await planEndHour(this.db))) {
+      const hora = `${String(horaInicio).padStart(2, '0')}:00`;
+      try {
+        const preview = await this.preview(student, enrollment, { ...input, horaInicio }, admin);
+        hours.push({
+          hora,
+          factible: preview.factible,
+          diasFallan: [],
+          motivo: preview.factible
+            ? null
+            : {
+                codigo: 'DIA_SIN_INSTRUCTOR',
+                mensaje: 'No hay disponibilidad para el plan completo.',
+              },
+        });
+      } catch (error) {
+        if (
+          !(error instanceof AppError) ||
+          ![
+            'RESERVA_SIN_HORARIOS',
+            'RESERVA_RECURSO_OCUPADO',
+            'PLAN_FRANJA_PASADA',
+            'PLAN_INICIO_PASADO',
+            'CAPACIDAD_INSTRUCTOR_NO_DISPONIBLE',
+            'RESERVA_SOLAPE_PROPIO',
+          ].includes(error.code ?? '')
+        )
+          throw error;
+        hours.push({
+          hora,
+          factible: false,
+          diasFallan: [],
+          motivo: { codigo: 'DIA_SIN_INSTRUCTOR', mensaje: error.message },
+        });
+      }
+    }
+    return hours;
+  }
   async calendar(
     student: string,
     enrollment: string,
@@ -91,7 +143,7 @@ export class PlanChangeService {
           p_hours: input.horasPorDia,
         });
     if (result.error) throwStudentScheduleError(result.error);
-    return result.data;
+    return calendarWithPlans(this.db, input, result.data);
   }
   async reserve(
     student: string,

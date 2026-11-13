@@ -1,5 +1,6 @@
+import { calendarWithPlans } from './planCalendar.service';
 import { planEndHour } from './planEndHour.service';
-import { buildEnrollmentPlan } from '../utils/enrollmentRules';
+import { configuredEnrollmentPlan } from './studentPlanRules.service';
 import { cohortError } from '../config/cohortErrors';
 import { DateTime } from 'luxon';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -89,7 +90,7 @@ export class StudentScheduleService {
     input: StudentScheduleSelection,
   ): Promise<StudentSchedulePreview> {
     await this.expire(studentId);
-    const plan = buildEnrollmentPlan(input, await planEndHour(this.db));
+    const plan = await configuredEnrollmentPlan(this.db, input);
     const result = await this.db.rpc('student_schedule_preview_v2', {
       p_student: studentId,
       p_enrollment: enrollmentId,
@@ -107,7 +108,7 @@ export class StudentScheduleService {
       serverNow: state.serverNow,
       modalidad: input.modalidad,
       precioCentavos: state.precioCentavos ?? undefined,
-      horasTotales: 15,
+      horasTotales: plan.totalHoras,
       horasPorDia: plan.horasPorDia,
       horaInicio: plan.horaInicio,
       fechaInicioSolicitada: plan.fechaInicioSolicitada,
@@ -211,7 +212,12 @@ export class StudentScheduleService {
     hours: number[],
   ): Promise<Evaluation> {
     await this.expire(studentId);
-    const { courseId, required } = await this.context(studentId, enrollmentId);
+    const { courseId } = await this.context(studentId, enrollmentId);
+    const configured = await configuredEnrollmentPlan(this.db, {
+      ...input,
+      horaInicio: hours[0] ?? 6,
+    });
+    const required = configured.totalHoras;
     const start = this.startDate(input.fechaInicio);
     const endHour = await planEndHour(this.db);
     const plans = new Map<number, FixedPlan>();
@@ -379,11 +385,11 @@ export class StudentScheduleService {
             throw error;
         }
       }
-      const plan = buildEnrollmentPlan({ ...input, horaInicio: 6 }, await planEndHour(this.db));
+      const plan = await configuredEnrollmentPlan(this.db, { ...input, horaInicio: 6 });
       return {
         enrollmentId,
         serverNow: first?.serverNow ?? new Date().toISOString(),
-        horasRequeridas: 15,
+        horasRequeridas: plan.totalHoras,
         fechaInicioEfectiva: plan.fechaInicioEfectiva,
         ajustada: plan.ajustada,
         cohorte: null,
@@ -476,7 +482,7 @@ export class StudentScheduleService {
     input: StudentScheduleSelection,
   ): Promise<StudentScheduleReservation> {
     if (await this.newRules()) {
-      const plan = buildEnrollmentPlan(input, await planEndHour(this.db));
+      const plan = await configuredEnrollmentPlan(this.db, input);
       const result = await this.db.rpc('reserve_student_schedule', {
         p_student: studentId,
         p_enrollment: enrollmentId,
@@ -551,6 +557,37 @@ export class StudentScheduleService {
   }
 
   async calendar(studentId: string, enrollmentId: string, input: StudentScheduleInput) {
+    if (!(await this.newRules())) {
+      const month = DateTime.fromISO(input.fechaInicio, { zone: SCHOOL_TIMEZONE });
+      if (!month.isValid || month.day !== 1) throw cohortError('PLAN_ENTRADA_INVALIDA');
+      const today = DateTime.now().setZone(SCHOOL_TIMEZONE).toISODate();
+      if (!today) throw cohortError('PLAN_CONFIG_NO_DISPONIBLE');
+      const days: { fecha: string; disponible: boolean; motivo: string | null }[] = [];
+      // Rama heredada: conserva sus comprobaciones de cupo y disponibilidad.
+      for (let index = 0; index < month.daysInMonth; index++) {
+        const date = month.plus({ days: index });
+        const fecha = date.toISODate();
+        if (!fecha) throw cohortError('PLAN_ENTRADA_INVALIDA');
+        let disponible = false,
+          motivo: string | null = 'La fecha no pertenece a esta modalidad o ya pasó.';
+        if (fecha >= today && date.weekday >= 6 === (input.modalidad === 'fin_de_semana')) {
+          const result = await this.options(studentId, enrollmentId, {
+            ...input,
+            fechaInicio: fecha,
+          });
+          disponible = result.horas.some((hour) => hour.factible);
+          motivo = disponible
+            ? null
+            : (result.sinCohorte?.mensaje ?? 'No hay disponibilidad para el plan completo.');
+        }
+        days.push({ fecha, disponible, motivo });
+      }
+      return calendarWithPlans(this.db, input, {
+        serverNow: new Date().toISOString(),
+        dias: days,
+        calendarEndDate: DateTime.now().setZone(SCHOOL_TIMEZONE).plus({ days: 365 }).toISODate(),
+      });
+    }
     const result = await this.db.rpc('student_schedule_calendar_v2', {
       p_student: studentId,
       p_enrollment: enrollmentId,
@@ -559,7 +596,7 @@ export class StudentScheduleService {
       p_hours: input.horasPorDia,
     });
     if (result.error) throwStudentScheduleError(result.error);
-    return result.data;
+    return calendarWithPlans(this.db, input, result.data);
   }
   async currentForEnrollment(studentId: string, enrollmentId: string) {
     const own = await this.db
