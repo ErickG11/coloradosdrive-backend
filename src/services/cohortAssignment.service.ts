@@ -131,6 +131,9 @@ type CohortCandidateRow = Pick<
   | 'fecha_inicio_matricula'
   | 'fecha_fin_matricula'
   | 'fecha_inicio_curso'
+  | 'fecha_fin_curso'
+  | 'habilitada'
+  | 'cancelled_at'
   | 'created_at'
 >;
 
@@ -181,7 +184,7 @@ export class CohortAssignmentService {
     const { data, error } = await this.supabase
       .from('cohorts')
       .select(
-        'id, course_id, updated_at, nombre, precio, cupo_maximo, fecha_inicio_matricula, fecha_fin_matricula, fecha_inicio_curso, created_at',
+        'id, course_id, updated_at, nombre, precio, cupo_maximo, fecha_inicio_matricula, fecha_fin_matricula, fecha_inicio_curso, fecha_fin_curso, habilitada, cancelled_at, created_at',
       )
       .eq('course_id', courseId);
     if (error) {
@@ -207,6 +210,11 @@ export class CohortAssignmentService {
       fechaInicioMatricula: parseFechaCivil(row.fecha_inicio_matricula).toJSDate(),
       fechaFinMatricula: parseFechaCivil(row.fecha_fin_matricula).toJSDate(),
       fechaInicioCurso: parseFechaCivil(row.fecha_inicio_curso).toJSDate(),
+      fechaFinCurso: row.fecha_fin_curso
+        ? parseFechaCivil(row.fecha_fin_curso).toJSDate()
+        : undefined,
+      habilitada: row.habilitada,
+      cancelledAt: row.cancelled_at,
       createdAt: new Date(row.created_at),
     }));
   }

@@ -135,6 +135,19 @@ export interface Database {
       };
     };
     Functions: {
+      assign_pending_enrollment_cohort_with_reason_v13: {
+        Args: {
+          p_actor: string;
+          p_student: string;
+          p_enrollment: string;
+          p_cohort: string;
+          p_cohort_version: string;
+          p_validated_day: string;
+          p_reason: string;
+        };
+        Returns: Database['public']['Functions']['assign_pending_enrollment_cohort']['Returns'];
+      };
+
       manual_plan_calendar_v13: {
         Args: {
           p_actor: string;

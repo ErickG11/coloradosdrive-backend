@@ -360,6 +360,12 @@
       "guards": 8,
       "guardInventory": "docs/operations/inscripcion-086-guardas.json",
       "schemaGuards": 1
+    },
+    {
+      "id": "087",
+      "file": "migrations/087_acceso_al_pagar_gestion_cohortes.sql",
+      "guards": 6,
+      "guardInventory": "docs/operations/inscripcion-087-guardas.json"
     }
   ],
   "excluded": [

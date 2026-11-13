@@ -47,7 +47,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     cupoOcupado: 1,
     createdAt: new Date('2025-01-01Z'),
     fechaInicioMatricula: new Date('2026-01-01T05:00:00Z'),
-    fechaFinMatricula: new Date('2026-01-15T05:00:00Z'),
+    fechaFinMatricula: new Date('2026-01-20T05:00:00Z'),
     fechaInicioCurso: new Date('2026-02-01T05:00:00Z'),
   };
   const candidatesForCourse = jest.fn().mockResolvedValue([candidate]);
@@ -73,7 +73,7 @@ describe('C: asignación tardía', () => {
     expect(result).toMatchObject({
       enrollmentId: enrollment,
       suggestion: { cohortId: cohort },
-      items: [{ id: cohort, cuposDisponibles: 1, fechaFinMatricula: '2026-01-15' }],
+      items: [{ id: cohort, cuposDisponibles: 1, fechaFinMatricula: '2026-01-20' }],
     });
     expect(JSON.stringify(result)).not.toContain(version);
     s.candidate.cupoOcupado = 2;
@@ -84,15 +84,18 @@ describe('C: asignación tardía', () => {
   });
   it('pasa los seis decimales exactos sin Date y día civil inclusivo al único guardado', async () => {
     const s = setup();
-    expect(await s.service.assign(actor, student, enrollment, cohort)).toMatchObject({
+    expect(
+      await s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+    ).toMatchObject({
       enrollmentId: enrollment,
       montoTotal: 100,
       montoAbonado: 25,
       saldo: 75,
     });
     expect(s.rpc).toHaveBeenCalledTimes(1);
-    expect(s.rpc).toHaveBeenCalledWith('assign_pending_enrollment_cohort', {
+    expect(s.rpc).toHaveBeenCalledWith('assign_pending_enrollment_cohort_with_reason_v13', {
       p_actor: actor,
+      p_reason: 'Asignación C09',
       p_student: student,
       p_enrollment: enrollment,
       p_cohort: cohort,
@@ -109,7 +112,9 @@ describe('C: asignación tardía', () => {
   it('distingue ventana cerrada de COHORT_CHANGED y no guarda si ya cerró', async () => {
     const s = setup();
     jest.setSystemTime(new Date('2026-01-16T05:00:00Z'));
-    await expect(s.service.assign(actor, student, enrollment, cohort)).rejects.toMatchObject({
+    await expect(
+      s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+    ).rejects.toMatchObject({
       statusCode: 409,
       code: 'COHORT_WINDOW_CLOSED',
     });
@@ -129,19 +134,23 @@ describe('C: asignación tardía', () => {
       },
       error: null,
     });
-    expect((await s.service.assign(actor, student, enrollment, cohort)).saldo).toBe(0.1);
+    expect(
+      (await s.service.assign(actor, student, enrollment, cohort, 'Asignación C09')).saldo,
+    ).toBe(0.1);
   });
   it('permite repetir la misma asignación ya activa aunque haya cerrado la ventana', async () => {
     const s = setup({ status: 'activo', cohort_id: cohort });
     jest.setSystemTime(new Date('2027-01-01T05:00:00Z'));
-    await s.service.assign(actor, student, enrollment, cohort);
+    await s.service.assign(actor, student, enrollment, cohort, 'Asignación C09');
     expect(s.rpc).toHaveBeenCalledTimes(1);
   });
   it.each(['retirado', 'finalizado', 'activo'])(
     'rechaza matrícula %s sin reasignar',
     async (status) => {
       const s = setup({ status });
-      await expect(s.service.assign(actor, student, enrollment, cohort)).rejects.toMatchObject({
+      await expect(
+        s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+      ).rejects.toMatchObject({
         code: 'ENROLLMENT_NOT_PENDING',
       });
       expect(s.rpc).not.toHaveBeenCalled();
@@ -151,7 +160,9 @@ describe('C: asignación tardía', () => {
     const s = setup();
     s.tables.student_deletion_operations.data = { status: 'fallido' };
     s.tables.users.data = { activo: false };
-    await expect(s.service.assign(actor, student, enrollment, cohort)).rejects.toMatchObject({
+    await expect(
+      s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+    ).rejects.toMatchObject({
       code: 'DELETION_PENDING',
     });
     expect(s.candidatesForCourse).not.toHaveBeenCalled();
@@ -163,7 +174,9 @@ describe('C: asignación tardía', () => {
   ])('rechaza contexto %s inválido', async (table, data, code) => {
     const s = setup();
     s.tables[table].data = data;
-    await expect(s.service.assign(actor, student, enrollment, cohort)).rejects.toMatchObject({
+    await expect(
+      s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+    ).rejects.toMatchObject({
       code,
     });
     expect(s.rpc).not.toHaveBeenCalled();
@@ -172,14 +185,18 @@ describe('C: asignación tardía', () => {
     const s = setup();
     s.candidatesForCourse.mockResolvedValue([]);
     s.tables.cohorts.data = exists ? { id: cohort } : null;
-    await expect(s.service.assign(actor, student, enrollment, cohort)).rejects.toMatchObject({
+    await expect(
+      s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+    ).rejects.toMatchObject({
       code: exists ? 'COHORT_COURSE_MISMATCH' : 'COHORT_NOT_FOUND',
     });
   });
   it('una respuesta perdida no dispara reintentos ni compensaciones; log solo identificadores', async () => {
     const s = setup();
     s.rpc.mockRejectedValue(new Error('private fixture value'));
-    await expect(s.service.assign(actor, student, enrollment, cohort)).rejects.toMatchObject({
+    await expect(
+      s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+    ).rejects.toMatchObject({
       statusCode: 503,
       code: 'UNCONFIRMED',
     });
@@ -216,7 +233,9 @@ describe('C: asignación tardía', () => {
       data: null,
       error: { code: dbCode, message: 'private fixture value' },
     });
-    await expect(s.service.assign(actor, student, enrollment, cohort)).rejects.toMatchObject({
+    await expect(
+      s.service.assign(actor, student, enrollment, cohort, 'Asignación C09'),
+    ).rejects.toMatchObject({
       statusCode,
       code,
     });
