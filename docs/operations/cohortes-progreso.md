@@ -24,7 +24,7 @@ Pruebas: solo obligatorias por lote y tipos; lint/build completos en 11.
 
 ## Integración pendiente (lote 11, antes de activar)
 
-- Conectar matrícula manual/caja y su última sesión parcial al constructor único de 15 horas; usar precio por tipo cuando los indicadores nuevos estén activos.
+- Conectar matrícula manual/caja con sesiones completas al constructor único de 10 horas; usar precio por tipo cuando los indicadores nuevos estén activos.
 - Revisar horizonte del calendario contra todas las fechas candidatas y mostrar precio antes de reservar.
 - Auditar todas las rutas heredadas de acceso y eliminar nombres/códigos de cohorte de respuestas de alumno.
 - Aplicar permisos separados a rutas heredadas, dependencias de activación, observación de leases/latidos y las alertas restantes; no afirmar que estén operativas todavía.

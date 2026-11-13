@@ -1,3 +1,4 @@
+import { AppError } from '../utils/AppError';
 import { buildRateLimiter } from '../middlewares/rateLimit';
 import { env } from '../config/env';
 import { createHmac } from 'node:crypto';
@@ -42,20 +43,23 @@ planChangeRouter.get(
       .json(await service.state(req.user!.id, req.params.enrollmentId));
   }),
 );
-for (const action of ['preview', 'reservar', 'calendario'] as const)
+for (const action of ['preview', 'reservar', 'calendario', 'opciones'] as const)
   planChangeRouter.post(
     `/:enrollmentId/${action}`,
     param('enrollmentId').isUUID(),
     plan(),
     validateFields,
     asyncHandler(async (req, res) => {
+      if (!req.user) throw new AppError('Authentication required', 401);
       const input = matchedData<StudentScheduleSelection>(req, { locations: ['body'] });
       res.json(
         action === 'calendario'
-          ? await service.calendar(req.user!.id, req.params.enrollmentId, input)
-          : action === 'preview'
-            ? await service.preview(req.user!.id, req.params.enrollmentId, input)
-            : await service.reserve(req.user!.id, req.params.enrollmentId, input),
+          ? await service.calendar(req.user.id, req.params.enrollmentId, input)
+          : action === 'opciones'
+            ? await service.options(req.user.id, req.params.enrollmentId, input)
+            : action === 'preview'
+              ? await service.preview(req.user.id, req.params.enrollmentId, input)
+              : await service.reserve(req.user.id, req.params.enrollmentId, input),
       );
     }),
   );

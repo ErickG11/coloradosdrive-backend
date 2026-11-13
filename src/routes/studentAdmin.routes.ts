@@ -210,7 +210,7 @@ studentAdminRouter.get(
     res.json(state);
   }),
 );
-for (const changeAction of ['preview', 'reservar'] as const)
+for (const changeAction of ['preview', 'reservar', 'opciones'] as const)
   studentAdminRouter.post(
     `/:id/matriculas/:enrollmentId/cambio/${changeAction}`,
     param('id').isUUID(),
@@ -248,9 +248,11 @@ for (const changeAction of ['preview', 'reservar'] as const)
         throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
       const admin = { id: actor(req), reason: motivo, target: cohortId };
       res.json(
-        changeAction === 'preview'
-          ? await changeService.preview(req.params.id, req.params.enrollmentId, input, admin)
-          : await changeService.reserve(req.params.id, req.params.enrollmentId, input, admin),
+        changeAction === 'opciones'
+          ? await changeService.options(req.params.id, req.params.enrollmentId, input, admin)
+          : changeAction === 'preview'
+            ? await changeService.preview(req.params.id, req.params.enrollmentId, input, admin)
+            : await changeService.reserve(req.params.id, req.params.enrollmentId, input, admin),
       );
     }),
   );

@@ -26,7 +26,7 @@ rollback 070, apply 070, verify 070; reset restablece fixtures de 068. Sin servi
 
 | Datos/pasos | Esperado | Restablecer |
 | --- | --- | --- |
-| Vectores de tests/fixtures/enrollment-plan-vectors.json | 15 horas, sesiones y fechas de fin aprobadas en TS y SQL | reset |
+| Vectores de tests/fixtures/enrollment-plan-vectors.json | Contrato histórico 070 de 15 horas; para la oferta vigente de 10 horas, ver ADR 022 y pruebas C08 | reset |
 | Fin matrícula 15/11; consultar helper a 10/11 23:59:59 y 11/11 00:00 Guayaquil | Abierta y cerrada respectivamente | Solo lectura |
 | Inicio hoy 06:00; reloj 05:59:59 y después 06:00 | Primero permitido, después PLAN_FRANJA_PASADA | Solo lectura |
 | Inicio de fecha anterior | PLAN_INICIO_PASADO | Solo lectura |

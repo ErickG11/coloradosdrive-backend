@@ -12,10 +12,11 @@ export interface CohortCalendarInput {
 }
 export function buildEnrollmentPlan(
   input: Omit<FixedPlanInput, 'totalHoras'>,
-  endHour = 22,
+  endHour: number,
+  totalHoras: number,
 ): FixedPlan {
   try {
-    return buildFixedPlan({ ...input, totalHoras: 15 }, endHour);
+    return buildFixedPlan({ ...input, totalHoras }, endHour);
   } catch {
     throw cohortError('PLAN_ENTRADA_INVALIDA');
   }

@@ -31,7 +31,7 @@ Fixture: dos alumnos ficticios con A pagada, primeras prácticas a más de 48 h;
 
 | Pasos / datos | Esperado | Restablecer |
 | --- | --- | --- |
-| Mi inscripción → cambiar modalidad/horas/mes/fecha/hora → consultar | Calendario del servidor y plan exacto 15 h con última parcial; sin retener ni mostrar nombre/código de cohorte | Recargar formulario |
+| Mi inscripción → cambiar modalidad/horas/mes/fecha/hora → consultar | Calendario del servidor y plan exacto 10 h con sesiones completas; sin retener ni mostrar nombre/código de cohorte | Recargar formulario |
 | Elegir propuesta y reservar | Contador desde servidor; aviso a 2 min, original conservado; no caja ni pasarela | Conservar plan actual |
 | Ocupar última franja antes de reservar o confirmar | RESERVA_RECURSO_OCUPADO; original intacto, disponibilidad se recarga | Liberar práctica fixture |
 | Adelantar reloj local SQL 16 min | PLAN_CAMBIO_RESERVA_VENCIDA; original intacto; nueva propuesta si permite ventana | Restaurar reloj y fixture |

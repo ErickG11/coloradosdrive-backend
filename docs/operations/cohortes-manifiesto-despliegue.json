@@ -353,6 +353,13 @@
       "id": "085",
       "file": "migrations/085_alumnos_sin_cohorte_orden.sql",
       "guards": 1
+    },
+    {
+      "id": "086",
+      "file": "migrations/086_plan_diez_horas.sql",
+      "guards": 8,
+      "guardInventory": "docs/operations/inscripcion-086-guardas.json",
+      "schemaGuards": 1
     }
   ],
   "excluded": [

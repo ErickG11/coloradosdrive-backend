@@ -69,7 +69,8 @@ export const COHORT_ERRORS = {
     status: 400,
     cause: 'Formato, modalidad u horas fuera de rango',
     student: 'Revisa la fecha, modalidad y horas de tu plan.',
-    admin: 'El plan debe tener 15 horas, de 1 a 6 por día y franjas de 06:00 a 22:00.',
+    admin:
+      'Elige una combinación habilitada y una hora dentro del horario configurado de la escuela.',
     action: 'Corregir los campos indicados y volver a consultar.',
   },
   PLAN_INICIO_PASADO: {

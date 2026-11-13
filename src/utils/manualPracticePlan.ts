@@ -44,8 +44,10 @@ export function manualPracticePlan(
   input: ManualPracticeInput,
   exact = false,
   endHour = 22,
+  totalHoras?: number,
 ): ManualPracticePlan {
   if (exact) {
+    if (totalHoras === undefined) throw new AppError('Falta la configuración del plan.', 503);
     const hour = parseHora(input.horaResuelta ?? input.horaDeseada);
     if (hour.minute !== 0) throw invalid(PRACTICE_MESSAGES.horaDeseada, 'horaDeseada');
     const plan = buildEnrollmentPlan(
@@ -56,6 +58,7 @@ export function manualPracticePlan(
         horaInicio: hour.hour,
       },
       endHour,
+      totalHoras,
     );
     return {
       rulesActive: true,
@@ -71,8 +74,8 @@ export function manualPracticePlan(
       manual: false,
       fechas: plan.dias.map((d) => d.fecha),
       dias: plan.dias.length,
-      bloques: 15,
-      horas: 15,
+      bloques: plan.totalHoras,
+      horas: plan.totalHoras,
       horasPorDia: input.horasPorDia,
       horaDeseada: input.horaDeseada,
     };

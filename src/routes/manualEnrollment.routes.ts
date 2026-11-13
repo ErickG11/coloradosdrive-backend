@@ -1,3 +1,4 @@
+import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { studentPlanRules } from '../services/studentPlanRules.service';
 import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { normalizeIdentityDocument } from '../utils/identityDocument';
@@ -44,6 +45,31 @@ manualEnrollmentRouter.get(
   '/rules',
   asyncHandler(async (_req, res) => {
     res.json(await studentPlanRules(supabaseAdmin));
+  }),
+);
+manualEnrollmentRouter.post(
+  '/calendar',
+  body('courseType').isIn(['A', 'B']),
+  body('fechaInicio').custom(isFechaCivil),
+  body('modalidad').isIn(['entre_semana', 'fin_de_semana']),
+  body('horasPorDia').isInt({ min: 1, max: 6 }),
+  validate,
+  asyncHandler(async (req, res) => {
+    const input = req.body as {
+      courseType: 'A' | 'B';
+      fechaInicio: string;
+      modalidad: string;
+      horasPorDia: number;
+    };
+    const result = await supabaseAdmin.rpc('manual_plan_calendar_v13', {
+      p_actor: actor(req),
+      p_type: input.courseType,
+      p_month: input.fechaInicio,
+      p_mode: input.modalidad,
+      p_hours: input.horasPorDia,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
   }),
 );
 const isMoney = (value: unknown): boolean =>

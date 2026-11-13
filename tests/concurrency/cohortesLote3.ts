@@ -94,7 +94,7 @@ async function main() {
       );
     }
     async function reserve(n: number, planInput = input, client?: Client) {
-      const p = buildEnrollmentPlan(planInput);
+      const p = buildEnrollmentPlan(planInput, 22, 15);
       const sql = 'select public.reserve_student_schedule($1,$2,$3,$4,$5,$6) r';
       const args = [
         student(n),
@@ -395,7 +395,7 @@ async function main() {
               'update public.cohorts set fecha_inicio_matricula=$1::date-1,fecha_fin_matricula=$1::date+60,fecha_inicio_curso=$1::date+1,fecha_fin_curso=$1::date+90',
               [dates.today],
             );
-            const plan = buildEnrollmentPlan({ ...input, fechaInicio: dates.start });
+            const plan = buildEnrollmentPlan({ ...input, fechaInicio: dates.start }, 22, 15);
             const reserveFn = direct
               ? 'private.legacy071_reserve_student_schedule'
               : 'public.reserve_student_schedule';

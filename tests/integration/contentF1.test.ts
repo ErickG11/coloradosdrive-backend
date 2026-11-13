@@ -1,7 +1,6 @@
 import { EmbeddedPostgres } from '../helpers/embeddedPostgres';
 import { enrollmentSql, setupEnrollmentDatabase } from '../helpers/enrollmentDatabase';
-import { readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { approvedMigrations } from '../helpers/migrationManifest';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const id = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -38,9 +37,7 @@ beforeAll(async () => {
     grant select on storage.objects to service_role;
     alter default privileges for role postgres in schema public grant all on tables to service_role;
     alter default privileges for role postgres in schema public grant all on tables to anon,authenticated;`);
-  for (const file of readdirSync(resolve(__dirname, '../../migrations'))
-    .filter((f) => /^\d{3}[ab]?_.*\.sql$/.test(f) && f.slice(0, 3) <= '066' && !f.startsWith('003'))
-    .sort()) {
+  for (const { file } of approvedMigrations('066b').filter((entry) => entry.id !== '003')) {
     if (file.startsWith('065')) {
       await db.query('insert into auth.users(id) values($1)', [id(900)]);
       await db.query(

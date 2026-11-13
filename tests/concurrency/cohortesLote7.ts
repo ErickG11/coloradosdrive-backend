@@ -46,10 +46,14 @@ async function main() {
           "insert into public.enrollments(id,student_id,course_id,course_type,status,origen,etapa_inscripcion,requisitos_verificados_at) values($1,$2,$3,'A','pendiente_cohorte','solicitud','por_agendar',clock_timestamp())",
           [enrollment(n), student(n), course],
         );
-        const p = buildEnrollmentPlan({
-          ...original,
-          fechaInicio: n === 1 ? '2026-11-16' : '2026-11-23',
-        });
+        const p = buildEnrollmentPlan(
+          {
+            ...original,
+            fechaInicio: n === 1 ? '2026-11-16' : '2026-11-23',
+          },
+          22,
+          15,
+        );
         const r = (
           await db.query<{ r: { id: string } }>(
             'select public.reserve_student_schedule($1,$2,$3,$4,$5,$6) r',

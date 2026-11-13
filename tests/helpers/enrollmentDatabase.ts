@@ -20,6 +20,7 @@ export async function setupManagedSurfaces(db: Pick<EmbeddedPostgres, 'exec'>): 
 export async function setupEnrollmentDatabase(
   db: Pick<EmbeddedPostgres, 'exec'>,
   through: string,
+  options: { includeSeed?: boolean } = {},
 ): Promise<void> {
   await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
     create schema auth;create table auth.users(id uuid primary key,email text);
@@ -31,7 +32,9 @@ export async function setupEnrollmentDatabase(
     create function realtime.topic() returns text language sql stable as $$select current_setting('realtime.topic',true)$$;
   `);
   if (through >= '065') await setupManagedSurfaces(db);
-  for (const entry of approvedMigrations(through).filter((entry) => entry.id !== '003'))
+  for (const entry of approvedMigrations(through).filter(
+    (entry) => options.includeSeed === true || entry.id !== '003',
+  ))
     await db.exec(
       enrollmentSql(`migrations/${entry.file}`).replace(
         /create extension if not exists "pgcrypto";/gi,
