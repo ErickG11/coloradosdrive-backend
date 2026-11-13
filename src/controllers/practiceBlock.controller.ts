@@ -4,13 +4,13 @@ import { RealtimeService } from '../services/realtime.service';
 import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 import { AppError } from '../utils/AppError';
 import { logSafeError } from '../utils/safeLog';
-import type { PracticeBlockMutation } from '../models/practiceBlock.model';
+import type { PracticeBlockMutation, PracticeBlockResolution } from '../models/practiceBlock.model';
 const realtime = new RealtimeService(supabaseAdmin);
 const student = (req: Request): string => {
   if (!req.user) throw new AppError('La sesión venció. Vuelve a iniciar sesión.', 401);
   return req.user.id;
 };
-async function invalidate(result: PracticeBlockMutation): Promise<void> {
+async function invalidate(result: PracticeBlockMutation | PracticeBlockResolution): Promise<void> {
   const recipients = [...new Set(result.audience ?? [])];
   const jobs = recipients.flatMap((id) => [
     realtime.broadcast(`user-${id}-practice-slots`, 'notifications-updated', {}),
@@ -100,4 +100,35 @@ export async function instructorBlocks(req: Request, res: Response): Promise<voi
   });
   if (error) throwPracticeWriteError(error);
   res.json(data);
+}
+
+export async function blockResolutionPreview(req: Request, res: Response): Promise<void> {
+  const { data, error } = await supabaseAdmin.rpc('preview_practice_block_resolution_v17', {
+    p_student: student(req),
+    p_enrollment: req.params.enrollmentId,
+    p_date: req.params.date,
+  });
+  if (error) throwPracticeWriteError(error);
+  res.json(data);
+}
+export async function resolveBlock(req: Request, res: Response): Promise<void> {
+  const body = req.body as {
+    accion: 'mover' | 'falta';
+    inicio?: string;
+    motivoCategoria: string;
+    motivoTexto: string;
+  };
+  const { data, error } = await supabaseAdmin.rpc('resolve_practice_block_v17', {
+    p_student: student(req),
+    p_enrollment: req.params.enrollmentId,
+    p_date: req.params.date,
+    p_action: body.accion,
+    p_start: body.accion === 'mover' ? (body.inicio ?? null) : null,
+    p_category: body.motivoCategoria,
+    p_reason: body.motivoTexto,
+  });
+  if (error) throwPracticeWriteError(error);
+  await invalidate(data);
+  const { audience: _audience, ...response } = data;
+  res.json(response);
 }
