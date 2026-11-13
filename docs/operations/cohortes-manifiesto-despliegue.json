@@ -420,6 +420,15 @@
       "newFunctions": 0,
       "schemaGuards": 0,
       "guardedFunctions": 1
+    },
+    {
+      "id": "094",
+      "file": "migrations/094_materiales_previos_examen.sql",
+      "guards": 5,
+      "guardInventory": "docs/operations/inscripcion-094-guardas.json",
+      "newFunctions": 1,
+      "schemaGuards": 0,
+      "guardedFunctions": 6
     }
   ],
   "excluded": [

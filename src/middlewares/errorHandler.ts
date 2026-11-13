@@ -165,6 +165,9 @@ export function errorHandler(
     );
     if (Object.keys(ids).length) body.detalles = { entityIds: ids };
   }
+  // El alumno necesita la lista para llevar cada material pendiente a su lugar.
+  if (err instanceof AppError && err.code === 'MATERIALES_PENDIENTES' && err.detalles?.pendientes)
+    body.detalles = { ...body.detalles, pendientes: err.detalles.pendientes };
   if (err instanceof AppError && err.code) {
     body.code = err.code;
     if (err.field) body.field = err.field;
