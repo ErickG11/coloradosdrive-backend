@@ -7,6 +7,9 @@ export interface CandidateCohort {
   fechaInicioMatricula: Date;
   fechaFinMatricula: Date;
   fechaInicioCurso: Date;
+  fechaFinCurso?: Date;
+  habilitada?: boolean;
+  cancelledAt?: string | null;
   cupoMaximo: number;
   cupoOcupado: number;
   createdAt: Date;

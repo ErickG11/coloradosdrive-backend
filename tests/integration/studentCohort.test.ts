@@ -1,13 +1,23 @@
 import request from 'supertest';
-jest.mock('../../src/config/supabase', () => ({ supabaseAdmin: {}, supabaseAnon: {} }));
+import express from 'express';
+jest.mock('../../src/config/supabase', () => ({
+  supabaseAdmin: { rpc: jest.fn().mockResolvedValue({ data: null, error: null }) },
+  supabaseAnon: {},
+}));
 jest.mock('../../src/config/jwks', () => ({ verifySupabaseJwt: jest.fn() }));
+jest.mock('../../src/middlewares/adminFinancialPrivacy.middleware', () => ({
+  adminFinancialPrivacy: (_req: unknown, _res: unknown, next: () => void) => {
+    next();
+  },
+}));
 jest.mock('../../src/config/mailer', () => ({ mailer: { sendMail: jest.fn() } }));
 jest.mock('../../src/services/studentCohort.service', () => ({
   StudentCohortService: jest
     .fn()
     .mockImplementation(() => ({ options: jest.fn(), assign: jest.fn() })),
 }));
-import { createApp } from '../../src/app';
+import { studentAdminRouter } from '../../src/routes/studentAdmin.routes';
+import { errorHandler } from '../../src/middlewares/errorHandler';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { StudentCohortService } from '../../src/services/studentCohort.service';
 import { mockAuthToken } from '../helpers/tokens';
@@ -20,7 +30,10 @@ const service = (StudentCohortService as jest.Mock).mock.results[0].value as {
   options: jest.Mock;
   assign: jest.Mock;
 };
-const app = createApp(),
+const app = express()
+    .use(express.json())
+    .use('/admin/estudiantes', studentAdminRouter)
+    .use(errorHandler),
   verify = verifySupabaseJwt as jest.Mock;
 describe('rutas C admin', () => {
   beforeEach(() => {
@@ -28,13 +41,16 @@ describe('rutas C admin', () => {
   });
   it.each(['get', 'post'] as const)('%s requiere sesión y admin', async (method) => {
     const path = base + (method === 'get' ? '/cohortes' : '/asignar-cohorte');
-    expect((await request(app)[method](path).send({ cohortId: cohort })).status).toBe(401);
+    expect(
+      (await request(app)[method](path).send({ cohortId: cohort, motivo: 'Asignación C09' }))
+        .status,
+    ).toBe(401);
     expect(
       (
         await request(app)
           [method](path)
           .set('Authorization', `Bearer ${mockAuthToken(verify, 'instructor')}`)
-          .send({ cohortId: cohort })
+          .send({ cohortId: cohort, motivo: 'Asignación C09' })
       ).status,
     ).toBe(403);
     expect(service.assign).not.toHaveBeenCalled();
@@ -49,18 +65,26 @@ describe('rutas C admin', () => {
     expect(response.body.items).toEqual([]);
     expect(service.options).toHaveBeenCalledWith(student, enrollment);
   });
-  it('POST acepta solo cohortId; actor viene de sesión', async () => {
+  it('POST exige cohortId y motivo; actor viene de sesión', async () => {
     service.assign.mockResolvedValue({ enrollmentId: enrollment, status: 'activo' });
     const response = await request(app)
       .post(base + '/asignar-cohorte')
       .set('Authorization', `Bearer ${mockAuthToken(verify, 'admin')}`)
-      .send({ cohortId: cohort });
+      .send({ cohortId: cohort, motivo: 'Asignación C09' });
     expect(response.status).toBe(200);
-    expect(service.assign).toHaveBeenCalledWith(expect.any(String), student, enrollment, cohort);
+    expect(service.assign).toHaveBeenCalledWith(
+      expect.any(String),
+      student,
+      enrollment,
+      cohort,
+      'Asignación C09',
+    );
   });
   it.each([
     {},
-    { cohortId: 'invalid' },
+    { cohortId: 'invalid', motivo: 'Asignación C09' },
+    { cohortId: cohort },
+    { cohortId: cohort, motivo: '' },
     { cohortId: cohort, p_validated_day: '2099-01-01' },
     { cohortId: cohort, actorId: student },
   ])('rechaza entradas y pruebas de ventana del cliente', async (body) => {
@@ -90,7 +114,7 @@ describe('rutas C admin', () => {
     const response = await request(app)
       .post(base + '/asignar-cohorte')
       .set('Authorization', `Bearer ${mockAuthToken(verify, 'admin')}`)
-      .send({ cohortId: cohort });
+      .send({ cohortId: cohort, motivo: 'Asignación C09' });
     expect(response.status).toBe(status);
     expect(response.body.code).toBe(code);
   });

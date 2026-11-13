@@ -909,6 +909,27 @@ export function translateCohortSqlError(error: unknown): AppError | null {
   )
     return null;
   if (
+    value.message === 'COHORTE_CANCELACION_BLOQUEADA' &&
+    'details' in error &&
+    typeof error.details === 'string'
+  ) {
+    try {
+      const detail = JSON.parse(error.details) as { cantidad?: unknown };
+      if (
+        typeof detail.cantidad === 'number' &&
+        Number.isInteger(detail.cantidad) &&
+        detail.cantidad >= 0
+      )
+        return new AppError(
+          `No puedes cancelar: ${String(detail.cantidad)} alumnos tienen matrículas activas o reservas vigentes en esta cohorte.`,
+          409,
+          { code: 'COHORTE_CANCELACION_BLOQUEADA', detalles: { cantidad: detail.cantidad } },
+        );
+    } catch {
+      /* Usar el catálogo si no hay detalle válido. */
+    }
+  }
+  if (
     value.message === 'COHORTE_FIN_CON_COMPROMISOS' &&
     'details' in error &&
     typeof error.details === 'string'
@@ -917,7 +938,7 @@ export function translateCohortSqlError(error: unknown): AppError | null {
       const detail = JSON.parse(error.details) as { ultimoFin?: string; cantidad?: number };
       if (detail.ultimoFin && Number.isInteger(detail.cantidad))
         return new AppError(
-          `No puedes acortar: ${detail.cantidad} compromisos requieren prácticas hasta el ${detail.ultimoFin}.`,
+          `No puedes acortar: ${String(detail.cantidad)} compromisos requieren prácticas hasta el ${detail.ultimoFin}.`,
           409,
           { code: 'COHORTE_FIN_CON_COMPROMISOS' },
         );

@@ -12,6 +12,7 @@ export interface StudentCohortOptions {
     fechaInicioMatricula: string;
     fechaFinMatricula: string;
     fechaInicioCurso: string;
+    fechaFinCurso?: string;
   }[];
 }
 
