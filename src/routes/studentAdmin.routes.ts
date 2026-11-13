@@ -10,6 +10,7 @@ import { logSafeError } from '../utils/safeLog';
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router, type Request } from 'express';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertBirthDate, BIRTH_DATE_MESSAGES } from '../utils/birthDate';
 import { body, param, query } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
@@ -341,6 +342,60 @@ studentAdminRouter.post(
         warning = 'No se pudo avisar a los instructores afectados.';
       }
     res.json(warning ? { ...confirmed, advertencia: warning } : confirmed);
+  }),
+);
+// Solo lectura: instructor propuesto por hora (retenciones de la reserva) y el actual del alumno.
+studentAdminRouter.get(
+  '/:id/matriculas/cambio/:reservationId/horarios',
+  param('id').isUUID(),
+  param('reservationId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const permission = await supabaseAdmin.rpc('assert_reassignment_permission_v2', {
+      p_actor: actor(req),
+    });
+    if (permission.error) throwStudentScheduleError(permission.error);
+    const own = await supabaseAdmin
+      .from('student_schedule_reservations')
+      .select('id, cohort_id')
+      .eq('id', req.params.reservationId)
+      .eq('student_id', req.params.id)
+      .maybeSingle();
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data)
+      throw new AppError('Reserva no encontrada.', 404, { code: 'RESERVA_NO_ENCONTRADA' });
+    const untyped = supabaseAdmin as unknown as SupabaseClient;
+    const holds = await untyped
+      .from('student_schedule_holds')
+      .select('scheduled_at, instructor_id')
+      .eq('reservation_id', req.params.reservationId)
+      .is('released_at', null)
+      .order('scheduled_at');
+    if (holds.error) throwStudentScheduleError(holds.error);
+    const current = own.data.cohort_id
+      ? await snapshotFuturePractices(supabaseAdmin, req.params.id, own.data.cohort_id)
+      : [];
+    const proposed = (holds.data ?? []) as { scheduled_at: string; instructor_id: string }[];
+    const ids = [
+      ...new Set([...proposed.map((h) => h.instructor_id), ...current.map((c) => c.instructorId)]),
+    ];
+    const names = ids.length
+      ? await supabaseAdmin.from('users').select('id, nombre_completo').in('id', ids)
+      : { data: [], error: null };
+    if (names.error) throwStudentScheduleError(names.error);
+    const nameOf = new Map((names.data ?? []).map((u) => [u.id, u.nombre_completo]));
+    res.set('Cache-Control', 'no-store').json({
+      propuesto: proposed.map((h) => ({
+        scheduledAt: h.scheduled_at,
+        instructorId: h.instructor_id,
+        instructorName: nameOf.get(h.instructor_id) ?? 'Instructor por informar',
+      })),
+      actual: current.map((c) => ({
+        scheduledAt: c.scheduledAt,
+        instructorId: c.instructorId,
+        instructorName: nameOf.get(c.instructorId) ?? 'Instructor por informar',
+      })),
+    });
   }),
 );
 studentAdminRouter.post(
