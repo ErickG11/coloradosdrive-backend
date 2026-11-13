@@ -366,6 +366,12 @@
       "file": "migrations/087_acceso_al_pagar_gestion_cohortes.sql",
       "guards": 6,
       "guardInventory": "docs/operations/inscripcion-087-guardas.json"
+    },
+    {
+      "id": "088",
+      "file": "migrations/088_contrato_asistencia.sql",
+      "guards": 4,
+      "guardInventory": "docs/operations/inscripcion-088-guardas.json"
     }
   ],
   "excluded": [
