@@ -1,5 +1,7 @@
 # Asistencia E4: registro, correcciones e historial
 
+C14 incorpora la interfaz actual por bloques: [operación y endpoints](asistencia-c14-operacion.md), [aceptación y límites](asistencia-c14-aceptacion.md) y [ADR 024](../adr/024-asistencia-por-bloques.md). E4 conserva el alcance de las funciones por franja que siguen disponibles.
+
 Backend en `feat/asistencia-e3-e4`, sobre E3 (`2513743`). **034_asistencia_auditoria.sql** es el siguiente numero libre: se revisaron `migrations/` y `docs/operations/`, incluido el borrador de Cohortes 030. Aplicacion manual en el SQL Editor; esta entrega no aplica SQL remoto.
 
 ## Reglas y persistencia
