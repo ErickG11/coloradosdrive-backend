@@ -348,6 +348,11 @@
       "id": "084",
       "file": "migrations/084_gestion_documentos_fechas_cohorte.sql",
       "guards": 4
+    },
+    {
+      "id": "085",
+      "file": "migrations/085_alumnos_sin_cohorte_orden.sql",
+      "guards": 1
     }
   ],
   "excluded": [
