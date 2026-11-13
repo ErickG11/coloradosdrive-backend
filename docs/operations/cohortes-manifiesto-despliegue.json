@@ -402,6 +402,15 @@
       "newFunctions": 6,
       "schemaGuards": 1,
       "guardedFunctions": 14
+    },
+    {
+      "id": "092",
+      "file": "migrations/092_aviso_un_paso.sql",
+      "guards": 7,
+      "guardInventory": "docs/operations/inscripcion-092-guardas.json",
+      "newFunctions": 6,
+      "schemaGuards": 0,
+      "guardedFunctions": 13
     }
   ],
   "excluded": [

@@ -3,6 +3,8 @@ import { body, param, query } from 'express-validator';
 import {
   blockOptions,
   blockPreview,
+  blockResolutionPreview,
+  resolveBlock,
   blockSummary,
   cancelBlock,
   confirmBlock,
@@ -50,6 +52,33 @@ practiceBlockRouter.get(
   date(),
   validate,
   asyncHandler(blockPreview),
+);
+practiceBlockRouter.get(
+  '/:enrollmentId/:date/resolution-preview',
+  enrollment(),
+  date(),
+  validate,
+  asyncHandler(blockResolutionPreview),
+);
+practiceBlockRouter.post(
+  '/:enrollmentId/:date/resolve',
+  requireRequisitosVerificados,
+  enrollment(),
+  date(),
+  body('accion').isIn(['mover', 'falta']).withMessage('Elige cambiar de hora o avisar la falta'),
+  body('inicio')
+    .if(body('accion').equals('mover'))
+    .isISO8601({ strict: true })
+    .withMessage('Elige una hora válida para el cambio'),
+  body('motivoCategoria').isIn(CANCELLATION_CATEGORIES).withMessage('Selecciona un motivo válido'),
+  body('motivoTexto')
+    .isString()
+    .bail()
+    .trim()
+    .isLength({ min: 10 })
+    .withMessage('Escribe un motivo de al menos 10 caracteres'),
+  validate,
+  asyncHandler(resolveBlock),
 );
 practiceBlockRouter.post(
   '/:enrollmentId/:date/cancel',
