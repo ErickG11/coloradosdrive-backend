@@ -1,0 +1,13 @@
+begin;
+set local lock_timeout='5s';
+do $$begin if exists(select 1 from public.practice_slot_cancellations where block_slot_ids is not null) then raise exception 'ROLLBACK_089: existen operaciones por bloque; conservar la auditoría y revisar antes de revertir';end if;end $$;
+drop function public.confirm_practice_block_v14(uuid,uuid,date);
+drop function public.cancel_practice_block_with_reason_v14(uuid,uuid,date,text,text);
+drop function private.notify_released_block_v14(uuid);
+drop function public.preview_practice_block_cancellation_v14(uuid,uuid,date);
+drop function private.practice_block_effect_v14(text,integer);
+drop function private.practice_block_options_v14(uuid,date);
+drop function private.practice_block_v14(uuid,uuid,date);
+alter table public.practice_slot_cancellations drop constraint practice_cancellation_block_v14,drop column block_slot_ids,drop column block_hours,drop column block_local_date;
+notify pgrst, 'reload schema';
+commit;
