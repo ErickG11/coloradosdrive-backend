@@ -411,6 +411,15 @@
       "newFunctions": 6,
       "schemaGuards": 0,
       "guardedFunctions": 13
+    },
+    {
+      "id": "093",
+      "file": "migrations/093_politica_avisos_realtime.sql",
+      "guards": 1,
+      "guardInventory": "docs/operations/inscripcion-093-guardas.json",
+      "newFunctions": 0,
+      "schemaGuards": 0,
+      "guardedFunctions": 1
     }
   ],
   "excluded": [
