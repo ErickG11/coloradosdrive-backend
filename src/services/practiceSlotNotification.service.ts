@@ -15,7 +15,11 @@ export class PracticeSlotNotificationService {
 
   private async broadcastUser(userId: string, event: string, scheduledAt: string): Promise<void> {
     try {
-      await this.realtime.broadcast(`user-${userId}-practice-slots`, event, { scheduledAt });
+      const results=await Promise.allSettled([
+        this.realtime.broadcast(`user-${userId}-practice-slots`, event, { scheduledAt }),
+        this.realtime.broadcast(`user-${userId}-notifications`, 'notifications-updated', {}),
+      ]);
+      for(const result of results) if(result.status==='rejected') logSafeError('practice_slot_realtime_failed',result.reason);
     } catch (err) {
       logSafeError('practice_slot_realtime_failed', err);
     }

@@ -3,7 +3,7 @@ begin;
 set local lock_timeout='5s';
 -- GUARDA-C14-NUEVAS INICIO
 do $guard$ begin if to_regprocedure('private.write_practice_contract_v14()') is not null and (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.write_practice_contract_v14()')) is distinct from 'bc246e4370f15426d192f5b7bd7d05df' then raise exception 'GUARDA_088: función C14 alterada: private.write_practice_contract_v14()';end if;end $guard$;
-do $guard$ begin if to_regprocedure('private.resolve_practice_contract_v14(enrollments)') is not null and (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.resolve_practice_contract_v14(enrollments)')) is distinct from '6678f64f0d67bd809e99f5353cb9e643' then raise exception 'GUARDA_088: función C14 alterada: private.resolve_practice_contract_v14(enrollments)';end if;end $guard$;
+do $guard$ begin if to_regprocedure('private.resolve_practice_contract_v14(enrollments)') is not null and (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.resolve_practice_contract_v14(enrollments)')) is distinct from '63409564a3b7ca540b85c1919968a8ab' then raise exception 'GUARDA_088: función C14 alterada: private.resolve_practice_contract_v14(enrollments)';end if;end $guard$;
 -- GUARDA-C14-NUEVAS FIN
 do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.reserve_schedule_v2(uuid,uuid,jsonb)')) is distinct from 'b6b2ee2afd0866b255ccaa9ef1fbd26c' then raise exception 'GUARDA_088: private.reserve_schedule_v2(uuid,uuid,jsonb) no coincide con la instalación esperada';end if;end $guard$;
 do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text)')) is distinct from '6fbf8dea16054980095bd760988b2baf' then raise exception 'GUARDA_088: private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text) no coincide con la instalación esperada';end if;end $guard$;
@@ -22,7 +22,7 @@ begin
  -- Cada reserva candidata debe demostrar las fechas y el objetivo con sus retenciones históricas.
  select array_agg(distinct jsonb_build_object('modalidad',r.modalidad,'horasPorDia',r.horas_por_dia)) into v_candidates
  from public.student_schedule_reservations r where r.enrollment_id=p_e.id and r.student_id=p_e.student_id
- and r.cohort_id=p_e.cohort_id and r.estado in('vigente','pago_en_curso','confirmada')
+ and r.cohort_id=p_e.cohort_id and (r.estado='confirmada' or (pg_trigger_depth()>0 and r.estado in('vigente','pago_en_curso')))
  and r.practice_start_date=p_e.practice_start_date and r.practice_end_date=p_e.practice_end_date
  and (select count(*) from public.student_schedule_holds h where h.reservation_id=r.id)=p_e.horas_practica_objetivo
  and (select min((h.scheduled_at at time zone 'America/Guayaquil')::date) from public.student_schedule_holds h where h.reservation_id=r.id)=p_e.practice_start_date

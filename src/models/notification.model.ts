@@ -6,6 +6,8 @@ export const NOTIFICATION_TYPES = [
   'cupo_disponible',
   'sin_practica_instructor',
   'cambio_realizado',
+  'cambio_agenda_instructor',
+  'falta_registrada_admin',
   'asistencia_corregida',
   'encuesta_practica',
   'documento_aprobado',

@@ -28,7 +28,7 @@ export class RealtimeService {
     event: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
-    const personal = /^user-(.+)-practice-slots$/.exec(channelName);
+    const personal = /^user-(.+)-(?:practice-slots|notifications)$/.exec(channelName);
     if (personal) {
       const { data, error } = await this.supabase
         .from('users')

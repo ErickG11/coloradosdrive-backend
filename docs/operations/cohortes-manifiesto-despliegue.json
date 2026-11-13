@@ -371,19 +371,37 @@
       "id": "088",
       "file": "migrations/088_contrato_asistencia.sql",
       "guards": 4,
-      "guardInventory": "docs/operations/inscripcion-088-guardas.json"
+      "guardInventory": "docs/operations/inscripcion-088-guardas.json",
+      "newFunctions": 2,
+      "schemaGuards": 0,
+      "guardedFunctions": 2
     },
     {
       "id": "089",
       "file": "migrations/089_asistencia_bloques.sql",
       "guards": 2,
-      "guardInventory": "docs/operations/inscripcion-089-guardas.json"
+      "guardInventory": "docs/operations/inscripcion-089-guardas.json",
+      "newFunctions": 7,
+      "schemaGuards": 0,
+      "guardedFunctions": 7
     },
     {
       "id": "090",
       "file": "migrations/090_reposicion_bloques.sql",
       "guards": 3,
-      "guardInventory": "docs/operations/inscripcion-090-guardas.json"
+      "guardInventory": "docs/operations/inscripcion-090-guardas.json",
+      "newFunctions": 3,
+      "schemaGuards": 0,
+      "guardedFunctions": 6
+    },
+    {
+      "id": "091",
+      "file": "migrations/091_avisos_bloques.sql",
+      "guards": 8,
+      "guardInventory": "docs/operations/inscripcion-091-guardas.json",
+      "newFunctions": 6,
+      "schemaGuards": 1,
+      "guardedFunctions": 14
     }
   ],
   "excluded": [
