@@ -1,5 +1,12 @@
 begin;
 set local lock_timeout='5s';
+-- Rollback condicionado a los cuerpos instalados; nunca sobreescribir cambios ajenos.
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('student_practice_block_options_v14(uuid)')) is distinct from '8309997a78af2bd7d4bf8b073e1806da' then raise exception 'ROLLBACK_090: cuerpo desconocido: student_practice_block_options_v14(uuid)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('student_practice_block_summary_v14(uuid)')) is distinct from '209dbdd18865812ece2e054ceb902483' then raise exception 'ROLLBACK_090: cuerpo desconocido: student_practice_block_summary_v14(uuid)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('take_practice_block_v14(uuid,uuid,text)')) is distinct from 'a206d11976c334e90a31348071e8e0a0' then raise exception 'ROLLBACK_090: cuerpo desconocido: take_practice_block_v14(uuid,uuid,text)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.reserve_schedule_v2(uuid,uuid,jsonb)')) is distinct from '8a3a24737c168e6e681556688d5dd66a' then raise exception 'ROLLBACK_090: cuerpo desconocido: private.reserve_schedule_v2(uuid,uuid,jsonb)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text)')) is distinct from '9291bb7618029eec0cf60cb43369fd3b' then raise exception 'ROLLBACK_090: cuerpo desconocido: private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.confirm_plan_change_v2(uuid,uuid,uuid)')) is distinct from '05a7e7af217d5516e536ee2d7725bafe' then raise exception 'ROLLBACK_090: cuerpo desconocido: private.confirm_plan_change_v2(uuid,uuid,uuid)';end if;end $guard$;
 CREATE OR REPLACE FUNCTION private.reserve_schedule_v2(p_student uuid, p_enrollment uuid, p_input jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql

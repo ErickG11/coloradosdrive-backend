@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { practiceBlockRouter } from './practiceBlock.routes';
 import { body, param, query } from 'express-validator';
 
 import {
@@ -31,6 +32,7 @@ import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
 export const practiceSlotRouter = Router();
 
 practiceSlotRouter.use(asyncHandler(authenticate));
+practiceSlotRouter.use('/blocks',practiceBlockRouter);
 
 const createValidators = [
   body('cohortId').isUUID().withMessage('cohortId debe ser un UUID válido'),
