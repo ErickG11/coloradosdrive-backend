@@ -1,0 +1,3 @@
+# Falsos positivos confirmados (13/11/2026): la regla generic-api-key detecta la frase "secretos, estilos/compartidos" en notas de trabajo. Son texto, no credenciales.
+3cd8bda65c423788513aaec2121a42e8a362cbf4:docs/operations/inscripcion-progreso.md:generic-api-key:460
+3cd8bda65c423788513aaec2121a42e8a362cbf4:docs/operations/inscripcion-progreso-f44-f45.md:generic-api-key:103
