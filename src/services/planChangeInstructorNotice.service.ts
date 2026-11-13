@@ -3,6 +3,7 @@ import type { Database } from '../config/database.types';
 import { logSafeError } from '../utils/safeLog';
 
 export interface FuturePractice {
+  id: string;
   instructorId: string;
   scheduledAt: string;
   minutes: number;
@@ -18,13 +19,14 @@ export async function snapshotFuturePractices(
 ): Promise<FuturePractice[]> {
   const { data, error } = await db
     .from('practice_slots')
-    .select('instructor_id, scheduled_at, duration_minutes')
+    .select('id, instructor_id, scheduled_at, duration_minutes')
     .eq('student_id', studentId)
     .eq('cohort_id', cohortId)
     .in('status', ['asignado', 'confirmado'])
     .gt('scheduled_at', new Date().toISOString());
   if (error) throw error;
   return (data ?? []).map((row) => ({
+    id: row.id,
     instructorId: row.instructor_id,
     scheduledAt: row.scheduled_at,
     minutes: row.duration_minutes ?? 60,
@@ -125,5 +127,40 @@ export async function safeNotify(
   } catch (error) {
     logSafeError('plan_change_instructor_notice_failed', error);
     return { ok: false, notified: [] };
+  }
+}
+
+// Las horas que el cambio de plan dejó de usar nunca se cancelaron: la función SQL las deja
+// «liberado» y aquí vuelven a «disponible». Una sola sentencia con el filtro completo; las
+// franjas reutilizadas por el plan nuevo (foto posterior) no se tocan.
+export async function releaseUnusedSlots(
+  db: SupabaseClient<Database>,
+  before: FuturePractice[],
+  after: FuturePractice[],
+): Promise<number> {
+  const kept = new Set(after.map((p) => p.id));
+  const ids = before.filter((p) => !kept.has(p.id)).map((p) => p.id);
+  if (!ids.length) return 0;
+  const { data, error } = await db
+    .from('practice_slots')
+    .update({ status: 'disponible' })
+    .in('id', ids)
+    .is('student_id', null)
+    .eq('status', 'liberado')
+    .gt('scheduled_at', new Date().toISOString())
+    .select('id');
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
+export async function safeReleaseUnusedSlots(
+  db: SupabaseClient<Database>,
+  before: FuturePractice[],
+  after: FuturePractice[],
+): Promise<void> {
+  try {
+    await releaseUnusedSlots(db, before, after);
+  } catch (error) {
+    logSafeError('plan_change_release_slots_failed', error);
   }
 }
