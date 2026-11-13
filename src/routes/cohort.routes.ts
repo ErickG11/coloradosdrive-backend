@@ -4,6 +4,7 @@ import { translateCohortSqlError, cohortError as domainCohortError } from '../co
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { supabaseAdmin } from '../config/supabase';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
+import { logDatabaseError } from '../utils/safeLog';
 import { Router } from 'express';
 import { body, param, type ValidationChain } from 'express-validator';
 
@@ -83,10 +84,12 @@ cohortRouter.post(
       p_actor: req.user!.id,
       p_cohort: req.params.id,
     });
-    if (result.error)
+    if (result.error) {
+      logDatabaseError('waitlist_preview_failed', result.error);
       throw (
         translateCohortSqlError(result.error) ?? domainCohortError('ESPERA_PREVIEW_NO_DISPONIBLE')
       );
+    }
     res.json(result.data);
   }),
 );
@@ -101,7 +104,12 @@ cohortRouter.post(
       p_actor: req.user!.id,
       p_cohort: req.params.id,
     });
-    if (result.error) throwStudentScheduleError(result.error);
+    if (result.error) {
+      logDatabaseError('waitlist_notify_failed', result.error);
+      throw (
+        translateCohortSqlError(result.error) ?? domainCohortError('ESPERA_NOTIFICAR_NO_DISPONIBLE')
+      );
+    }
     res.json({ queued: result.data });
   }),
 );

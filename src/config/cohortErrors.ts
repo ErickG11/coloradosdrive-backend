@@ -500,6 +500,13 @@ export const COHORT_ERRORS = {
     admin: 'Revisa el tipo de curso y el horario preferido.',
     action: 'Usar tipo A/B y preferencias estructuradas válidas.',
   },
+  ESPERA_NOTIFICAR_NO_DISPONIBLE: {
+    status: 503,
+    cause: 'No se pudo encolar el aviso de apertura.',
+    student: 'No se pudo enviar el aviso.',
+    admin: 'No pudimos enviar el aviso. Intenta nuevamente.',
+    action: 'Reintentar la misma acción; no duplica el evento. Revisar el registro del servidor.',
+  },
   ESPERA_PREVIEW_NO_DISPONIBLE: {
     status: 503,
     cause: 'No se pudo comprobar el aviso de disponibilidad.',
