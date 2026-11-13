@@ -2,6 +2,7 @@ import { adminFinancialPrivacy } from '../middlewares/adminFinancialPrivacy.midd
 import { PlanChangeService } from '../services/planChange.service';
 import {
   safeNotify,
+  safeReleaseUnusedSlots,
   snapshotFuturePractices,
   type FuturePractice,
 } from '../services/planChangeInstructorNotice.service';
@@ -319,6 +320,7 @@ studentAdminRouter.post(
     else
       try {
         const after = await snapshotFuturePractices(supabaseAdmin, req.params.id, cohortId);
+        await safeReleaseUnusedSlots(supabaseAdmin, before, after);
         const student = await supabaseAdmin
           .from('users')
           .select('nombre_completo')
