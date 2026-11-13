@@ -372,6 +372,12 @@
       "file": "migrations/088_contrato_asistencia.sql",
       "guards": 4,
       "guardInventory": "docs/operations/inscripcion-088-guardas.json"
+    },
+    {
+      "id": "089",
+      "file": "migrations/089_asistencia_bloques.sql",
+      "guards": 2,
+      "guardInventory": "docs/operations/inscripcion-089-guardas.json"
     }
   ],
   "excluded": [

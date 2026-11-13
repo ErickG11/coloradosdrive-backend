@@ -1,0 +1,55 @@
+{
+  "functions": [
+    {
+      "signature": "private.practice_replacement_balance(uuid)",
+      "before": "abd969f79a911133bdce49e98b265dd7",
+      "after": "abd969f79a911133bdce49e98b265dd7",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.free_instructors_v2(timestamp with time zone[],uuid,uuid)",
+      "before": "231b1953a2b029dcf350147fa2d92b02",
+      "after": "231b1953a2b029dcf350147fa2d92b02",
+      "kind": "dependency"
+    }
+  ],
+  "newFunctions": [
+    "private.practice_block_v14",
+    "private.practice_block_options_v14",
+    "private.practice_block_effect_v14",
+    "public.preview_practice_block_cancellation_v14",
+    "private.notify_released_block_v14",
+    "public.cancel_practice_block_with_reason_v14",
+    "public.confirm_practice_block_v14"
+  ],
+  "newFunctionHashes": [
+    {
+      "signature": "private.practice_block_options_v14(uuid,date)",
+      "after": "3e71e918864f829d3fc95aabfafac86a"
+    },
+    {
+      "signature": "private.practice_block_v14(uuid,uuid,date)",
+      "after": "6b48e665db82f1d16a1501d8e58b8c85"
+    },
+    {
+      "signature": "private.practice_block_effect_v14(text,integer)",
+      "after": "fcde7be22e2a24292069ddd384dcf8c6"
+    },
+    {
+      "signature": "preview_practice_block_cancellation_v14(uuid,uuid,date)",
+      "after": "ed2f39e37495cb1d08a6ebea53cb7216"
+    },
+    {
+      "signature": "private.notify_released_block_v14(uuid)",
+      "after": "2c0d07aaeea4d36bac4f5bdb37a41849"
+    },
+    {
+      "signature": "cancel_practice_block_with_reason_v14(uuid,uuid,date,text,text)",
+      "after": "66e5c7cf21f698bd96ee088b796eac3c"
+    },
+    {
+      "signature": "confirm_practice_block_v14(uuid,uuid,date)",
+      "after": "4c21eec9ce2e052b9391e107ed27be6f"
+    }
+  ]
+}
