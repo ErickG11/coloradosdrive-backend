@@ -1,5 +1,12 @@
 import { adminFinancialPrivacy } from '../middlewares/adminFinancialPrivacy.middleware';
 import { PlanChangeService } from '../services/planChange.service';
+import {
+  safeNotify,
+  snapshotFuturePractices,
+  type FuturePractice,
+} from '../services/planChangeInstructorNotice.service';
+import { RealtimeService } from '../services/realtime.service';
+import { logSafeError } from '../utils/safeLog';
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router, type Request } from 'express';
@@ -64,7 +71,7 @@ studentAdminRouter.post(
   body('anterior').optional({ values: 'null' }).isIn(['pendiente', 'entregado', 'no_aplica']),
   validate,
   asyncHandler(async (req, res) => {
-    const input = req.body as {tipo:string;estado:string;anterior?:string|null};
+    const input = req.body as { tipo: string; estado: string; anterior?: string | null };
     const result = await supabaseAdmin.rpc('set_enrollment_document_v12', {
       p_actor: actor(req),
       p_student: req.params.id,
@@ -87,7 +94,12 @@ studentAdminRouter.post(
   body('excepcion').isBoolean({ strict: true }),
   validate,
   asyncHandler(async (req, res) => {
-    const input = req.body as {cohortId:string;version:string;motivo:string;excepcion:boolean};
+    const input = req.body as {
+      cohortId: string;
+      version: string;
+      motivo: string;
+      excepcion: boolean;
+    };
     const result = await supabaseAdmin.rpc('transfer_enrollment_cohort_v12', {
       p_actor: actor(req),
       p_student: req.params.id,
@@ -202,6 +214,7 @@ studentAdminRouter.post(
   }),
 );
 const changeService = new PlanChangeService(supabaseAdmin);
+const planChangeRealtime = new RealtimeService(supabaseAdmin);
 studentAdminRouter.get(
   '/:id/matriculas/:enrollmentId/cambio',
   param('id').isUUID(),
@@ -226,7 +239,11 @@ for (const changeAction of ['preview', 'reservar', 'opciones'] as const)
     validate,
     asyncHandler(async (req, res) => {
       // Cualquier cohortId enviado por el cliente se ignora: el destino es la cohorte actual.
-      const { motivo, cohortId: _ignoredTarget, ...input } = req.body as {
+      const {
+        motivo,
+        cohortId: _ignoredTarget,
+        ...input
+      } = req.body as {
         motivo: string;
         cohortId?: string;
         modalidad: 'entre_semana' | 'fin_de_semana';
@@ -275,14 +292,55 @@ studentAdminRouter.post(
     if (permission.error) throwStudentScheduleError(permission.error);
     const own = await supabaseAdmin
       .from('student_schedule_reservations')
-      .select('id')
+      .select('id, cohort_id')
       .eq('id', req.params.reservationId)
       .eq('student_id', req.params.id)
       .maybeSingle();
     if (own.error) throwStudentScheduleError(own.error);
     if (!own.data)
       throw new AppError('Reserva no encontrada.', 404, { code: 'RESERVA_NO_ENCONTRADA' });
-    res.json(await changeService.confirm(req.params.id, req.params.reservationId, actor(req)));
+    // Foto de las prácticas futuras antes de confirmar; si falla, el cambio sigue igual.
+    let before: FuturePractice[] | null = null;
+    const cohortId = own.data.cohort_id;
+    if (cohortId)
+      try {
+        before = await snapshotFuturePractices(supabaseAdmin, req.params.id, cohortId);
+      } catch (error) {
+        logSafeError('plan_change_snapshot_failed', error);
+      }
+    const confirmed = await changeService.confirm(
+      req.params.id,
+      req.params.reservationId,
+      actor(req),
+    );
+    let warning: string | undefined;
+    if (!before || !cohortId) warning = 'No se pudo avisar a los instructores afectados.';
+    else
+      try {
+        const after = await snapshotFuturePractices(supabaseAdmin, req.params.id, cohortId);
+        const student = await supabaseAdmin
+          .from('users')
+          .select('nombre_completo')
+          .eq('id', req.params.id)
+          .maybeSingle();
+        const result = await safeNotify(supabaseAdmin, {
+          studentName: student.data?.nombre_completo ?? 'un alumno',
+          reservationId: req.params.reservationId,
+          before,
+          after,
+        });
+        if (!result.ok) warning = 'No se pudo avisar a los instructores afectados.';
+        else
+          await Promise.allSettled(
+            result.notified.flatMap((id) => [
+              planChangeRealtime.broadcast(`user-${id}-notifications`, 'notifications-updated', {}),
+            ]),
+          );
+      } catch (error) {
+        logSafeError('plan_change_instructor_notice_failed', error);
+        warning = 'No se pudo avisar a los instructores afectados.';
+      }
+    res.json(warning ? { ...confirmed, advertencia: warning } : confirmed);
   }),
 );
 studentAdminRouter.post(
