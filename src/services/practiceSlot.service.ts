@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
+import type { CourseType } from '../models/course.model';
 import type {
   CreatePracticeSlotInput,
   PracticeSlot,
@@ -37,6 +38,19 @@ const SELECT_WITH_NAMES = `
   student:users!practice_slots_student_id_fkey(nombre_completo)
 `;
 
+type PracticeSlotRowForInstructor = PracticeSlotRowWithNames & {
+  cohort: { nombre: string; course: { tipo: CourseType } | null } | null;
+};
+
+// Relaciones opcionales: una cohorte o un curso ausente no elimina la franja.
+const SELECT_FOR_INSTRUCTOR = `
+  ${SELECT_WITH_NAMES},
+  cohort:cohorts!practice_slots_cohort_id_fkey(
+    nombre,
+    course:courses!cohorts_course_id_fkey(tipo)
+  )
+`;
+
 const SELECT_WITH_ACTIVE_INSTRUCTOR = `
   *,
   instructor:users!practice_slots_instructor_id_fkey!inner(nombre_completo,activo),
@@ -71,6 +85,14 @@ function toPracticeSlotWithNames(row: PracticeSlotRowWithNames): PracticeSlotWit
     ...toPracticeSlot(row),
     instructorName: row.instructor?.nombre_completo ?? 'Instructor',
     studentName: row.student?.nombre_completo ?? null,
+  };
+}
+
+function toPracticeSlotForInstructor(row: PracticeSlotRowForInstructor): PracticeSlotWithNames {
+  return {
+    ...toPracticeSlotWithNames(row),
+    ...(row.cohort ? { cohortName: row.cohort.nombre } : {}),
+    ...(row.cohort?.course ? { courseType: row.cohort.course.tipo } : {}),
   };
 }
 
@@ -271,18 +293,18 @@ export class PracticeSlotService {
   ): Promise<PracticeSlotWithNames[]> {
     let query = this.supabase
       .from('practice_slots')
-      .select(SELECT_WITH_NAMES)
+      .select(SELECT_FOR_INSTRUCTOR)
       .eq('instructor_id', instructorId)
       .order('scheduled_at', { ascending: true });
     if (range) query = query.gte('scheduled_at', range.from).lt('scheduled_at', range.to);
     const { data, error } = await query
-      .overrideTypes<PracticeSlotRowWithNames[], { merge: false }>();
+      .overrideTypes<PracticeSlotRowForInstructor[], { merge: false }>();
 
     if (error) {
       throw error;
     }
 
-    return data.map(toPracticeSlotWithNames);
+    return data.map(toPracticeSlotForInstructor);
   }
 
   // Editar solo se permite si status = 'disponible' (confirmado
