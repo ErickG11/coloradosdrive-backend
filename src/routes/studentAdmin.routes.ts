@@ -225,7 +225,8 @@ for (const changeAction of ['preview', 'reservar', 'opciones'] as const)
     body('cohortId').optional().isUUID(),
     validate,
     asyncHandler(async (req, res) => {
-      const { motivo, cohortId, ...input } = req.body as {
+      // Cualquier cohortId enviado por el cliente se ignora: el destino es la cohorte actual.
+      const { motivo, cohortId: _ignoredTarget, ...input } = req.body as {
         motivo: string;
         cohortId?: string;
         modalidad: 'entre_semana' | 'fin_de_semana';
@@ -241,14 +242,18 @@ for (const changeAction of ['preview', 'reservar', 'opciones'] as const)
       // La RPC deriva el propietario: el id de URL se verifica antes de mutar.
       const own = await supabaseAdmin
         .from('enrollments')
-        .select('id')
+        .select('id, cohort_id')
         .eq('id', req.params.enrollmentId)
         .eq('student_id', req.params.id)
         .maybeSingle();
       if (own.error) throwStudentScheduleError(own.error);
       if (!own.data)
         throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
-      const admin = { id: actor(req), reason: motivo, target: cohortId };
+      const admin = {
+        id: actor(req),
+        reason: motivo,
+        target: own.data.cohort_id ?? undefined,
+      };
       res.json(
         changeAction === 'opciones'
           ? await changeService.options(req.params.id, req.params.enrollmentId, input, admin)
@@ -305,19 +310,29 @@ studentAdminRouter.post(
   body('cohortId').optional().isUUID(),
   validate,
   asyncHandler(async (req, res) => {
-    const { cohortId, ...input } = req.body as {
+    // Cualquier cohortId enviado por el cliente se ignora: el destino es la cohorte actual.
+    const { cohortId: _ignoredTarget, ...input } = req.body as {
       cohortId?: string;
       fechaInicio: string;
       modalidad: 'entre_semana' | 'fin_de_semana';
       horasPorDia: number;
     };
     await changeService.state(req.params.id, req.params.enrollmentId, actor(req));
+    const own = await supabaseAdmin
+      .from('enrollments')
+      .select('cohort_id')
+      .eq('id', req.params.enrollmentId)
+      .eq('student_id', req.params.id)
+      .maybeSingle();
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data)
+      throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
     res.json(
       await changeService.calendar(
         req.params.id,
         req.params.enrollmentId,
         { ...input, horaInicio: 6 },
-        { id: actor(req), target: cohortId },
+        { id: actor(req), target: own.data.cohort_id ?? undefined },
       ),
     );
   }),
