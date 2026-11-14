@@ -198,7 +198,11 @@ async function main() {
               'select id,updated_at::text version from public.enrollments',
             )
           ).rows;
-          const version = (n: number) => versions.find((e) => e.id === enrollment(n))!.version;
+          const version = (n: number): string => {
+            const row = versions.find((e) => e.id === enrollment(n));
+            assert.ok(row, `no existe la matrícula ${n}`);
+            return row.version;
+          };
           const conflicting = [
             { ...replacement, enrollmentId: enrollment(1), updatedAt: version(1) },
             { ...replacement, enrollmentId: enrollment(2), updatedAt: version(2) },

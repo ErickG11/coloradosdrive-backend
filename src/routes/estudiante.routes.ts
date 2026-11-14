@@ -26,6 +26,7 @@ import { requireRole } from '../middlewares/rbac.middleware';
 import { validate, validateFields } from '../middlewares/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
+import { authenticatedUserId } from '../utils/requestUser';
 
 export const estudianteRouter = Router();
 
@@ -48,7 +49,7 @@ estudianteRouter.get(
   asyncHandler(async (req, res) => {
     res
       .set('Cache-Control', 'no-store')
-      .json(await individualEnrollmentAccess(supabaseAdmin, req.user!.id));
+      .json(await individualEnrollmentAccess(supabaseAdmin, authenticatedUserId(req)));
   }),
 );
 estudianteRouter.get(
@@ -58,7 +59,9 @@ estudianteRouter.get(
   asyncHandler(async (req, res) => {
     res
       .set('Cache-Control', 'no-store')
-      .json(await estadoInscripcion.get(req.user!.id, new Date(), req.params.enrollmentId));
+      .json(
+        await estadoInscripcion.get(authenticatedUserId(req), new Date(), req.params.enrollmentId),
+      );
   }),
 );
 estudianteRouter.get('/practice-history/enrollments', asyncHandler(studentPracticeEnrollments));

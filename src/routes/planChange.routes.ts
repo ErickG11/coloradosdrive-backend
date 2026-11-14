@@ -10,12 +10,13 @@ import { PlanChangeService } from '../services/planChange.service';
 import type { StudentScheduleSelection } from '../models/studentSchedule.model';
 import { validateFields } from '../middlewares/validate';
 import { asyncHandler } from '../utils/asyncHandler';
+import { authenticatedUserId } from '../utils/requestUser';
 const service = new PlanChangeService(supabaseAdmin);
 export const planChangeRouter = Router();
 planChangeRouter.use(
   buildRateLimiter(60, env.NODE_ENV === 'test', (req) =>
     createHmac('sha256', env.ENROLLMENT_RATE_HMAC_SECRET)
-      .update(`plan-change:${req.user!.id}`)
+      .update(`plan-change:${authenticatedUserId(req)}`)
       .digest('hex'),
   ),
 );
@@ -41,7 +42,7 @@ planChangeRouter.get(
   asyncHandler(async (req, res) => {
     res
       .set('Cache-Control', 'no-store')
-      .json(await service.state(req.user!.id, req.params.enrollmentId));
+      .json(await service.state(authenticatedUserId(req), req.params.enrollmentId));
   }),
 );
 for (const action of ['preview', 'reservar', 'calendario', 'opciones'] as const)
@@ -74,6 +75,6 @@ planChangeRouter.post(
   ),
   validateFields,
   asyncHandler(async (req, res) => {
-    res.json(await service.confirm(req.user!.id, req.params.id));
+    res.json(await service.confirm(authenticatedUserId(req), req.params.id));
   }),
 );

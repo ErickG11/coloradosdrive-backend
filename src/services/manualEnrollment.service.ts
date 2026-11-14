@@ -272,6 +272,7 @@ export class ManualEnrollmentService {
           (a, b) => a.fecha_fin_curso.localeCompare(b.fecha_fin_curso) || a.id.localeCompare(b.id),
         );
       const first = open[0];
+      const precio = price.data.precio_centavos / 100;
       return {
         rulesActive: true,
         courseId: first?.course_id ?? courseId,
@@ -279,12 +280,12 @@ export class ManualEnrollmentService {
         suggestion: {
           cohortId: first?.id ?? null,
           cohortNombre: first?.nombre ?? null,
-          precio: price.data.precio_centavos / 100,
+          precio,
           warning: null,
         },
         cohorts: open.map((c) => ({
           ...c,
-          precio: String(price.data!.precio_centavos / 100),
+          precio: String(precio),
           ocupados: 0,
         })),
       };
@@ -496,9 +497,11 @@ export class ManualEnrollmentService {
         ? { courseId: current.courseId, price: current.precioCentavos / 100 }
         : await this.resolveCourse(input);
       validateInitialPayment(price, payment, input.pago !== undefined);
-      const scheduled = current
-        ? current.plan.franjas!
-        : input.cohortId
+      const exactSlots = current ? current.plan.franjas : undefined;
+      if (current && !exactSlots) throw cohortError('PLAN_CONFIG_NO_DISPONIBLE');
+      const scheduled =
+        exactSlots ??
+        (input.cohortId
           ? await this.generator.prepareForTransaction({
               fechaInicio: input.practice.fechaInicio,
               fechaFin: plan.fechaFinElegida,
@@ -507,7 +510,7 @@ export class ManualEnrollmentService {
               horaResuelta: input.practice.horaResuelta ?? input.practice.horaDeseada,
               instructorId: this.requireInstructor(input.practice),
             })
-          : [];
+          : []);
       let studentId: string;
       let birthDate: string | null;
       if (input.student.mode === 'existing') {
@@ -534,7 +537,7 @@ export class ManualEnrollmentService {
         duplicateQuery = input.student.documentType
           ? duplicateQuery
               .eq('identity_document_type', input.student.documentType)
-              .eq('identity_document_number', input.student.documentNumber!)
+              .eq('identity_document_number', input.student.documentNumber ?? '')
           : duplicateQuery.eq('cedula', input.student.cedula);
         const { data: profile, error } = await duplicateQuery.maybeSingle();
         if (error) throw error;

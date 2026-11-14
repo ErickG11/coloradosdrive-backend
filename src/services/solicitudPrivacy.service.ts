@@ -196,6 +196,8 @@ export class SolicitudPrivacyService {
     const rechazo = Object.entries(MOTIVOS_RECHAZO).find(
       ([codigo]) => codigo === row.rechazo_motivo_codigo,
     )?.[1];
+    const representativeDocument =
+      consent?.representante_document_number ?? consent?.representante_cedula;
     return {
       courseId: row.course_id,
       curso: course.data
@@ -222,7 +224,7 @@ export class SolicitudPrivacyService {
         consent?.representante_autoriza_tratamiento &&
         consent.representante_acepta &&
         consent.representante_nombre &&
-        (consent.representante_document_number ?? consent.representante_cedula),
+        representativeDocument,
       ),
       nivelEstudios: row.nivel_estudios ?? null,
       documentoRequerido: requerido,
@@ -251,14 +253,12 @@ export class SolicitudPrivacyService {
         nacionalidadTipo: row.nacionalidad_tipo ?? null,
         tipoSangre: row.tipo_sangre ?? null,
         representante:
-          consent?.representante_nombre &&
-          (consent.representante_document_number ?? consent.representante_cedula)
+          consent?.representante_nombre && representativeDocument
             ? {
                 nombre: consent.representante_nombre,
                 cedula: consent.representante_cedula ?? '',
                 documentType: consent.representante_document_type,
-                documentNumber: (consent.representante_document_number ??
-                  consent.representante_cedula)!,
+                documentNumber: representativeDocument,
                 acepta: consent.representante_acepta && consent.representante_autoriza_tratamiento,
               }
             : null,

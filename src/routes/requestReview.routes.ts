@@ -9,6 +9,7 @@ import { uploadCertificado } from '../middlewares/uploadCertificado';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { cohortError } from '../config/cohortErrors';
 import type { Json } from '../config/database.types';
+import { authenticatedUserId } from '../utils/requestUser';
 export const requestReviewRouter = Router();
 const service = new RequestReviewService(supabaseAdmin);
 requestReviewRouter.get(
@@ -19,7 +20,7 @@ requestReviewRouter.get(
       return;
     }
     const permission = await supabaseAdmin.rpc('assert_identity_permission_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
     });
     if (permission.error) throwStudentScheduleError(permission.error);
     const result = await supabaseAdmin.rpc('request_retention_config_v2');
@@ -34,7 +35,7 @@ requestReviewRouter.patch(
   validateFields,
   asyncHandler(async (req, res) => {
     const result = await supabaseAdmin.rpc('set_request_retention_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_policy: req.body.policy as Json,
       p_reason: String(req.body.reason),
     });
@@ -47,7 +48,7 @@ requestReviewRouter.get(
   param('id').isUUID(),
   validateFields,
   asyncHandler(async (req, res) => {
-    res.json(await service.state(req.user!.id, req.params.id));
+    res.json(await service.state(authenticatedUserId(req), req.params.id));
   }),
 );
 requestReviewRouter.post(
@@ -55,7 +56,7 @@ requestReviewRouter.post(
   param('id').isUUID(),
   validateFields,
   asyncHandler(async (req, res) => {
-    res.json(await service.state(req.user!.id, req.params.id, true));
+    res.json(await service.state(authenticatedUserId(req), req.params.id, true));
   }),
 );
 requestReviewRouter.post(
@@ -63,7 +64,7 @@ requestReviewRouter.post(
   param('id').isUUID(),
   validateFields,
   asyncHandler(async (req, _res, next) => {
-    const state = await service.state(req.user!.id, req.params.id);
+    const state = await service.state(authenticatedUserId(req), req.params.id);
     if (!('owned' in state) || !state.owned) throw cohortError('SOLICITUD_REVISION_REQUERIDA');
     next();
   }),
@@ -78,7 +79,7 @@ requestReviewRouter.post(
   asyncHandler(async (req, res) => {
     res.json(
       await service.verify(
-        req.user!.id,
+        authenticatedUserId(req),
         req.params.id,
         req.body as Record<string, unknown>,
         req.file,
@@ -94,7 +95,7 @@ requestReviewRouter.post(
   validateFields,
   asyncHandler(async (req, res) => {
     const result = await supabaseAdmin.rpc('revoke_request_approval_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_id: req.params.id,
       p_version: String(req.body.updatedAt),
       p_reason: String(req.body.reason),
@@ -110,7 +111,7 @@ requestReviewRouter.post(
   validateFields,
   asyncHandler(async (req, res) => {
     const result = await supabaseAdmin.rpc('retry_request_emails_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_id: req.params.id,
       p_reason: String(req.body.reason),
     });
@@ -125,7 +126,7 @@ requestReviewRouter.get(
   validateFields,
   asyncHandler(async (req, res) => {
     const permission = await supabaseAdmin.rpc('assert_identity_permission_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
     });
     if (permission.error) throwStudentScheduleError(permission.error);
     const doc = await supabaseAdmin
@@ -137,14 +138,12 @@ requestReviewRouter.get(
     if (doc.error) throwStudentScheduleError(doc.error);
     if (!doc.data?.scan_path || doc.data.scan_deleted_at)
       throw cohortError('SOLICITUD_ESCANEO_NO_DISPONIBLE');
-    const audit = await supabaseAdmin
-      .from('solicitud_auditoria')
-      .insert({
-        solicitud_id: req.params.id,
-        actor_id: req.user!.id,
-        accion: 'abrir_escaneo_verificacion',
-        documento_id: req.params.verificationId,
-      });
+    const audit = await supabaseAdmin.from('solicitud_auditoria').insert({
+      solicitud_id: req.params.id,
+      actor_id: authenticatedUserId(req),
+      accion: 'abrir_escaneo_verificacion',
+      documento_id: req.params.verificationId,
+    });
     if (audit.error) throwStudentScheduleError(audit.error);
     const signed = await supabaseAdmin.storage
       .from('solicitudes-documentos')

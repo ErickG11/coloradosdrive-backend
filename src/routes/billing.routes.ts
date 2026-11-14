@@ -13,10 +13,11 @@ import { buildRateLimiter } from '../middlewares/rateLimit';
 import { env } from '../config/env';
 import { createHmac } from 'node:crypto';
 import type { Json } from '../config/database.types';
+import { authenticatedUserId } from '../utils/requestUser';
 const limit = (): RequestHandler =>
   buildRateLimiter(60, env.NODE_ENV === 'test', (req) =>
     createHmac('sha256', env.ENROLLMENT_RATE_HMAC_SECRET)
-      .update(`billing:${req.user!.id}`)
+      .update(`billing:${authenticatedUserId(req)}`)
       .digest('hex'),
   );
 export const studentBillingRouter = Router(),
@@ -40,7 +41,9 @@ studentBillingRouter.get(
       res.json({ active: false });
       return;
     }
-    const result = await supabaseAdmin.rpc('billing_state_v2', { p_student: req.user!.id });
+    const result = await supabaseAdmin.rpc('billing_state_v2', {
+      p_student: authenticatedUserId(req),
+    });
     if (result.error) throwStudentScheduleError(result.error);
     res.json(result.data);
   }),
@@ -51,7 +54,7 @@ studentBillingRouter.patch(
   validateFields,
   asyncHandler(async (req, res) => {
     const result = await supabaseAdmin.rpc('save_billing_profile_v2', {
-      p_student: req.user!.id,
+      p_student: authenticatedUserId(req),
       p_profile: req.body.profile as Json,
     });
     if (result.error) throwStudentScheduleError(result.error);
@@ -69,7 +72,7 @@ adminBillingRouter.get(
     }
     const result = await supabaseAdmin.rpc('billing_state_v2', {
       p_student: req.params.id,
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json(result.data);
@@ -84,7 +87,7 @@ adminBillingRouter.patch(
     const result = await supabaseAdmin.rpc('save_billing_profile_v2', {
       p_student: req.params.id,
       p_profile: req.body.profile as Json,
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json(result.data);
@@ -100,7 +103,7 @@ adminBillingRouter.post(
   asyncHandler(async (req, res) => {
     const data = matchedData<{ id: string; updatedAt: string; action: string; data: Json }>(req);
     const result = await supabaseAdmin.rpc('admin_billing_action_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_document: data.id,
       p_version: data.updatedAt,
       p_action: data.action,
@@ -127,7 +130,7 @@ adminBillingRouter.post(
       reference: string;
     }>(req);
     const result = await supabaseAdmin.rpc('document_refund_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_payment: d.paymentId,
       p_key: d.key,
       p_amount: d.amountCentavos,
