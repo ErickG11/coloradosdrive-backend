@@ -10,6 +10,7 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const app = createApp();
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -301,7 +302,7 @@ describe('RF-04: rutas de calificación', () => {
         expect(res.status).toBe(400);
         expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field });
       }
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     },
   );
 
@@ -312,7 +313,7 @@ describe('RF-04: rutas de calificación', () => {
       .send({ ...submission, practiceSlotId });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field: 'practiceSlotId' });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each([undefined, null, 0, 6, 1.5, '5', true])('valida score %p', async (score) => {
@@ -322,7 +323,7 @@ describe('RF-04: rutas de calificación', () => {
       .send({ ...submission, score });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field: 'score' });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each([null, 42, ['texto'], 'x'.repeat(1001)])('valida comment %p', async (comment) => {
@@ -332,7 +333,7 @@ describe('RF-04: rutas de calificación', () => {
       .send({ ...submission, comment });
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field: 'comment' });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it('acepta exactamente 1000 caracteres después de recortar', async () => {
@@ -352,26 +353,26 @@ describe('RF-04: rutas de calificación', () => {
     const res = await request(app).get(`${ranking}/no-uuid`).set('Authorization', auth('admin'));
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field: 'instructorId' });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each(routes)('%s rechaza peticiones sin sesión', async (route) => {
     expect((await call(route)).status).toBe(401);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each(['pending', 'submit'] as const)('%s rechaza admin e instructor', async (route) => {
     for (const denied of ['admin', 'instructor'] as const) {
       expect((await call(route, auth(denied))).status).toBe(403);
     }
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each(['ranking', 'detail'] as const)('%s rechaza alumno e instructor', async (route) => {
     for (const denied of ['estudiante', 'instructor'] as const) {
       expect((await call(route, auth(denied))).status).toBe(403);
     }
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each(routes)('%s mapea cada código SQL y no filtra errores internos', async (route) => {
@@ -411,7 +412,7 @@ describe('RF-04: rutas de calificación', () => {
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('INVALID_FIELD');
       expect(JSON.stringify(log.mock.calls)).not.toContain('secreto del alumno');
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     } finally {
       log.mockRestore();
     }

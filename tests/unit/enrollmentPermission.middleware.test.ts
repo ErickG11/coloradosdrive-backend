@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import type * as Middleware from '../../src/middlewares/enrollmentPermission.middleware';
 
 jest.mock('../../src/config/supabase', () => ({
   supabaseAdmin: { rpc: jest.fn() },
@@ -7,9 +8,9 @@ jest.mock('../../src/config/supabase', () => ({
 
 import { supabaseAdmin } from '../../src/config/supabase';
 
-const { requireEnrollmentPermission } = jest.requireActual<
-  typeof import('../../src/middlewares/enrollmentPermission.middleware')
->('../../src/middlewares/enrollmentPermission.middleware');
+const { requireEnrollmentPermission } = jest.requireActual<typeof Middleware>(
+  '../../src/middlewares/enrollmentPermission.middleware',
+);
 const rpc = supabaseAdmin.rpc as unknown as jest.Mock;
 
 function run(user?: { id: string }): Promise<unknown> {

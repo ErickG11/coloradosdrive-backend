@@ -10,6 +10,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { SolicitudService } from '../../src/services/solicitud.service';
 import { createChain } from '../helpers/supabaseMock';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 const from = supabaseAdmin.from as jest.Mock,
   rpc = supabaseAdmin.rpc as jest.Mock,
   jwt = verifySupabaseJwt as jest.Mock;
@@ -77,7 +78,7 @@ test.each(['estudiante', 'instructor'])('config admin rechaza rol %s', async (ro
     .set('Authorization', 'Bearer ficticio')
     .send({ inscripcionesAbiertas: false });
   expect(res.status).toBe(403);
-  expect(rpc).not.toHaveBeenCalled();
+  expect(dataRpcCalls(rpc)).toHaveLength(0);
 });
 test('admin actualiza mediante RPC auditada con actor de JWT', async () => {
   const res = await request(app)
@@ -97,7 +98,7 @@ test('rechaza mass assignment en configuración', async () => {
     .set('Authorization', 'Bearer ficticio')
     .send({ inscripcionesAbiertas: false, updated_by: 'otro' });
   expect(res.status).toBe(400);
-  expect(rpc).not.toHaveBeenCalled();
+  expect(dataRpcCalls(rpc)).toHaveLength(0);
 });
 test('resumen autenticado expone alertas del 80% y elimina contador documental', async () => {
   const res = await request(app)

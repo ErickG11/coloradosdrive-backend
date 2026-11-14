@@ -21,6 +21,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedFrom = supabaseAdmin.from as jest.Mock;
@@ -94,7 +95,7 @@ describe('practice-slots student actions', () => {
     const res = await request(app).post(`/practice-slots/${slotId}/${action}`)
       .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, role)}`);
     expect(res.status).toBe(403);
-    expect(mockedRpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(mockedRpc)).toHaveLength(0);
   });
 
   it.each([
@@ -176,7 +177,7 @@ describe('practice-slots student actions', () => {
     const res = await request(app).post(`/practice-slots/${slotId}/cancel`)
       .set('Authorization', authenticateStudent()).send(body);
     expect(res.status).toBe(400);
-    expect(mockedRpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(mockedRpc)).toHaveLength(0);
     expect(mockedChannel).not.toHaveBeenCalled();
   });
 
@@ -213,7 +214,7 @@ describe('practice-slots student actions', () => {
     const res = await request(app).get(`/practice-slots/${slotId}/cancel-preview`)
       .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, role)}`);
     expect(res.status).toBe(403);
-    expect(mockedRpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(mockedRpc)).toHaveLength(0);
   });
 
   it.each([['CD404', 404], ['CD403', 403], ['CD409', 409], ['55P03', 409]])(
