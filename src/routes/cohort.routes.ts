@@ -26,6 +26,7 @@ import {
   isFechaCivil,
   maxCohortDate,
 } from '../utils/cohortRules';
+import { authenticatedUserId } from '../utils/requestUser';
 
 export const cohortRouter = Router();
 
@@ -45,7 +46,9 @@ cohortRouter.use((req, res, next) => {
 cohortRouter.get(
   '/configuracion',
   asyncHandler(async (req, res) => {
-    const result = await supabaseAdmin.rpc('cohort_admin_config_v2', { p_actor: req.user!.id });
+    const result = await supabaseAdmin.rpc('cohort_admin_config_v2', {
+      p_actor: authenticatedUserId(req),
+    });
     if (result.error) throwStudentScheduleError(result.error);
     res.json(result.data);
   }),
@@ -63,7 +66,7 @@ cohortRouter.patch(
       motivo: string;
     };
     const result = await supabaseAdmin.rpc('set_course_type_price_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_type: tipo,
       p_cents: centavos,
       p_reason: motivo,
@@ -83,7 +86,7 @@ cohortRouter.post(
       return;
     }
     const result = await supabaseAdmin.rpc('preview_waitlist_event_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_cohort: req.params.id,
     });
     if (result.error) {
@@ -103,7 +106,7 @@ cohortRouter.post(
     if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist')))
       throw domainCohortError('ESPERA_REGLAS_INACTIVAS');
     const result = await supabaseAdmin.rpc('enqueue_waitlist_event_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_cohort: req.params.id,
     });
     if (result.error) {
@@ -125,7 +128,7 @@ cohortRouter.get(
       return;
     }
     const result = await supabaseAdmin.rpc('cohort_reassignment_source_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_cohort: req.params.id,
     });
     if (result.error) throwStudentScheduleError(result.error);
@@ -148,7 +151,7 @@ for (const action of ['preview', 'aplicar'] as const)
     validateFields,
     asyncHandler(async (req, res) => {
       const source = await supabaseAdmin.rpc('cohort_reassignment_source_v2', {
-        p_actor: req.user!.id,
+        p_actor: authenticatedUserId(req),
         p_cohort: req.params.id,
       });
       if (source.error) throwStudentScheduleError(source.error);
@@ -160,7 +163,7 @@ for (const action of ['preview', 'aplicar'] as const)
       if (changes.some((row) => !source.data.enrollments?.some((e) => e.id === row.enrollmentId)))
         throw domainCohortError('MATRICULA_AJENA');
       const result = await supabaseAdmin.rpc('bulk_reassign_enrollments_v2', {
-        p_actor: req.user!.id,
+        p_actor: authenticatedUserId(req),
         p_changes: changes,
         p_reason: motivo,
         p_preview: action === 'preview',
@@ -184,7 +187,7 @@ cohortRouter.post(
   asyncHandler(async (req, res) => {
     const { updatedAt, motivo } = req.body as { updatedAt: string; motivo: string };
     const result = await supabaseAdmin.rpc('cancel_cohort_v2', {
-      p_actor: req.user!.id,
+      p_actor: authenticatedUserId(req),
       p_cohort: req.params.id,
       p_version: updatedAt,
       p_reason: motivo,

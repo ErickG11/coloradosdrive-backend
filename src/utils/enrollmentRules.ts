@@ -54,9 +54,12 @@ export function cohortCalendar(input: CohortCalendarInput, now: Date): CohortCal
   const current = DateTime.fromJSDate(now, { zone: SCHOOL_TIMEZONE });
   const finished = current >= practiceEnd.plus({ days: 1 });
   const open = !finished && input.enabled && current >= start && current < exclusive;
+  const cutoffDate = cutoff.toISODate();
+  const exclusiveIso = exclusive.toISO();
+  if (!cutoffDate || !exclusiveIso) throw cohortError('COHORTE_FECHAS_INVALIDAS');
   return {
-    cutoff: cutoff.toISODate()!,
-    cutoffExclusive: exclusive.toISO()!,
+    cutoff: cutoffDate,
+    cutoffExclusive: exclusiveIso,
     open,
     finished,
     state: finished
