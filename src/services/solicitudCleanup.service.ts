@@ -1,5 +1,5 @@
 import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
-import { resolveRequestRetention } from '../utils/requestRetention';
+import { resolveRequestRetention, type ResolvedRequestRetention } from '../utils/requestRetention';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
@@ -60,7 +60,7 @@ export class SolicitudCleanupService {
   }
 
   // Devuelta sin reenviar a tiempo: rechazada con VENCIDA (sin correo).
-  private async policy() {
+  private async policy(): Promise<ResolvedRequestRetention> {
     if (!(await enrollmentRuleEnabled(this.db, 'identity')))
       return resolveRequestRetention(null, this.retentionDays);
     const result = await this.db.rpc('request_retention_config_v2');

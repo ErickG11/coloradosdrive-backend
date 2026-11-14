@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { RequestHandler, Response } from 'express';
 import { supabaseAdmin } from '../config/supabase';
 import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -53,7 +53,7 @@ export const adminFinancialPrivacy: RequestHandler = asyncHandler(async (req, re
   const error = translateCohortSqlError(allowed.error);
   if (error?.code !== 'PERMISO_REQUERIDO') throw allowed.error;
   const json = res.json.bind(res);
-  res.json = (body: unknown) =>
+  res.json = (body: unknown): Response =>
     json(
       body && typeof body === 'object' && !Array.isArray(body)
         ? {

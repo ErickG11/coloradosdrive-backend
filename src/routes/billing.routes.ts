@@ -1,5 +1,7 @@
 import { Router } from 'express';
+import type { RequestHandler } from 'express';
 import { body, param, matchedData } from 'express-validator';
+import type { ValidationChain } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
 import { authenticate } from '../middlewares/auth.middleware';
 import { requireRole } from '../middlewares/rbac.middleware';
@@ -11,7 +13,7 @@ import { buildRateLimiter } from '../middlewares/rateLimit';
 import { env } from '../config/env';
 import { createHmac } from 'node:crypto';
 import type { Json } from '../config/database.types';
-const limit = () =>
+const limit = (): RequestHandler =>
   buildRateLimiter(60, env.NODE_ENV === 'test', (req) =>
     createHmac('sha256', env.ENROLLMENT_RATE_HMAC_SECRET)
       .update(`billing:${req.user!.id}`)
@@ -21,7 +23,7 @@ export const studentBillingRouter = Router(),
   adminBillingRouter = Router();
 studentBillingRouter.use(limit());
 adminBillingRouter.use(asyncHandler(authenticate), requireRole('admin'), limit());
-const profile = () => [
+const profile = (): ValidationChain[] => [
   body('profile').isObject(),
   ...['name', 'documentType', 'documentNumber', 'address', 'email'].map((k) =>
     body(`profile.${k}`)

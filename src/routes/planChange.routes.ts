@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import { createHmac } from 'node:crypto';
 import { Router } from 'express';
 import { body, param, matchedData } from 'express-validator';
+import type { ValidationChain } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
 import { PlanChangeService } from '../services/planChange.service';
 import type { StudentScheduleSelection } from '../models/studentSchedule.model';
@@ -18,7 +19,7 @@ planChangeRouter.use(
       .digest('hex'),
   ),
 );
-const plan = () => [
+const plan = (): ValidationChain[] => [
   body().custom(
     (value: unknown) =>
       !!value &&

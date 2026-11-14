@@ -1,7 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
+import type { IndividualEnrollmentAccess } from '../models/individualEnrollmentAccess.model';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
-export async function individualEnrollmentAccess(db: SupabaseClient<Database>, studentId: string) {
+export async function individualEnrollmentAccess(
+  db: SupabaseClient<Database>,
+  studentId: string,
+): Promise<IndividualEnrollmentAccess> {
   const flag = await db
     .from('enrollment_rule_flags')
     .select('enabled,implemented')
