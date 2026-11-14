@@ -1,3 +1,5 @@
+// Esta prueba valida la lectura real del tope de horas configurado en app_settings.
+jest.unmock('../../src/services/planEndHour.service');
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../src/config/database.types';
 import { PlanChangeService } from '../../src/services/planChange.service';

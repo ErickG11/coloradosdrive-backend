@@ -133,6 +133,8 @@ describe('contratos HTTP y recordatorios con correo por consola real', () => {
           ? createChain({ data: null, error: null })
           : Promise.resolve({ data: true, error: null }),
       );
+      // runOnce mantiene primero la lista de espera y después reclama los correos.
+      rpc.mockResolvedValueOnce({ data: null, error: null });
       rpc.mockReturnValueOnce(
         createChain({
           data: {
