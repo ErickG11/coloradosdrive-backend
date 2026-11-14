@@ -5,7 +5,9 @@ export const requestCorrelation: RequestHandler = (req, res, next) => {
   res.locals.correlationId = correlationId;
   res.setHeader('X-Correlation-ID', correlationId);
   res.on('finish', () => {
-    const entities = Object.values(req.params).filter((v) =>
+    // Tras un rechazo del enrutador, Express puede dejar req.params sin definir.
+    const params = req.params as Record<string, string> | undefined;
+    const entities = Object.values(params ?? {}).filter((v) =>
       /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v),
     );
     const errorCode = res.locals.errorCode as string | undefined;

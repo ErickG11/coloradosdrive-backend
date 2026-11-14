@@ -40,10 +40,15 @@ export function errorHandler(
   res.locals.errorCode =
     err instanceof AppError ? (err.code ?? 'OPERACION_RECHAZADA') : 'ERROR_INTERNO';
   if (err instanceof AppError && err.statusCode === 403 && req.user) {
-    void supabaseAdmin.rpc('report_enrollment_security_v2', { p_actor: req.user.id }).then(
-      () => undefined,
-      () => undefined,
-    );
+    // El aviso de seguridad es de mejor esfuerzo: nunca debe impedir que se responda el error.
+    try {
+      void supabaseAdmin.rpc('report_enrollment_security_v2', { p_actor: req.user.id }).then(
+        () => undefined,
+        () => undefined,
+      );
+    } catch {
+      // Si la llamada falla de inmediato se ignora; la respuesta sigue su curso.
+    }
   }
   // Frontera de salida S1: tampoco revelar detalles/campos/stack por rutas hermanas.
   const identityError = normalizeSolicitudError(err);
