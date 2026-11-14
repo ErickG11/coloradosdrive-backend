@@ -18,6 +18,7 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const from = supabaseAdmin.from as jest.Mock;
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -68,7 +69,7 @@ describe('admin estudiantes A', () => {
         : createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
     );
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
     expect(getAuth).not.toHaveBeenCalled();
     expect(updateAuth).not.toHaveBeenCalled();
   });
@@ -149,7 +150,7 @@ describe('admin estudiantes A', () => {
   ])('rejects invalid/unknown filters %s', async (query) => {
     const res = await request(app).get(path).query(query).set('Authorization', token());
     expect(res.status).toBe(400);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it('returns the existing expanded profile without enrollments', async () => {
@@ -198,7 +199,7 @@ describe('admin estudiantes A', () => {
     ).toBe(404);
     expect(updateAuth).not.toHaveBeenCalled();
     expect(from).not.toHaveBeenCalled();
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it('PATCH requires authentication and admin', async () => {
@@ -212,7 +213,7 @@ describe('admin estudiantes A', () => {
         : createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
     );
     expect((await call().set('Authorization', token('estudiante'))).status).toBe(403);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it('PATCH preserves the version and rejects fields outside the profile', async () => {
@@ -244,7 +245,7 @@ describe('admin estudiantes A', () => {
           .send({ updatedAt: version, activo: false })
       ).status,
     ).toBe(400);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each([
@@ -269,7 +270,7 @@ describe('admin estudiantes A', () => {
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ code: 'INVALID_FIELD', field });
     expect(from).not.toHaveBeenCalled();
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
     expect(getAuth).not.toHaveBeenCalled();
     expect(updateAuth).not.toHaveBeenCalled();
   });
@@ -288,7 +289,7 @@ describe('admin estudiantes A', () => {
       .send({ updatedAt: version, fechaNacimiento: date });
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ code, field: 'fechaNacimiento', message });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it('PATCH accepts a leap date and the exact field length limits', async () => {

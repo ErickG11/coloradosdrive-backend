@@ -20,6 +20,7 @@ import {
 import { createChain } from '../helpers/supabaseMock';
 import { mockSesionAlumno } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const exam = '22222222-2222-4222-8222-222222222222';
 const question = '33333333-3333-4333-8333-333333333333';
@@ -108,7 +109,7 @@ test.each([
     code: 'IMAGE_TYPE_INVALID',
     statusCode: 400,
   });
-  expect(rpc).not.toHaveBeenCalled();
+  expect(dataRpcCalls(rpc)).toHaveLength(0);
   expect(storage.upload).not.toHaveBeenCalled();
 });
 test('limita por bytes reales a 3 MiB y no por file.size declarado', async () => {

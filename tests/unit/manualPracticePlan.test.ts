@@ -77,7 +77,7 @@ describe('Plan civil compartido con el wizard por HTTP', () => {
   it('hora fuera de 06:00-22:00 o que no cabe: mensajes con field', () => {
     expect(() => manualPracticePlan({ ...base, horaDeseada: '05:59' })).toThrow(
       expect.objectContaining({ field: 'practice.horaDeseada',
-        message: 'La hora deseada debe estar entre 06:00 y 22:00.' }),
+        message: 'Elige una hora válida desde las 06:00, dentro del horario de la escuela.' }),
     );
     expect(() => manualPracticePlan({ ...base, horaDeseada: '17:00', horasPorDia: 6 })).toThrow(
       expect.objectContaining({ field: 'practice.horaDeseada' }),

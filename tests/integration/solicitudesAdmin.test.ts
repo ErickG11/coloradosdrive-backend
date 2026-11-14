@@ -26,6 +26,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
 import { signSolicitudToken } from '../../src/utils/solicitudToken';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedFrom = supabaseAdmin.from as jest.Mock;
@@ -240,7 +241,7 @@ describe('solicitudes de inscripción (admin)', () => {
         .send({ estado, motivoRechazo: 'Documento ilegible' });
       expect(res.status).toBe(409);
       expect(res.body.code).toBe('DOCUMENTO_YA_REVISADO');
-      expect(mockedRpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(mockedRpc)).toHaveLength(0);
       expect(mockedFrom).toHaveBeenCalledTimes(2);
     });
   });

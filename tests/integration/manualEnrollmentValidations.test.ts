@@ -15,6 +15,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { alumnoActivo, sinInscripcionPendiente } from '../helpers/authMocks';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const from = supabaseAdmin.from as jest.Mock;
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -61,7 +62,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         debe_cambiar_password: false }, error: null }));
       expect((await request(app).post(`${base}/duplicates`).set('Authorization', token('instructor'))
         .send({ cedula: '1710034065' })).status).toBe(403);
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     });
 
     it('responde solo booleanos por campo, sin datos personales', async () => {
@@ -82,7 +83,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
       const res = await request(app).post(`${base}/duplicates`).set('Authorization', token())
         .send({ cedula: '1710034065' });
       expect(res.body).toEqual({ cedula: false, correo: false });
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
       rpc.mockResolvedValueOnce({ data: [], error: null });
       const res2 = await request(app).post(`${base}/duplicates`).set('Authorization', token())
         .send({ correo: 'nadie@example.com' });
@@ -113,7 +114,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
       expect(res.body).toMatchObject({ code: 'INVALID_FIELD', message });
       if (field) expect(res.body.field).toBe(field);
       expect(from).not.toHaveBeenCalled();
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     });
   });
 
@@ -190,7 +191,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         .set('Idempotency-Key', uuid).send(payload);
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field, message });
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     });
 
     it('sin Idempotency-Key responde con mensaje en español', async () => {

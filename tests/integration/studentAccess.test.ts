@@ -14,6 +14,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 const from = supabaseAdmin.from as jest.Mock,
   rpc = supabaseAdmin.rpc as jest.Mock;
 const auth = supabaseAdmin.auth.admin.updateUserById as jest.Mock;
@@ -38,7 +39,7 @@ describe('B admin access and student exceptions', () => {
       ).status,
     ).toBe(403);
     expect(auth).not.toHaveBeenCalled();
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
   it('admin deactivates without touching enrollments or past attendance through REST', async () => {
     from.mockReturnValue(createChain({ data: { id }, error: null }));

@@ -17,3 +17,13 @@ jest.mock('../src/middlewares/enrollmentPermission.middleware', () => ({
     next();
   },
 }));
+
+// inscripcionIncompleta consulta primero el acceso individual por matrícula (indicador
+// enrollment_access). Con el indicador apagado el servicio responde "inactivo" y se conserva la
+// consulta anterior de matrículas; así las pruebas de rutas no necesitan una lectura adicional.
+// El servicio se prueba por separado en tests/unit/individualEnrollmentAccess.service.test.ts.
+jest.mock('../src/services/individualEnrollmentAccess.service', () => ({
+  individualEnrollmentAccess: jest
+    .fn()
+    .mockResolvedValue({ active: false, serverNow: '2026-01-01T00:00:00.000Z', enrollments: [] }),
+}));

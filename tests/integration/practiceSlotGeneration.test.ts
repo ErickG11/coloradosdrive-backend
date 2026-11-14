@@ -15,6 +15,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const mockedRpc = supabaseAdmin.rpc as jest.Mock;
 const mockedFrom = supabaseAdmin.from as jest.Mock;
@@ -77,7 +78,7 @@ describe('generador de práctica (admin)', () => {
           instructorId: '22222222-2222-4222-8222-222222222222', durationMinutes: 45 });
       expect(res.status).toBe(400);
       expect(mockedFrom).not.toHaveBeenCalled();
-      expect(mockedRpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(mockedRpc)).toHaveLength(0);
     });
     it.each(['sugerir-practica', 'confirmar-practica'])(
       '%s limita horasPorDia a 1-6 con mensaje en español',
