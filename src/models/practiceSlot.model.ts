@@ -38,8 +38,7 @@ export interface PracticeSlotWithNames extends PracticeSlot {
 
 // Durante la selección, la identidad del instructor permanece oculta.
 export type StudentPracticeSlot =
-  | PracticeSlotWithNames
-  | Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
+  PracticeSlotWithNames | Omit<PracticeSlotWithNames, 'instructorId' | 'instructorName'>;
 
 // 'verde': sin estudiante asignado (disponible/liberado), o estados fuera
 // del ciclo activo (sin_practica/completado). 'rojo'/'amarillo'/'neutro':
@@ -83,7 +82,14 @@ export interface SubmitAttendanceInput {
   motivo?: string;
 }
 
-export const CANCELLATION_CATEGORIES = ['salud', 'trabajo', 'estudios', 'familiar', 'transporte', 'otro'] as const;
+export const CANCELLATION_CATEGORIES = [
+  'salud',
+  'trabajo',
+  'estudios',
+  'familiar',
+  'transporte',
+  'otro',
+] as const;
 export type CancellationCategory = (typeof CANCELLATION_CATEGORIES)[number];
 export type CancellationOutcome = 'reprogramable' | 'hora_perdida' | 'falta';
 
@@ -114,10 +120,14 @@ export interface PracticeCancellationRpcResult {
 }
 
 export interface CancelPracticeSlotResult extends PracticeSlot {
-  cancelacion: Omit<PracticeCancellationRpcResult, 'slot' | 'studentId' | 'instructorId' | 'cohortId' | 'difundirCohorte'>;
+  cancelacion: Omit<
+    PracticeCancellationRpcResult,
+    'slot' | 'studentId' | 'instructorId' | 'cohortId' | 'difundirCohorte'
+  >;
 }
 
 export interface ReleasedPracticeSlot {
+  conflict?: { course: string; date: string; hour: string; message: string } | null;
   id: string;
   cohortId: string;
   enrollmentId: string;

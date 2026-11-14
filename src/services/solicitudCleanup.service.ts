@@ -1,7 +1,9 @@
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
+import { resolveRequestRetention, type ResolvedRequestRetention } from '../utils/requestRetention';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
-import { MOTIVOS_RECHAZO, RETENCION_INSCRIPCION } from '../config/enrollmentCatalog';
+import { MOTIVOS_RECHAZO } from '../config/enrollmentCatalog';
 import { env } from '../config/env';
 import { recordSolicitudAudit } from './solicitudAudit.service';
 import { CERTIFICATE_BUCKET } from './solicitudCertificateStorage.service';
@@ -36,7 +38,9 @@ export class SolicitudCleanupService {
       vencidas: await this.step('expire_returned', () => this.expireReturned()),
       borradores: await this.step('purge_drafts', () => this.purgeDrafts(now)),
       rechazadas: await this.step('purge_rejected', () => this.purgeRejected(now)),
-      certificados: await this.step('purge_certificates', () => this.purgeCertificates(now)),
+      certificados:
+        (await this.step('purge_certificates', () => this.purgeCertificates(now))) +
+        (await this.step('purge_verification_scans', () => this.purgeScans(now))),
       huerfanos: await this.step('purge_orphans', () => this.purgeOrphans(now)),
     };
     return report;
@@ -56,9 +60,17 @@ export class SolicitudCleanupService {
   }
 
   // Devuelta sin reenviar a tiempo: rechazada con VENCIDA (sin correo).
+  private async policy(): Promise<ResolvedRequestRetention> {
+    if (!(await enrollmentRuleEnabled(this.db, 'identity')))
+      return resolveRequestRetention(null, this.retentionDays);
+    const result = await this.db.rpc('request_retention_config_v2');
+    if (result.error) throw result.error;
+    return resolveRequestRetention(result.data, this.retentionDays);
+  }
+
   async expireReturned(): Promise<number> {
     const { data, error } = await this.db.rpc('vencer_solicitudes_devueltas', {
-      p_dias: RETENCION_INSCRIPCION.devueltaDias,
+      p_dias: (await this.policy()).devueltaDias,
       p_mensaje: MOTIVOS_RECHAZO.VENCIDA.mensaje,
     });
     if (error) throw error;
@@ -70,7 +82,7 @@ export class SolicitudCleanupService {
       .from('solicitudes_inscripcion')
       .select('id')
       .eq('estado', 'borrador')
-      .lt('created_at', this.cutoff(now, RETENCION_INSCRIPCION.borradorDias))
+      .lt('created_at', this.cutoff(now, (await this.policy()).borradorDias))
       .order('created_at')
       .limit(BATCH);
     if (error) throw error;
@@ -85,7 +97,7 @@ export class SolicitudCleanupService {
       .from('solicitudes_inscripcion')
       .select('id')
       .eq('estado', 'rechazada')
-      .lt('reviewed_at', this.cutoff(now, this.retentionDays))
+      .lt('reviewed_at', this.cutoff(now, (await this.policy()).rechazadaDias))
       .order('reviewed_at')
       .limit(BATCH);
     if (error) throw error;
@@ -95,7 +107,10 @@ export class SolicitudCleanupService {
     );
   }
 
-  private async purgeAll(ids: string[], action: 'purga_borrador' | 'purga_retencion'): Promise<number> {
+  private async purgeAll(
+    ids: string[],
+    action: 'purga_borrador' | 'purga_retencion',
+  ): Promise<number> {
     let count = 0;
     for (const id of ids) {
       try {
@@ -114,7 +129,10 @@ export class SolicitudCleanupService {
       .select('id,solicitud_id,storage_path')
       .eq('tipo_documento', 'certificado_estudios')
       .not('storage_path', 'is', null)
-      .lt('archivo_verificado_at', this.cutoff(now, RETENCION_INSCRIPCION.certificadoVerificadoDias))
+      .lt(
+        'archivo_verificado_at',
+        this.cutoff(now, (await this.policy()).certificadoVerificadoDias),
+      )
       .order('archivo_verificado_at')
       .limit(BATCH);
     if (error) throw error;
@@ -140,10 +158,40 @@ export class SolicitudCleanupService {
     return count;
   }
 
+  async purgeScans(now: Date): Promise<number> {
+    if (!(await enrollmentRuleEnabled(this.db, 'identity'))) return 0;
+    const result = await this.db
+      .from('solicitud_verificaciones')
+      .select('id,scan_path')
+      .not('scan_path', 'is', null)
+      .is('scan_deleted_at', null)
+      .lt('creado_at', this.cutoff(now, (await this.policy()).certificadoVerificadoDias))
+      .order('creado_at')
+      .limit(BATCH);
+    if (result.error) throw result.error;
+    let count = 0;
+    for (const scan of result.data) {
+      if (!scan.scan_path) continue;
+      try {
+        const removed = await this.db.storage.from(CERTIFICATE_BUCKET).remove([scan.scan_path]);
+        if (removed.error) throw removed.error;
+        const marked = await this.db.rpc('mark_verification_scan_deleted_v2', {
+          p_id: scan.id,
+          p_path: scan.scan_path,
+        });
+        if (marked.error) throw marked.error;
+        if (marked.data) count++;
+      } catch {
+        console.error(JSON.stringify({ event: 'verification_scan_retention_failed' }));
+      }
+    }
+    return count;
+  }
+
   // Objetos sin fila que los referencie, de más de un día (subidas que no se confirmaron).
   async purgeOrphans(now: Date): Promise<number> {
     const { data, error } = await this.db.rpc('listar_objetos_huerfanos_solicitudes', {
-      p_antes: this.cutoff(now, RETENCION_INSCRIPCION.huerfanoDias),
+      p_antes: this.cutoff(now, (await this.policy()).huerfanoDias),
       p_limite: ORPHAN_BATCH,
     });
     if (error) throw error;

@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 import { paymentWelcome } from '../services/paymentWelcome';
 import { logSafeError } from '../utils/safeLog';
@@ -8,8 +9,7 @@ export function startPaymentWelcomeCron(): void {
     () => {
       if (running) return;
       running = true;
-      paymentWelcome
-        .run()
+      observeJob('payment_welcome', () => paymentWelcome.run())
         .catch((error: unknown) => {
           logSafeError('payment_welcome_retry_failed', error);
         })

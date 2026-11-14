@@ -1,9 +1,13 @@
 export const NOTIFICATION_TYPES = [
   'recordatorio_practica',
+  'espera_apertura',
+  'plan_cambiado',
   'resultado_cancelacion',
   'cupo_disponible',
   'sin_practica_instructor',
   'cambio_realizado',
+  'cambio_agenda_instructor',
+  'falta_registrada_admin',
   'asistencia_corregida',
   'encuesta_practica',
   'documento_aprobado',
@@ -16,6 +20,12 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export type NotificationEmailStatus = 'pendiente' | 'enviado' | 'fallido' | null;
 
 export interface NotificationRow extends Record<string, unknown> {
+  domain_code?: string | null;
+  domain_entity_id?: string | null;
+  domain_severity?: string | null;
+  domain_last_seen_at?: string | null;
+  domain_resolved_at?: string | null;
+  waitlist_type?: 'A' | 'B' | null;
   attendance_event_id: string | null;
   id: string;
   user_id: string;
@@ -35,6 +45,13 @@ export interface NotificationRow extends Record<string, unknown> {
 }
 
 export interface Notification {
+  alert?: {
+    code: string;
+    entityId: string | null;
+    severity: string;
+    lastSeenAt: string | null;
+    resolvedAt: string | null;
+  };
   attendanceEventId: string | null;
   id: string;
   tipo: NotificationType;

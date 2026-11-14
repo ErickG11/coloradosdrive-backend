@@ -13,6 +13,11 @@ import type {
 } from '../models/exam.model';
 import { AppError } from '../utils/AppError';
 import { ContentService, translateContentDatabaseError } from './content.service';
+import {
+  removeQuestionImages,
+  signQuestionImage,
+  signQuestionImages,
+} from './questionImageStorage.service';
 import type { ContentData } from '../models/content.model';
 
 type ExamRow = Database['public']['Tables']['exams']['Row'];
@@ -52,6 +57,7 @@ function toQuestionOption(row: QuestionOptionRow): QuestionOption {
 
 function toQuestion(row: QuestionRow, optionRows: QuestionOptionRow[]): Question {
   return {
+    image: null,
     id: row.id,
     examId: row.exam_id,
     type: row.type,
@@ -167,10 +173,14 @@ export class ExamService {
 
     const optionRows = await this.getOptionsForQuestions(questionRows.map((q) => q.id));
     const optionsByQuestionId = groupOptionsByQuestionId(optionRows);
+    const images = await signQuestionImages(this.supabase, questionRows);
 
     return {
       ...toExam(examRow),
-      questions: questionRows.map((row) => toQuestion(row, optionsByQuestionId.get(row.id) ?? [])),
+      questions: questionRows.map((row, index) => ({
+        ...toQuestion(row, optionsByQuestionId.get(row.id) ?? []),
+        image: images[index],
+      })),
     };
   }
 
@@ -205,21 +215,33 @@ export class ExamService {
     return toExam(data);
   }
 
-  async deleteExam(id: string): Promise<void> {
-    const { error, count } = await this.supabase
-      .from('exams')
-      .delete({ count: 'exact' })
-      .eq('id', id);
-
-    if (error) {
+  async deleteExam(id: string, actor: string): Promise<void> {
+    const { data, error } = await this.supabase.rpc('exam_question_image', {
+      p_actor: actor,
+      p_exam: id,
+      p_question: null,
+      p_action: 'delete_exam',
+      p_data: {},
+    });
+    if (error)
       throw this.translateForeignKeyViolation(
         error,
         'No se puede eliminar el examen: tiene elementos vinculados o intentos; despublícalo',
       );
-    }
-    if (!count) {
-      throw new AppError('Examen no encontrado', 404);
-    }
+    const paths = (data as ContentData).paths;
+    if (Array.isArray(paths))
+      await removeQuestionImages(
+        this.supabase,
+        paths.filter((path): path is string => typeof path === 'string'),
+      );
+  }
+
+  async getQuestionById(id: string): Promise<Question> {
+    const row = await this.getQuestionRowOrThrow(id);
+    return {
+      ...toQuestion(row, await this.getOptionsForQuestions([id])),
+      image: await signQuestionImage(this.supabase, row),
+    };
   }
 
   async addQuestion(examId: string, input: CreateQuestionInput): Promise<Question> {
@@ -273,14 +295,18 @@ export class ExamService {
       optionRows = await this.getOptionsForQuestions([questionId]);
     }
 
-    return toQuestion(updatedRow, optionRows);
+    return {
+      ...toQuestion(updatedRow, optionRows),
+      image: await signQuestionImage(this.supabase, updatedRow),
+    };
   }
 
   async deleteQuestion(questionId: string): Promise<void> {
-    const { error, count } = await this.supabase
+    const { data, error, count } = await this.supabase
       .from('questions')
       .delete({ count: 'exact' })
-      .eq('id', questionId);
+      .eq('id', questionId)
+      .select('image_path');
 
     if (error) {
       throw this.translateForeignKeyViolation(
@@ -291,6 +317,10 @@ export class ExamService {
     if (!count) {
       throw new AppError('Pregunta no encontrada', 404);
     }
+    await removeQuestionImages(
+      this.supabase,
+      data.flatMap((row) => (row.image_path ? [row.image_path] : [])),
+    );
   }
 
   private async assertCourseExists(courseId: string): Promise<void> {

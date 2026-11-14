@@ -34,3 +34,25 @@ export function maskEmail(email: string): string {
 export function maskCedula(cedula: string): string {
   return cedula.length > 4 ? `${'*'.repeat(cedula.length - 4)}${cedula.slice(-4)}` : '****';
 }
+
+// Error de base de datos con su detalle técnico (message, code, details, hint) para diagnóstico.
+// Se enmascaran correos y secuencias largas de dígitos (cédulas, teléfonos) antes de imprimir.
+export function logDatabaseError(event: string, error: unknown): void {
+  const record = (error && typeof error === 'object' ? error : {}) as Record<string, unknown>;
+  const clean = (value: unknown): string | undefined =>
+    typeof value === 'string' && value
+      ? value
+          .replace(/[^\s@]+@[^\s@]+/g, '***@***')
+          .replace(/\d{8,}/g, '********')
+          .slice(0, 400)
+      : undefined;
+  console.error(
+    JSON.stringify({
+      event,
+      code: clean(record.code),
+      message: clean(record.message),
+      details: clean(record.details),
+      hint: clean(record.hint),
+    }),
+  );
+}

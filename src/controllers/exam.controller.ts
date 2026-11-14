@@ -40,6 +40,7 @@ export async function listExams(req: Request, res: Response<Exam[]>): Promise<vo
 // requireRole('admin') en exam.routes.ts.
 export async function getExamById(req: Request, res: Response<ExamWithQuestions>): Promise<void> {
   const exam = await examService.getExamById(req.params.id);
+  res.set('Cache-Control', 'no-store');
   res.status(200).json(exam);
 }
 
@@ -49,7 +50,8 @@ export async function updateExam(req: Request, res: Response<Exam>): Promise<voi
 }
 
 export async function deleteExam(req: Request, res: Response): Promise<void> {
-  await examService.deleteExam(req.params.id);
+  if (!req.user) throw new AppError('Authentication required', 401);
+  await examService.deleteExam(req.params.id, req.user.id);
   res.status(204).send();
 }
 

@@ -15,6 +15,8 @@ export interface AuthenticatedUser {
 // Perfil completo de la tabla `users`, reflejando migrations/001_init.sql
 // y 016_users_datos_estudiante_ampliados.sql.
 export interface UserProfile {
+  documentType?: string;
+  documentNumber?: string;
   id: string;
   cedula: string;
   nombreCompleto: string;

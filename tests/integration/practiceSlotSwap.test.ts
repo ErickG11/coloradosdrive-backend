@@ -12,6 +12,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const rpc = supabaseAdmin.rpc as jest.Mock;
 const from = supabaseAdmin.from as jest.Mock;
@@ -51,20 +52,20 @@ describe('E2: rutas de cupos para el alumno', () => {
     }
     expect((await request(app).post(`/practice-slots/${target}/swap`)
       .set('Authorization', `Bearer ${mockAuthToken(verify, role)}`).send({})).status).toBe(403);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each([null, 'no-es-uuid', 123, [source]])('rechaza practicaASoltarId inválido: %j', async (value) => {
     const res = await request(app).post(`/practice-slots/${target}/swap`).set('Authorization', auth())
       .send({ practicaASoltarId: value });
     expect(res.status).toBe(400);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it('valida UUID del cupo antes de llamar SQL', async () => {
     const res = await request(app).post('/practice-slots/no-uuid/swap').set('Authorization', auth()).send({});
     expect(res.status).toBe(400);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it.each([

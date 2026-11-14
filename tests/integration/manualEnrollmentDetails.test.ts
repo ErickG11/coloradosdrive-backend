@@ -14,6 +14,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const from = supabaseAdmin.from as jest.Mock;
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -44,7 +45,7 @@ describe('detalles administrativos de matrícula', () => {
     from.mockReturnValueOnce(createChain({ data: { rol: 'instructor', activo: true,
       debe_cambiar_password: false }, error: null }));
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 
   it('lee el monto neto y calcula saldo y documentos pendientes', async () => {

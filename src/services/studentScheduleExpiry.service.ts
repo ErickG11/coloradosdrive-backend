@@ -14,10 +14,19 @@ export class StudentScheduleExpiryService {
   async run(): Promise<{ vencidas: number; fallos: number; revisadas: number }> {
     // El reloj SQL decide si venció, incluso con diferencia de reloj en Node.
     // Revisar las primeras100 leases incluye todas las vencidas antes de las futuras.
+    const flag = await this.db
+      .from('enrollment_rule_flags')
+      .select('enabled,implemented')
+      .eq('key', 'reservations')
+      .single();
+    if (flag.error) throwStudentScheduleError(flag.error);
     const result = await this.db
       .from('student_schedule_reservations')
       .select('student_id')
-      .in('estado', ['vigente', 'pago_en_curso'])
+      .in(
+        'estado',
+        flag.data.enabled && flag.data.implemented ? ['vigente'] : ['vigente', 'pago_en_curso'],
+      )
       .order('expira_at')
       .order('id')
       .limit(100);

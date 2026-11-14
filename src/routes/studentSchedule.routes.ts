@@ -1,3 +1,7 @@
+import { throwStudentScheduleError } from '../utils/studentScheduleError';
+import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
+import { cohortError } from '../config/cohortErrors';
+import { studentPlanRules } from '../services/studentPlanRules.service';
 import { createHmac } from 'node:crypto';
 import { Router } from 'express';
 import { body, matchedData, param, type ValidationChain } from 'express-validator';
@@ -88,6 +92,37 @@ studentScheduleRouter.use((req, _res, next) => {
   }
   next();
 });
+studentScheduleRouter.get(
+  '/horario/config',
+  readLimit,
+  asyncHandler(async (req, res) => {
+    subject(req);
+    res.json(await studentPlanRules(supabaseAdmin));
+  }),
+);
+studentScheduleRouter.post(
+  '/horario/calendario',
+  readLimit,
+  planValidators(false),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const input = matchedData<StudentScheduleInput & { enrollmentId: string }>(req, {
+      locations: ['body'],
+    });
+    res.json(await service.calendar(subject(req), input.enrollmentId, input));
+  }),
+);
+studentScheduleRouter.get(
+  '/reserva/matricula/:enrollmentId',
+  readLimit,
+  param('enrollmentId').isUUID(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    const { enrollmentId } = matchedData<{ enrollmentId: string }>(req, { locations: ['params'] });
+    const reserva = await service.currentForEnrollment(subject(req), enrollmentId);
+    res.json({ reserva, serverNow: reserva?.serverNow ?? new Date().toISOString() });
+  }),
+);
 studentScheduleRouter.post(
   '/horario/opciones',
   readLimit,
@@ -111,7 +146,15 @@ studentScheduleRouter.post(
     const input = matchedData<StudentScheduleSelection & { enrollmentId: string }>(req, {
       locations: ['body'],
     });
-    res.json(await service.preview(subject(req), input.enrollmentId, input));
+    const preview = await service.preview(subject(req), input.enrollmentId, input);
+    if (preview.factible) {
+      const event = await supabaseAdmin.rpc('record_schedule_choice_v2', {
+        p_student: subject(req),
+        p_enrollment: input.enrollmentId,
+      });
+      if (event.error) throw event.error;
+    }
+    res.json(preview);
   }),
 );
 studentScheduleRouter.post(
@@ -154,3 +197,44 @@ for (const action of ['ampliar', 'liberar'] as const) {
     }),
   );
 }
+
+studentScheduleRouter.get(
+  '/espera',
+  readLimit,
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist'))) {
+      res.json({ active: false, types: {} });
+      return;
+    }
+    const result = await supabaseAdmin.rpc('get_enrollment_waitlist_v2', {
+      p_student: subject(req),
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentScheduleRouter.post(
+  '/espera',
+  changeLimit,
+  body('tipo').isIn(['A', 'B']),
+  body('preferencia').not().exists(),
+  body('quitar').optional().isBoolean(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist')))
+      throw cohortError('ESPERA_REGLAS_INACTIVAS');
+    const { tipo, preferencia, quitar } = req.body as {
+      tipo: 'A' | 'B';
+      preferencia?: Record<string, unknown> | null;
+      quitar?: boolean;
+    };
+    const result = await supabaseAdmin.rpc('set_enrollment_waitlist_v2', {
+      p_student: subject(req),
+      p_type: tipo,
+      p_preference: preferencia ?? null,
+      p_remove: quitar ?? false,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);

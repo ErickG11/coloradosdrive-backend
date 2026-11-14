@@ -37,7 +37,9 @@ export interface InstructorSummary {
   createdAt: string;
 }
 
-export interface InstructorDetail extends InstructorSummary { correo: string }
+export interface InstructorDetail extends InstructorSummary {
+  correo: string;
+}
 
 export interface InstructorOwn {
   profile: InstructorDetail;
@@ -51,11 +53,12 @@ export interface InstructorOwn {
   }[];
 }
 
-function summary(row: Pick<UserRow,
-  'id' | 'cedula' | 'nombre_completo' | 'telefono' | 'activo' | 'created_at'>): InstructorSummary {
+function summary(
+  row: Pick<UserRow, 'id' | 'cedula' | 'nombre_completo' | 'telefono' | 'activo' | 'created_at'>,
+): InstructorSummary {
   return {
     id: row.id,
-    cedula: row.cedula,
+    cedula: row.cedula ?? '',
     nombreCompleto: row.nombre_completo,
     telefono: row.telefono,
     activo: row.activo,
@@ -71,7 +74,10 @@ export class InstructorService {
 
   async create(input: InstructorInput): Promise<InstructorDetail> {
     const { data: existing, error: lookupError } = await this.db
-      .from('users').select('id').eq('cedula', input.cedula).maybeSingle();
+      .from('users')
+      .select('id')
+      .eq('cedula', input.cedula)
+      .maybeSingle();
     if (lookupError) throw new AppError('No se pudo verificar la cédula', 500);
     if (existing) throw new AppError('La cédula ya está registrada', 409);
 
@@ -85,32 +91,45 @@ export class InstructorService {
         app_metadata: { role: 'instructor' },
       });
     } catch {
-      throw new AppError('No se pudo confirmar la creación en Auth; requiere revisión antes de reintentar', 503);
+      throw new AppError(
+        'No se pudo confirmar la creación en Auth; requiere revisión antes de reintentar',
+        503,
+      );
     }
     const { data: auth, error: authError } = authResult;
     if (authError) {
-      if (authError.code === 'email_exists') throw new AppError('El correo ya está registrado', 409);
+      if (authError.code === 'email_exists')
+        throw new AppError('El correo ya está registrado', 409);
       if (!authError.status || authError.status >= 500)
-        throw new AppError('La creación en Auth tiene resultado incierto; requiere revisión antes de reintentar', 503);
+        throw new AppError(
+          'La creación en Auth tiene resultado incierto; requiere revisión antes de reintentar',
+          503,
+        );
       throw new AppError('No se pudo crear la cuenta de acceso', 502);
     }
 
     try {
-      const { data: row, error } = await this.db.from('users').insert({
-        id: auth.user.id,
-        cedula: input.cedula,
-        nombre_completo: input.nombreCompleto,
-        telefono: input.telefono,
-        rol: 'instructor',
-        activo: true,
-        debe_cambiar_password: true,
-      }).select().single();
+      const { data: row, error } = await this.db
+        .from('users')
+        .insert({
+          id: auth.user.id,
+          cedula: input.cedula,
+          nombre_completo: input.nombreCompleto,
+          telefono: input.telefono,
+          rol: 'instructor',
+          activo: true,
+          debe_cambiar_password: true,
+        })
+        .select()
+        .single();
       if (error) {
         if (error.code === '23505') throw new AppError('La cédula ya está registrada', 409);
         throw new AppError('No se pudo guardar el instructor', 500);
       }
       await this.email.sendInstructorCredentials({
-        to: input.correo, nombreCompleto: input.nombreCompleto, temporaryPassword: generatedPassword,
+        to: input.correo,
+        nombreCompleto: input.nombreCompleto,
+        temporaryPassword: generatedPassword,
       });
       return { ...summary(row), correo: input.correo };
     } catch (error) {
@@ -126,9 +145,13 @@ export class InstructorService {
   }
 
   async list({ q, activo, page, pageSize }: InstructorListQuery): Promise<{
-    items: InstructorSummary[]; total: number; page: number; pageSize: number;
+    items: InstructorSummary[];
+    total: number;
+    page: number;
+    pageSize: number;
   }> {
-    let query = this.db.from('users')
+    let query = this.db
+      .from('users')
       .select('id,cedula,nombre_completo,telefono,activo,created_at', { count: 'exact' })
       .eq('rol', 'instructor');
     const searchFilter = buildIlikeOr(['nombre_completo', 'cedula'], q);
@@ -142,8 +165,12 @@ export class InstructorService {
   }
 
   private async row(id: string): Promise<UserRow> {
-    const { data, error } = await this.db.from('users').select().eq('id', id)
-      .eq('rol', 'instructor').maybeSingle();
+    const { data, error } = await this.db
+      .from('users')
+      .select()
+      .eq('id', id)
+      .eq('rol', 'instructor')
+      .maybeSingle();
     if (error) throw new AppError('No se pudo consultar el instructor', 500);
     if (!data) throw new AppError('Instructor no encontrado', 404);
     return data;
@@ -156,12 +183,19 @@ export class InstructorService {
     return { ...summary(row), correo: data.user.email };
   }
 
-  async update(id: string, fields: { nombreCompleto?: string; telefono?: string }): Promise<InstructorDetail> {
+  async update(
+    id: string,
+    fields: { nombreCompleto?: string; telefono?: string },
+  ): Promise<InstructorDetail> {
     await this.row(id);
     const update: Database['public']['Tables']['users']['Update'] = {};
     if (fields.nombreCompleto !== undefined) update.nombre_completo = fields.nombreCompleto;
     if (fields.telefono !== undefined) update.telefono = fields.telefono;
-    const { error } = await this.db.from('users').update(update).eq('id', id).eq('rol', 'instructor');
+    const { error } = await this.db
+      .from('users')
+      .update(update)
+      .eq('id', id)
+      .eq('rol', 'instructor');
     if (error) throw new AppError('No se pudo actualizar el instructor', 500);
     return this.get(id);
   }
@@ -172,7 +206,8 @@ export class InstructorService {
     // bloqueando la cuenta. Al desactivar, la BD se cierra primero.
     if (active) await this.setAuthBan(id, false);
     const { data, error } = await this.db.rpc('set_instructor_active', {
-      p_id: id, p_active: active,
+      p_id: id,
+      p_active: active,
     });
     if (error?.code === 'CD024')
       throw new AppError('El instructor tiene franjas futuras asignadas o confirmadas', 409);
@@ -186,7 +221,8 @@ export class InstructorService {
     const { error } = await this.db.auth.admin.updateUserById(id, {
       ban_duration: banned ? '876000h' : 'none',
     });
-    if (error) throw new AppError('El estado de acceso requiere reconciliación administrativa', 503);
+    if (error)
+      throw new AppError('El estado de acceso requiere reconciliación administrativa', 503);
   }
 
   async resendCredentials(id: string): Promise<void> {
@@ -200,12 +236,18 @@ export class InstructorService {
       password: temporaryPassword,
     });
     if (updateError) throw new AppError('No se pudo regenerar la contraseña temporal', 502);
-    const { error: flagError } = await this.db.from('users')
-      .update({ debe_cambiar_password: true }).eq('id', id).eq('rol', 'instructor');
-    if (flagError) throw new AppError('El estado de la contraseña requiere reconciliación administrativa', 503);
+    const { error: flagError } = await this.db
+      .from('users')
+      .update({ debe_cambiar_password: true })
+      .eq('id', id)
+      .eq('rol', 'instructor');
+    if (flagError)
+      throw new AppError('El estado de la contraseña requiere reconciliación administrativa', 503);
     try {
       await this.email.sendInstructorCredentials({
-        to: data.user.email, nombreCompleto: row.nombre_completo, temporaryPassword,
+        to: data.user.email,
+        nombreCompleto: row.nombre_completo,
+        temporaryPassword,
       });
     } catch {
       throw new AppError('No se pudo enviar el correo de acceso; puedes reintentarlo', 502);
@@ -230,22 +272,33 @@ export class InstructorService {
     }
     if (authResult.error) throw new AppError('No se pudo restablecer la contraseña en Auth', 502);
 
-    const { error: flagError } = await this.db.from('users')
-      .update({ debe_cambiar_password: true }).eq('id', id).eq('rol', 'instructor');
+    const { error: flagError } = await this.db
+      .from('users')
+      .update({ debe_cambiar_password: true })
+      .eq('id', id)
+      .eq('rol', 'instructor');
     if (flagError) {
       // Auth y public.users no comparten transacción. No enviamos una clave
       // sin bloqueo de acceso; el administrador debe reintentar o reconciliar.
-      throw new AppError('La contraseña cambió en Auth, pero el estado requiere reconciliación; reintenta', 503);
+      throw new AppError(
+        'La contraseña cambió en Auth, pero el estado requiere reconciliación; reintenta',
+        503,
+      );
     }
 
     try {
       await this.email.sendInstructorCredentials({
-        to: data.user.email, nombreCompleto: row.nombre_completo,
-        temporaryPassword: generatedPassword, reason: 'admin_reset',
+        to: data.user.email,
+        nombreCompleto: row.nombre_completo,
+        temporaryPassword: generatedPassword,
+        reason: 'admin_reset',
       });
     } catch {
       // El reintento genera una clave nueva y reemplaza esta; jamás se expone.
-      throw new AppError('La contraseña cambió, pero el correo no se envió; reintenta para generar una nueva clave', 502);
+      throw new AppError(
+        'La contraseña cambió, pero el correo no se envió; reintenta para generar una nueva clave',
+        502,
+      );
     }
     console.warn(JSON.stringify({ adminId, instructorId: id, fecha: new Date().toISOString() }));
   }

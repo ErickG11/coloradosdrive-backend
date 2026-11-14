@@ -1,5 +1,10 @@
 # Contenido y Exámenes — F1
 
+Actualización operativa: Erick confirma 065, 066a y 066b ya aplicadas. No volver
+a ejecutarlas para incorporar imágenes. La entrega aditiva 067 y el contrato
+de imágenes de preguntas se documentan en [examenes-imagenes.md](examenes-imagenes.md).
+Las instrucciones 066 que siguen se conservan como historial y recuperación.
+
 Rama `feat/examenes-contenido-f1`. Node >=22 <23. Backend únicamente.
 064 continúa reservada según `inscripcion-orden-migraciones.md`. La 065 **ya está
 aplicada** en la base real: no modificarla ni volver a ejecutarla. La 029 se

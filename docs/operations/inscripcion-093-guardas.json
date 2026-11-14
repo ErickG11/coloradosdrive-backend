@@ -1,0 +1,18 @@
+{
+  "functions": [
+    {
+      "signature": "private.student_realtime_account_active()",
+      "before": "06ce7ad81b5af41a2e1999f1c7708946",
+      "after": "06ce7ad81b5af41a2e1999f1c7708946",
+      "kind": "dependency"
+    }
+  ],
+  "newFunctionHashes": [],
+  "policies": [
+    {
+      "name": "notifications_broadcast_v14",
+      "table": "realtime.messages",
+      "kind": "replacement"
+    }
+  ]
+}

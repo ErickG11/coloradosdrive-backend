@@ -1,0 +1,56 @@
+{
+  "functions": [
+    {
+      "signature": "private.reserve_schedule_v2(uuid,uuid,jsonb)",
+      "before": "b6b2ee2afd0866b255ccaa9ef1fbd26c",
+      "after": "8a3a24737c168e6e681556688d5dd66a",
+      "kind": "replacement"
+    },
+    {
+      "signature": "private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text)",
+      "before": "6fbf8dea16054980095bd760988b2baf",
+      "after": "9291bb7618029eec0cf60cb43369fd3b",
+      "kind": "replacement"
+    },
+    {
+      "signature": "private.confirm_plan_change_v2(uuid,uuid,uuid)",
+      "before": "7367c7611d0c2eba97f64f2d8aa422c6",
+      "after": "05a7e7af217d5516e536ee2d7725bafe",
+      "kind": "replacement"
+    }
+  ],
+  "newFunctions": [
+    "public.student_practice_block_options_v14",
+    "public.student_practice_block_summary_v14",
+    "public.take_practice_block_v14",
+    "private.reserve_schedule_v2",
+    "private.confirm_payment_v2",
+    "private.confirm_plan_change_v2"
+  ],
+  "newFunctionHashes": [
+    {
+      "signature": "student_practice_block_options_v14(uuid)",
+      "after": "8309997a78af2bd7d4bf8b073e1806da"
+    },
+    {
+      "signature": "student_practice_block_summary_v14(uuid)",
+      "after": "209dbdd18865812ece2e054ceb902483"
+    },
+    {
+      "signature": "take_practice_block_v14(uuid,uuid,text)",
+      "after": "a206d11976c334e90a31348071e8e0a0"
+    },
+    {
+      "signature": "private.reserve_schedule_v2(uuid,uuid,jsonb)",
+      "after": "8a3a24737c168e6e681556688d5dd66a"
+    },
+    {
+      "signature": "private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text)",
+      "after": "9291bb7618029eec0cf60cb43369fd3b"
+    },
+    {
+      "signature": "private.confirm_plan_change_v2(uuid,uuid,uuid)",
+      "after": "05a7e7af217d5516e536ee2d7725bafe"
+    }
+  ]
+}

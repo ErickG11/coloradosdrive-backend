@@ -1,3 +1,4 @@
+import { translateCohortSqlError } from '../config/cohortErrors';
 import { AppError } from './AppError';
 import { logSafeError } from './safeLog';
 const map: Record<string, [number, string, string]> = {
@@ -28,6 +29,8 @@ const map: Record<string, [number, string, string]> = {
 };
 export function throwStudentPaymentError(error: unknown): never {
   if (error instanceof AppError) throw error;
+  const domain = translateCohortSqlError(error);
+  if (domain) throw domain;
   const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
   const item = typeof code === 'string' ? map[code] : undefined;
   if (item) throw new AppError(item[2], item[0], { code: item[1] });

@@ -15,6 +15,8 @@ const notification: NotificationRow = {
 function harness(row = notification) {
   const rpc = jest.fn().mockImplementation((name: string) => name === 'claim_notification_email'
     ? createChain({ data: null, error: null }) : Promise.resolve({ data: true, error: null }));
+  // runOnce mantiene primero la lista de espera (maintain_waitlist_v12) y luego reclama correos.
+  rpc.mockResolvedValueOnce({ data: null, error: null });
   rpc.mockReturnValueOnce(createChain({ data: row, error: null }));
   const from = jest.fn().mockReturnValue(createChain({ data: { activo: true, nombre_completo: 'Alumno' }, error: null }));
   const getUserById = jest.fn().mockResolvedValue({ data: { user: { email: 'fixture@example.invalid' } }, error: null });
@@ -39,7 +41,7 @@ describe('cola persistente de correos', () => {
     await h.service.runOnce();
     expect(h.email.sendPracticeConfirmationRequestEmail).toHaveBeenCalledTimes(1);
     expect(h.rpc).toHaveBeenCalledWith('finish_notification_email', {
-      p_id: 'notification', p_token: 'lease', p_error: 'SMTP no disponible',
+      p_id: 'notification', p_token: 'lease', p_error: 'NOTIFICATION_DELIVERY_FAILED',
     });
   });
   it('un destinatario desactivado no recibe correo', async () => {
@@ -47,7 +49,7 @@ describe('cola persistente de correos', () => {
     h.from.mockReturnValue(createChain({ data: { activo: false }, error: null }));
     await h.service.runOnce();
     expect(h.email.sendPracticeConfirmationRequestEmail).not.toHaveBeenCalled();
-    expect(h.rpc).toHaveBeenCalledWith('finish_notification_email', expect.objectContaining({ p_error: 'Destinatario inactivo o inexistente' }));
+    expect(h.rpc).toHaveBeenCalledWith('finish_notification_email', expect.objectContaining({ p_error: 'NOTIFICATION_DELIVERY_FAILED' }));
   });
   it('procesa el aviso de bloque vacio al instructor', async () => {
     const h = harness({ ...notification, tipo: 'sin_practica_instructor' });

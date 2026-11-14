@@ -1,3 +1,4 @@
+import type { IndividualEnrollmentSnapshot } from './enrollmentFoundation.model';
 // 'pendiente_cohorte': inscripción aprobada pero sin cohorte asignada
 // (ninguna cohorte del curso tenía matrícula abierta al momento de la
 // asignación automática). En etapa reservado puede tener cohorte tentativa sin monto (ver
@@ -6,12 +7,14 @@ export const ENROLLMENT_STATUSES = [
   'activo',
   'finalizado',
   'retirado',
+  'anulada',
   'pendiente_cohorte',
 ] as const;
 
 export type EnrollmentStatus = (typeof ENROLLMENT_STATUSES)[number];
 
 export interface Enrollment {
+  individualDates?: IndividualEnrollmentSnapshot;
   id: string;
   studentId: string;
   cohortId: string | null;

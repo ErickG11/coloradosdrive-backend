@@ -1,3 +1,7 @@
+import { studentBillingRouter } from './billing.routes';
+import { planChangeRouter } from './planChange.routes';
+import { param } from 'express-validator';
+import { individualEnrollmentAccess } from '../services/individualEnrollmentAccess.service';
 import { Router } from 'express';
 import { studentPaymentRouter } from './studentPayment.routes';
 import { studentScheduleRouter } from './studentSchedule.routes';
@@ -22,11 +26,14 @@ import { requireRole } from '../middlewares/rbac.middleware';
 import { validate, validateFields } from '../middlewares/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
+import { authenticatedUserId } from '../utils/requestUser';
 
 export const estudianteRouter = Router();
 
 estudianteRouter.use(asyncHandler(authenticate), requireRole('estudiante'));
 estudianteRouter.use('/inscripcion/pagos', studentPaymentRouter);
+estudianteRouter.use('/inscripcion/cambio', planChangeRouter);
+estudianteRouter.use('/inscripcion/facturacion', studentBillingRouter);
 estudianteRouter.use('/inscripcion', studentScheduleRouter);
 // Solo lectura: el alumno con cuenta no sube documentos; los físicos se llevan a la escuela.
 const estadoInscripcion = new StudentEnrollmentStatusService(supabaseAdmin);
@@ -35,6 +42,26 @@ estudianteRouter.get(
   asyncHandler(async (req, res) => {
     if (!req.user) throw new AppError('Authentication required', 401);
     res.set('Cache-Control', 'no-store').json(await estadoInscripcion.get(req.user.id));
+  }),
+);
+estudianteRouter.get(
+  '/inscripcion/matriculas',
+  asyncHandler(async (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .json(await individualEnrollmentAccess(supabaseAdmin, authenticatedUserId(req)));
+  }),
+);
+estudianteRouter.get(
+  '/estado-inscripcion/:enrollmentId',
+  param('enrollmentId').isUUID(),
+  validateFields,
+  asyncHandler(async (req, res) => {
+    res
+      .set('Cache-Control', 'no-store')
+      .json(
+        await estadoInscripcion.get(authenticatedUserId(req), new Date(), req.params.enrollmentId),
+      );
   }),
 );
 estudianteRouter.get('/practice-history/enrollments', asyncHandler(studentPracticeEnrollments));

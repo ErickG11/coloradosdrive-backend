@@ -11,6 +11,7 @@ import type { NotificationRow } from '../../src/models/notification.model';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const rpc = supabaseAdmin.rpc as jest.Mock;
 const from = supabaseAdmin.from as jest.Mock;
@@ -82,7 +83,7 @@ describe('API de notificaciones del propietario', () => {
       const res = await request(app).get(`/notifications?${query}`).set('Authorization', auth());
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('INVALID_FIELD');
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     },
   );
   it('expone la correccion como aviso solo de bandeja vinculado a su evento', async () => {
@@ -170,14 +171,12 @@ describe('API de notificaciones del propietario', () => {
     expect(res.body).toEqual({ updatedCount: 2 });
     expect(rpc).toHaveBeenCalledWith('read_all_user_notifications', { p_user: 'test-user-id' });
   });
-  it('valida UUID y requiere sesion con rol de alumno o instructor', async () => {
+  it('valida UUID y requiere sesion', async () => {
     expect(
       (await request(app).patch('/notifications/no-uuid/read').set('Authorization', auth())).status,
     ).toBe(400);
     expect((await request(app).get('/notifications')).status).toBe(401);
-    expect(
-      (await request(app).get('/notifications').set('Authorization', auth('admin'))).status,
-    ).toBe(403);
-    expect(rpc).not.toHaveBeenCalled();
+    // Desde los avisos de falta registrada, el administrador también tiene bandeja propia.
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 });

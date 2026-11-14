@@ -1,0 +1,135 @@
+{
+  "functions": [
+    {
+      "signature": "private.notify_released_block_v14(uuid)",
+      "before": "2c0d07aaeea4d36bac4f5bdb37a41849",
+      "after": "1ece6f5e6cd66087ea65e8b29f826fbb",
+      "kind": "replacement"
+    },
+    {
+      "signature": "cancel_practice_block_with_reason_v14(uuid,uuid,date,text,text)",
+      "before": "66e5c7cf21f698bd96ee088b796eac3c",
+      "after": "a3a4703ac5b5c908ef392fed708d1be8",
+      "kind": "replacement"
+    },
+    {
+      "signature": "take_practice_block_v14(uuid,uuid,text)",
+      "before": "a206d11976c334e90a31348071e8e0a0",
+      "after": "8cb5513f1f4f47c5c12eb97973f1c6af",
+      "kind": "replacement"
+    },
+    {
+      "signature": "transition_practice_slot_for_scheduler(uuid,text,text)",
+      "before": "e9a05c800b9daf2081be77f9c6b3691f",
+      "after": "d5cbecbfc7f35a57691cc29a207e7b55",
+      "kind": "replacement"
+    },
+    {
+      "signature": "private.practice_block_v14(uuid,uuid,date)",
+      "before": "6b48e665db82f1d16a1501d8e58b8c85",
+      "after": "884fb434efa35e480627daa4d92f1814",
+      "kind": "replacement"
+    },
+    {
+      "signature": "private.practice_block_options_v14(uuid,date)",
+      "before": "3e71e918864f829d3fc95aabfafac86a",
+      "after": "acb4a4722fd4c32746b2da0acbbcd737",
+      "kind": "replacement"
+    },
+    {
+      "signature": "confirm_practice_block_v14(uuid,uuid,date)",
+      "before": "4c21eec9ce2e052b9391e107ed27be6f",
+      "after": "36c45e621e8c5a7b121b095b9dbd13bd",
+      "kind": "replacement"
+    },
+    {
+      "signature": "student_practice_history(uuid,uuid,integer,integer)",
+      "before": "f51b4183d6f4c83f10cf9988e7cbd4b2",
+      "after": "539beba6c7bcf5e149e07b40398eb1e6",
+      "kind": "replacement"
+    }
+  ],
+  "newFunctions": [
+    "private.practice_block_result_message_v14",
+    "private.practice_block_instructor_notice_v14",
+    "private.practice_block_absence_notice_v14",
+    "private.notify_released_block_v14",
+    "public.admin_practice_absences_v14",
+    "public.cancel_practice_block_with_reason_v14",
+    "public.take_practice_block_v14",
+    "private.base_scheduler_transition_v14",
+    "public.transition_practice_slot_for_scheduler"
+  ],
+  "schemaGuards": [
+    {
+      "conname": "notifications_tipo_check",
+      "definition": "CHECK (((tipo = ANY (ARRAY['recordatorio_practica'::text, 'resultado_cancelacion'::text, 'cupo_disponible'::text, 'sin_practica_instructor'::text, 'cambio_realizado'::text, 'asistencia_corregida'::text, 'encuesta_practica'::text, 'documento_aprobado'::text, 'documento_rechazado'::text, 'contenido_habilitado'::text, 'examen_habilitado'::text, 'intento_extra'::text])) OR (tipo = 'espera_apertura'::text) OR (tipo = 'plan_cambiado'::text)))",
+      "hash": "5fd97756c26548e0b84287fc153a1b33"
+    }
+  ],
+  "newFunctionHashes": [
+    {
+      "signature": "private.practice_block_options_v14(uuid,date)",
+      "after": "acb4a4722fd4c32746b2da0acbbcd737"
+    },
+    {
+      "signature": "private.practice_block_v14(uuid,uuid,date)",
+      "after": "884fb434efa35e480627daa4d92f1814"
+    },
+    {
+      "signature": "take_practice_block_v14(uuid,uuid,text)",
+      "after": "8cb5513f1f4f47c5c12eb97973f1c6af"
+    },
+    {
+      "signature": "private.base_scheduler_transition_v14(uuid,text,text)",
+      "after": "e9a05c800b9daf2081be77f9c6b3691f"
+    },
+    {
+      "signature": "transition_practice_slot_for_scheduler(uuid,text,text)",
+      "after": "d5cbecbfc7f35a57691cc29a207e7b55"
+    },
+    {
+      "signature": "private.notify_released_block_v14(uuid)",
+      "after": "1ece6f5e6cd66087ea65e8b29f826fbb"
+    },
+    {
+      "signature": "cancel_practice_block_with_reason_v14(uuid,uuid,date,text,text)",
+      "after": "a3a4703ac5b5c908ef392fed708d1be8"
+    },
+    {
+      "signature": "private.practice_block_result_message_v14(jsonb,text,integer)",
+      "after": "56683e3692d18da51511cc4019c65c4b"
+    },
+    {
+      "signature": "private.practice_block_instructor_notice_v14(uuid,uuid,text)",
+      "after": "318b205fca48cd7b7707779dbe95e1e9"
+    },
+    {
+      "signature": "private.practice_block_absence_notice_v14(uuid,uuid,jsonb)",
+      "after": "47c6819d802f7333e64819b6858989da"
+    },
+    {
+      "signature": "admin_practice_absences_v14(uuid,uuid)",
+      "after": "7d126722c847189276f03d2ed7ee5c4e"
+    },
+    {
+      "signature": "confirm_practice_block_v14(uuid,uuid,date)",
+      "after": "36c45e621e8c5a7b121b095b9dbd13bd"
+    },
+    {
+      "signature": "instructor_practice_blocks_v14(uuid,date,date)",
+      "after": "33b9d31cf269f339877543a393027864"
+    },
+    {
+      "signature": "student_practice_history(uuid,uuid,integer,integer)",
+      "after": "539beba6c7bcf5e149e07b40398eb1e6"
+    }
+  ],
+  "newSchema": [
+    {
+      "conname": "notifications_blocks_inbox_only_v14",
+      "definition": "CHECK (((tipo <> ALL (ARRAY['cambio_agenda_instructor'::text, 'falta_registrada_admin'::text])) OR (email_status IS NULL)))",
+      "hash": "447e76a3d7c39f3e441819ad0c991e87"
+    }
+  ]
+}

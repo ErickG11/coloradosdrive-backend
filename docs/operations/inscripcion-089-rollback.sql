@@ -1,0 +1,21 @@
+begin;
+set local lock_timeout='5s';
+-- Rollback condicionado a los cuerpos instalados; nunca sobreescribir cambios ajenos.
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.practice_block_options_v14(uuid,date)')) is distinct from '3e71e918864f829d3fc95aabfafac86a' then raise exception 'ROLLBACK_089: cuerpo desconocido: private.practice_block_options_v14(uuid,date)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.practice_block_v14(uuid,uuid,date)')) is distinct from '6b48e665db82f1d16a1501d8e58b8c85' then raise exception 'ROLLBACK_089: cuerpo desconocido: private.practice_block_v14(uuid,uuid,date)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.practice_block_effect_v14(text,integer)')) is distinct from 'fcde7be22e2a24292069ddd384dcf8c6' then raise exception 'ROLLBACK_089: cuerpo desconocido: private.practice_block_effect_v14(text,integer)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('preview_practice_block_cancellation_v14(uuid,uuid,date)')) is distinct from 'ed2f39e37495cb1d08a6ebea53cb7216' then raise exception 'ROLLBACK_089: cuerpo desconocido: preview_practice_block_cancellation_v14(uuid,uuid,date)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('private.notify_released_block_v14(uuid)')) is distinct from '2c0d07aaeea4d36bac4f5bdb37a41849' then raise exception 'ROLLBACK_089: cuerpo desconocido: private.notify_released_block_v14(uuid)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('cancel_practice_block_with_reason_v14(uuid,uuid,date,text,text)')) is distinct from '66e5c7cf21f698bd96ee088b796eac3c' then raise exception 'ROLLBACK_089: cuerpo desconocido: cancel_practice_block_with_reason_v14(uuid,uuid,date,text,text)';end if;end $guard$;
+do $guard$ begin if (select md5(replace(prosrc,chr(13),'')) from pg_proc where oid=to_regprocedure('confirm_practice_block_v14(uuid,uuid,date)')) is distinct from '4c21eec9ce2e052b9391e107ed27be6f' then raise exception 'ROLLBACK_089: cuerpo desconocido: confirm_practice_block_v14(uuid,uuid,date)';end if;end $guard$;
+do $$begin if exists(select 1 from public.practice_slot_cancellations where block_slot_ids is not null) then raise exception 'ROLLBACK_089: existen operaciones por bloque; conservar la auditoría y revisar antes de revertir';end if;end $$;
+drop function public.confirm_practice_block_v14(uuid,uuid,date);
+drop function public.cancel_practice_block_with_reason_v14(uuid,uuid,date,text,text);
+drop function private.notify_released_block_v14(uuid);
+drop function public.preview_practice_block_cancellation_v14(uuid,uuid,date);
+drop function private.practice_block_effect_v14(text,integer);
+drop function private.practice_block_options_v14(uuid,date);
+drop function private.practice_block_v14(uuid,uuid,date);
+alter table public.practice_slot_cancellations drop constraint practice_cancellation_block_v14,drop column block_slot_ids,drop column block_hours,drop column block_local_date;
+notify pgrst, 'reload schema';
+commit;

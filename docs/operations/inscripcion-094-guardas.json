@@ -1,0 +1,40 @@
+{
+  "functions": [
+    {
+      "signature": "private.resolve_item_access(uuid,uuid)",
+      "before": "efd9ee913610bb265ac217debfcd7c6d",
+      "after": "efd9ee913610bb265ac217debfcd7c6d",
+      "kind": "dependency"
+    },
+    {
+      "signature": "content_start_attempt(uuid,uuid)",
+      "before": "39a5723aef9646a802b1f83c7c12eeb4",
+      "after": "39a5723aef9646a802b1f83c7c12eeb4",
+      "kind": "dependency"
+    },
+    {
+      "signature": "content_student(uuid,text,jsonb)",
+      "before": "0054e2ec7e7eb2967f16d43b8cd5c4b8",
+      "after": "0054e2ec7e7eb2967f16d43b8cd5c4b8",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.content_student(uuid,text,jsonb)",
+      "before": "e532f5a455c093db49ebd1b00d39d157",
+      "after": "a47de72445a97353fd691e175faa5f30",
+      "kind": "replacement"
+    },
+    {
+      "signature": "private.start_exam_attempt(uuid,uuid)",
+      "before": "22eac9bc6893007fe8ae7641468195c5",
+      "after": "20253c5dfbcf538254bac79783d72a02",
+      "kind": "replacement"
+    }
+  ],
+  "newFunctionHashes": [
+    {
+      "signature": "private.exam_prerequisites_v20(uuid,uuid)",
+      "after": "96dba899be0dd956b6b0dd5c3589bff6"
+    }
+  ]
+}

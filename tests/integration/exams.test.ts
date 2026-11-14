@@ -121,9 +121,11 @@ describe('exams endpoints', () => {
     });
 
     it('POST /exams con rol estudiante responde 403', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      ).mockReturnValueOnce(sinInscripcionPendiente());
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+        )
+        .mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .post('/exams')
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`)
@@ -140,9 +142,11 @@ describe('exams endpoints', () => {
     });
 
     it('GET /exams/:id (detalle completo) con rol estudiante responde 403', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      ).mockReturnValueOnce(sinInscripcionPendiente());
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+        )
+        .mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .get(`/exams/${examId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
@@ -151,9 +155,11 @@ describe('exams endpoints', () => {
     });
 
     it('DELETE /exams/:id con rol estudiante responde 403', async () => {
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
-      ).mockReturnValueOnce(sinInscripcionPendiente());
+      mockedFrom
+        .mockReturnValueOnce(
+          createChain({ data: { activo: true, debe_cambiar_password: false }, error: null }),
+        )
+        .mockReturnValueOnce(sinInscripcionPendiente());
       const res = await request(app)
         .delete(`/exams/${examId}`)
         .set('Authorization', `Bearer ${mockAuthToken(mockedVerifySupabaseJwt, 'estudiante')}`);
@@ -324,9 +330,10 @@ describe('exams endpoints', () => {
   describe('DELETE /exams/:id (admin)', () => {
     it('responde 409 si el examen ya tiene intentos registrados', async () => {
       // Ruta de la restricción de clave foránea (23503): mensaje nuevo, sin código de contenido.
-      mockedFrom.mockReturnValueOnce(
-        createChain({ data: null, error: { code: '23503', message: 'foreign key violation' } }),
-      );
+      mockedRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: '23503', message: 'foreign key violation' },
+      });
 
       const res = await request(app)
         .delete(`/exams/${examId}`)
@@ -341,12 +348,10 @@ describe('exams endpoints', () => {
 
     it('responde 409 EXAM_HAS_ATTEMPTS_UNPUBLISH cuando el trigger de la base bloquea borrar un examen con intentos', async () => {
       // Ruta real con intentos desde la migración 065: el trigger lanza CF409.
-      mockedFrom.mockReturnValueOnce(
-        createChain({
-          data: null,
-          error: { code: 'CF409', message: 'EXAM_HAS_ATTEMPTS_UNPUBLISH' },
-        }),
-      );
+      mockedRpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'CF409', message: 'EXAM_HAS_ATTEMPTS_UNPUBLISH' },
+      });
 
       const res = await request(app)
         .delete(`/exams/${examId}`)
@@ -358,7 +363,7 @@ describe('exams endpoints', () => {
     });
 
     it('elimina el examen y responde 204', async () => {
-      mockedFrom.mockReturnValueOnce(createChain({ data: null, error: null, count: 1 }));
+      mockedRpc.mockResolvedValueOnce({ data: { paths: [] }, error: null });
 
       const res = await request(app)
         .delete(`/exams/${examId}`)

@@ -1,3 +1,4 @@
+import { individualEnrollmentAccess } from './individualEnrollmentAccess.service';
 import { expireStudentSchedule } from './studentScheduleExpiry.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
@@ -11,6 +12,8 @@ export async function inscripcionIncompleta(
   db: SupabaseClient<Database>,
   studentId: string,
 ): Promise<boolean> {
+  const access = await individualEnrollmentAccess(db, studentId);
+  if (access.active) return !access.enrollments.some((e) => e.eligible);
   const { data, error } = await db
     .from('enrollments')
     .select('id,etapa_inscripcion,reserva_expira_at')
@@ -33,11 +36,28 @@ export async function inscripcionIncompleta(
 // Lista cerrada: cualquier nueva ruta autenticada queda bloqueada por defecto.
 export function permiteInscripcionIncompleta(method: string, mountedPath: string): boolean {
   const path = mountedPath.replace(/\/+$/, '');
+  if (['GET', 'PATCH'].includes(method) && path === '/estudiantes/inscripcion/facturacion')
+    return true;
   if (
-    method === 'GET' &&
-    ['/estudiantes/estado-inscripcion', '/estudiantes/account-status', '/notifications'].includes(
+    ['GET', 'POST'].includes(method) &&
+    /^\/estudiantes\/inscripcion\/cambio\/(?:[\da-f-]{36}(?:\/(?:preview|reservar|calendario))?|reserva\/[\da-f-]{36}\/confirmar)$/i.test(
       path,
     )
+  )
+    return true;
+  if (['GET', 'POST'].includes(method) && path === '/estudiantes/inscripcion/espera') return true;
+  if (method === 'GET' && /^\/estudiantes\/estado-inscripcion\/[\da-f-]{36}$/i.test(path))
+    return true;
+  if (
+    method === 'GET' &&
+    [
+      '/estudiantes/estado-inscripcion',
+      '/estudiantes/account-status',
+      '/notifications',
+      '/estudiantes/inscripcion/horario/config',
+      '/estudiantes/inscripcion/facturacion',
+      '/estudiantes/inscripcion/matriculas',
+    ].includes(path)
   )
     return true;
   if (
@@ -45,10 +65,16 @@ export function permiteInscripcionIncompleta(method: string, mountedPath: string
     ['/estudiantes/cambiar-password', '/notifications/read-all'].includes(path)
   )
     return true;
-  if (method === 'GET' && path === '/estudiantes/inscripcion/reserva') return true;
+  if (
+    method === 'GET' &&
+    (path === '/estudiantes/inscripcion/reserva' ||
+      /^\/estudiantes\/inscripcion\/reserva\/matricula\/[\da-f-]{36}$/i.test(path))
+  )
+    return true;
   if (
     method === 'POST' &&
     ([
+      '/estudiantes/inscripcion/horario/calendario',
       '/estudiantes/inscripcion/horario/opciones',
       '/estudiantes/inscripcion/horario/plan',
       '/estudiantes/inscripcion/reservas',

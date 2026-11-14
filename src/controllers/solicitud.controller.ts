@@ -35,7 +35,7 @@ export async function verificarCorreo(
   res: Response<{ message: string }>,
 ): Promise<void> {
   const { correo, courseId } = req.body as VerificarCorreoInput;
-  await uniformVerification(()=>solicitudService.verificarCorreo(correo,courseId));
+  await uniformVerification(() => solicitudService.verificarCorreo(correo, courseId));
   res.status(200).json({ message: MENSAJE_VERIFICACION_CORREO });
 }
 
@@ -52,10 +52,7 @@ export async function completarDatos(
   req: Request,
   res: Response<CompletarDatosResult>,
 ): Promise<void> {
-  const result = await solicitudService.completarDatos(
-    req.params.id,
-    req.body as unknown,
-  );
+  const result = await solicitudService.completarDatos(req.params.id, req.body as unknown);
   res.status(200).json(result);
 }
 
@@ -69,13 +66,15 @@ export async function subirDocumento(
     });
   }
   const { buffer, mimetype, originalname } = req.file;
-  res.status(201).json(
-    await solicitudService.subirCertificado(
-      req.params.id,
-      { buffer, mimetype, originalname },
-      req.body as unknown,
-    ),
-  );
+  res
+    .status(201)
+    .json(
+      await solicitudService.subirCertificado(
+        req.params.id,
+        { buffer, mimetype, originalname },
+        req.body as unknown,
+      ),
+    );
 }
 
 // --- Admin ---------------------------------------------------------------
@@ -102,7 +101,9 @@ export async function listarSolicitudes(req: Request, res: Response): Promise<vo
 }
 
 export async function detalleSolicitud(req: Request, res: Response): Promise<void> {
-  res.set('Cache-Control', 'no-store').json(await adminService.detalle(req.params.id));
+  res
+    .set('Cache-Control', 'no-store')
+    .json(await adminService.detalle(req.params.id, req.user?.id));
 }
 
 export async function registrarVerificacion(req: Request, res: Response): Promise<void> {
@@ -135,17 +136,26 @@ export function avisoPrivacidad(_req: Request, res: Response): void {
   res.set('Cache-Control', 'no-store').json(privacyNotice());
 }
 export async function progresoSolicitud(req: Request, res: Response): Promise<void> {
-  const progress=await privacyService.progress(req.params.id);
-  res.json({...progress,puedeEditar:req.solicitudScope==='edicion'&&['borrador','devuelta'].includes(progress.estado)});
+  const progress = await privacyService.progress(req.params.id);
+  res.json({
+    ...progress,
+    puedeEditar:
+      req.solicitudScope === 'edicion' && ['borrador', 'devuelta'].includes(progress.estado),
+  });
 }
 
 export async function aceptarConsentimiento(req: Request, res: Response): Promise<void> {
   res.json(await privacyService.accept(req.params.id, req.body as unknown));
 }
 
-
 export async function documentoUrl(req: Request, res: Response): Promise<void> {
-  res.json(await new SolicitudDocumentAccessService(supabaseAdmin).url(req.params.id, req.params.docId, requireAdminId(req)));
+  res.json(
+    await new SolicitudDocumentAccessService(supabaseAdmin).url(
+      req.params.id,
+      req.params.docId,
+      requireAdminId(req),
+    ),
+  );
 }
 
 export async function eliminarSolicitud(req: Request, res: Response): Promise<void> {
@@ -165,4 +175,6 @@ export async function reenviarSolicitud(req: Request, res: Response): Promise<vo
   res.json(await solicitudService.reenviar(req.params.id));
 }
 
-export async function resumenSolicitudes(_req:Request,res:Response):Promise<void>{res.json(await solicitudService.resumen());}
+export async function resumenSolicitudes(_req: Request, res: Response): Promise<void> {
+  res.json(await solicitudService.resumen());
+}

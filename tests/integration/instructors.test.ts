@@ -18,6 +18,9 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+// requestCorrelation también escribe en console.warn: aquí solo importa el registro de auditoría.
+const auditLogs = (log: jest.SpyInstance): unknown[][] =>
+  (log.mock.calls as unknown[][]).filter(([line]) => !String(line).includes('"correlationId"'));
 
 const from = supabaseAdmin.from as jest.Mock;
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -270,9 +273,9 @@ describe('módulo de instructores', () => {
       expect(sendMail.mock.calls[0][0].text).toContain(`Contraseña temporal: ${password}`);
       expect(sendMail.mock.calls[0][0].text).toContain('Un administrador solicitó restablecer');
       expect(JSON.stringify(res.body)).not.toContain(password);
-      expect(log).toHaveBeenCalledTimes(1);
+      expect(auditLogs(log)).toHaveLength(1);
       expect(JSON.stringify(log.mock.calls)).not.toContain(password);
-      expect(JSON.parse(log.mock.calls[0][0] as string)).toEqual({
+      expect(JSON.parse(auditLogs(log)[0][0] as string)).toEqual({
         adminId: 'test-user-id', instructorId: id, fecha: expect.any(String),
       });
     } finally {
@@ -334,14 +337,14 @@ describe('módulo de instructores', () => {
       expect(failed.status).toBe(502);
       expect(failed.body.message).toContain('reintenta para generar una nueva clave');
       expect(flag1.update).toHaveBeenCalledWith({ debe_cambiar_password: true });
-      expect(log).not.toHaveBeenCalled();
+      expect(auditLogs(log)).toHaveLength(0);
       const retried = await request(app).post(`/admin/instructores/${id}/restablecer-password`)
         .set('Authorization', token('admin')).send({});
       expect(retried.status).toBe(204);
       expect(updateUser.mock.calls[0][1].password).not.toBe(updateUser.mock.calls[1][1].password);
       expect(flag2.update).toHaveBeenCalledWith({ debe_cambiar_password: true });
       expect(sendMail).toHaveBeenCalledTimes(2);
-      expect(log).toHaveBeenCalledTimes(1);
+      expect(auditLogs(log)).toHaveLength(1);
     } finally {
       log.mockRestore();
     }

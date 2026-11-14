@@ -1,3 +1,4 @@
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { Router } from 'express';
 import { body } from 'express-validator';
 
@@ -11,6 +12,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const cohortAssignmentRouter = Router();
 
 cohortAssignmentRouter.use(asyncHandler(authenticate), requireRole('admin'));
+cohortAssignmentRouter.use(requireEnrollmentPermission('reassign_schedules'));
 
 cohortAssignmentRouter.post(
   '/preview',

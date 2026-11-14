@@ -1,0 +1,967 @@
+import { AppError } from '../utils/AppError';
+
+export const COHORT_ERRORS = {
+  DOCUMENTO_ESTADO_INVALIDO: {
+    status: 400,
+    cause: 'Selecciona un documento y un estado válidos.',
+    student: 'Selecciona un documento y un estado válidos.',
+    admin: 'Selecciona un documento y un estado válidos.',
+    action: 'Recargar y revisar la operación.',
+  },
+  DOCUMENTO_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'El documento cambió. Recarga la ficha antes de guardar.',
+    student: 'El documento cambió. Recarga la ficha antes de guardar.',
+    admin: 'El documento cambió. Recarga la ficha antes de guardar.',
+    action: 'Recargar y revisar la operación.',
+  },
+  IDENTIDAD_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La gestión de documentos aún no está activada.',
+    student: 'La gestión de documentos aún no está activada.',
+    admin: 'La gestión de documentos aún no está activada.',
+    action: 'Recargar y revisar la operación.',
+  },
+  MATRICULA_RESERVA_EN_CURSO: {
+    status: 409,
+    cause: 'Resuelve primero la reserva o el pago en curso.',
+    student: 'Resuelve primero la reserva o el pago en curso.',
+    admin: 'Resuelve primero la reserva o el pago en curso.',
+    action: 'Recargar y revisar la operación.',
+  },
+  COHORTE_TIPO_INCOMPATIBLE: {
+    status: 409,
+    cause: 'El destino debe ser del mismo tipo de curso.',
+    student: 'El destino debe ser del mismo tipo de curso.',
+    admin: 'El destino debe ser del mismo tipo de curso.',
+    action: 'Recargar y revisar la operación.',
+  },
+  COHORTE_EXCEPCION_REQUERIDA: {
+    status: 409,
+    cause: 'El plan no cabe o la matrícula está cerrada. Confirma una excepción con motivo.',
+    student: 'El plan no cabe o la matrícula está cerrada. Confirma una excepción con motivo.',
+    admin: 'El plan no cabe o la matrícula está cerrada. Confirma una excepción con motivo.',
+    action: 'Recargar y revisar la operación.',
+  },
+  COHORTE_MATRICULA_FUERA_DE_CURSO: {
+    status: 422,
+    cause: 'El fin de matrícula supera el fin del curso.',
+    student: 'No se puede utilizar ese período de inscripción.',
+    admin:
+      'El fin de matrícula no puede superar el fin del curso. Extiende también el fin del curso o ajusta ambas fechas.',
+    action: 'Ajustar ambas fechas en la misma operación.',
+  },
+  ESPERA_YA_MATRICULADO: {
+    status: 409,
+    cause: 'Ya existe matrícula del tipo.',
+    student: 'Ya tienes una matrícula de este tipo.',
+    admin: 'Consulta la matrícula vigente o finalizada.',
+    action: 'No duplicar la marca de espera.',
+  },
+  PLAN_CONFIG_NO_DISPONIBLE: {
+    status: 503,
+    cause: 'No se pudo leer la configuración del plan',
+    student: 'No se pudo consultar el plan. Intenta nuevamente.',
+    admin: 'La configuración de reglas no está disponible.',
+    action: 'Verificar la configuración y reintentar.',
+  },
+  PLAN_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Formato, modalidad u horas fuera de rango',
+    student: 'Revisa la fecha, modalidad y horas de tu plan.',
+    admin:
+      'Elige una combinación habilitada y una hora dentro del horario configurado de la escuela.',
+    action: 'Corregir los campos indicados y volver a consultar.',
+  },
+  PLAN_INICIO_PASADO: {
+    status: 409,
+    cause: 'Primera fecha anterior al día de Guayaquil',
+    student: 'Elige una fecha de inicio desde hoy.',
+    admin: 'El inicio efectivo del plan está en el pasado.',
+    action: 'Seleccionar una fecha vigente.',
+  },
+  PLAN_FRANJA_PASADA: {
+    status: 409,
+    cause: 'Alguna franja ya comenzó',
+    student: 'Esa hora ya pasó. Elige una hora posterior.',
+    admin: 'Todas las franjas deben ser posteriores al instante del servidor.',
+    action: 'Recargar disponibilidad y elegir otra hora.',
+  },
+  COHORTE_FECHAS_INVALIDAS: {
+    status: 422,
+    cause: 'Cadena de fechas inválida',
+    student: 'No se puede utilizar ese período de inscripción.',
+    admin:
+      'Debe cumplirse inicio de matrícula ≤ fin de matrícula ≤ fin del curso e inicio del curso ≤ fin del curso.',
+    action: 'Ajustar las fechas relacionadas en una sola operación.',
+  },
+  PLAN_OPCION_NO_OFERTADA: {
+    status: 422,
+    cause: 'La combinación de modalidad y horas no está habilitada.',
+    student: 'La combinación de modalidad y horas no está habilitada.',
+    admin: 'La combinación de modalidad y horas no está habilitada.',
+    action: 'Elegir otra combinación o aprobar su configuración.',
+  },
+  RESERVA_MATRICULA_AJENA: {
+    status: 403,
+    cause: 'No puedes operar sobre esa inscripción.',
+    student: 'No puedes operar sobre esa inscripción.',
+    admin: 'No puedes operar sobre esa inscripción.',
+    action: 'Comprobar el usuario autenticado y la pertenencia de la matrícula.',
+  },
+  RESERVA_CUENTA_NO_HABILITADA: {
+    status: 403,
+    cause: 'Tu cuenta no está habilitada para reservar.',
+    student: 'Tu cuenta no está habilitada para reservar.',
+    admin: 'Tu cuenta no está habilitada para reservar.',
+    action: 'Revisar el estado y la verificación de la cuenta.',
+  },
+  RESERVA_ESTADO_NO_PERMITIDO: {
+    status: 409,
+    cause: 'Tu inscripción no permite reservar en este momento.',
+    student: 'Tu inscripción no permite reservar en este momento.',
+    admin: 'Tu inscripción no permite reservar en este momento.',
+    action: 'Consultar la inscripción y su reserva vigente.',
+  },
+  RESERVA_LIMITE_EXPIRADAS: {
+    status: 429,
+    cause: 'Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar.',
+    student: 'Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar.',
+    admin: 'Alcanzaste el límite de reservas vencidas. Espera antes de volver a intentar.',
+    action: 'Revisar el límite diario y la espera configurada.',
+  },
+  RESERVA_RECURSO_OCUPADO: {
+    status: 409,
+    cause: 'Una hora acaba de ocuparse. Consulta otro horario.',
+    student: 'Una hora acaba de ocuparse. Consulta otro horario.',
+    admin: 'Una hora acaba de ocuparse. Consulta otro horario.',
+    action: 'Recargar la disponibilidad completa antes de reservar.',
+  },
+  RESERVA_SOLAPE_PROPIO: {
+    status: 409,
+    cause: 'Ya tienes una práctica en ese horario.',
+    student: 'Ya tienes una práctica en ese horario.',
+    admin: 'Ya tienes una práctica en ese horario.',
+    action: 'Elegir sesiones que no se solapen con tu agenda.',
+  },
+  RESERVA_SIN_HORARIOS: {
+    status: 409,
+    cause: 'No hay horarios disponibles para ese plan.',
+    student: 'No hay horarios disponibles para ese plan.',
+    admin: 'No hay horarios disponibles para ese plan.',
+    action: 'Cambiar fecha, modalidad u hora; solicitar aviso de apertura.',
+  },
+  RESERVA_ACCION_INVALIDA: {
+    status: 400,
+    cause: 'La acción solicitada no es válida.',
+    student: 'La acción solicitada no es válida.',
+    admin: 'La acción solicitada no es válida.',
+    action: 'Usar una operación de reserva permitida.',
+  },
+  RESERVA_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La nueva modalidad de reserva aún no está disponible.',
+    student: 'La nueva modalidad de reserva aún no está disponible.',
+    admin: 'La nueva modalidad de reserva aún no está disponible.',
+    action: 'Comprobar los indicadores y sus dependencias.',
+  },
+  RESERVA_NO_AMPLIABLE: {
+    status: 409,
+    cause: 'Esta reserva no permite ampliar el tiempo.',
+    student: 'Esta reserva no permite ampliar el tiempo.',
+    admin: 'Esta reserva no permite ampliar el tiempo.',
+    action: 'Continuar con el pago o elegir otro horario.',
+  },
+  RESERVA_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos esa reserva.',
+    student: 'No encontramos esa reserva.',
+    admin: 'No encontramos esa reserva.',
+    action: 'Consultar las reservas de esta inscripción.',
+  },
+  CAPACIDAD_CONFIG_REQUERIDA: {
+    status: 503,
+    cause: 'La escuela debe configurar la disponibilidad antes de reservar.',
+    student: 'La escuela debe configurar la disponibilidad antes de reservar.',
+    admin: 'La escuela debe configurar la disponibilidad antes de reservar.',
+    action: 'RETIRADO por D3; no configurar vehículos.',
+  },
+  CAPACIDAD_CUPO_AGOTADO: {
+    status: 409,
+    cause: 'No hay disponibilidad durante todas las fechas del plan.',
+    student: 'No hay disponibilidad durante todas las fechas del plan.',
+    admin: 'No hay disponibilidad durante todas las fechas del plan.',
+    action: 'Consultar la ocupación por intervalo y elegir otras fechas.',
+  },
+  CAPACIDAD_HISTORICO_PENDIENTE: {
+    status: 409,
+    cause: 'La escuela debe revisar las fechas de esta inscripción.',
+    student: 'La escuela debe revisar las fechas de esta inscripción.',
+    admin: 'La escuela debe revisar las fechas de esta inscripción.',
+    action: 'Resolver el preflight con evidencia y excepción auditada.',
+  },
+  CAPACIDAD_INSTRUCTOR_NO_DISPONIBLE: {
+    status: 409,
+    cause: 'El instructor ya no está disponible. Consulta otro horario.',
+    student: 'El instructor ya no está disponible. Consulta otro horario.',
+    admin: 'El instructor ya no está disponible. Consulta otro horario.',
+    action: 'Revisar la vigencia y disponibilidad del instructor.',
+  },
+  CAPACIDAD_VEHICULOS_AGOTADA: {
+    status: 409,
+    cause: 'No quedan recursos disponibles en esa hora.',
+    student: 'No quedan recursos disponibles en esa hora.',
+    admin: 'No quedan recursos disponibles en esa hora.',
+    action: 'RETIRADO por D3; los vehículos no limitan reservas.',
+  },
+  PAGO_PRECIO_NO_CONFIGURADO: {
+    status: 503,
+    cause: 'El precio aún no está disponible. Contacta con la escuela.',
+    student: 'El precio aún no está disponible. Contacta con la escuela.',
+    admin: 'El precio aún no está disponible. Contacta con la escuela.',
+    action: 'Cargar el precio por tipo mediante el script explícito aprobado.',
+  },
+  PAGO_EN_PROCESO: {
+    status: 409,
+    cause: 'El pago sigue en proceso. Espera su resultado y no pagues de nuevo.',
+    student: 'El pago sigue en proceso. Espera su resultado y no pagues de nuevo.',
+    admin: 'El pago sigue en proceso. Espera su resultado y no pagues de nuevo.',
+    action: 'Consultar el proveedor o conciliar antes de liberar recursos.',
+  },
+  PAGO_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa los datos del intento de pago.',
+    student: 'Revisa los datos del intento de pago.',
+    admin: 'Revisa los datos del intento de pago.',
+    action: 'Verificar proveedor, identificador e importes.',
+  },
+  PAGO_CUENTA_NO_HABILITADA: {
+    status: 403,
+    cause: 'Tu cuenta no está habilitada para pagar.',
+    student: 'Tu cuenta no está habilitada para pagar.',
+    admin: 'Tu cuenta no está habilitada para pagar.',
+    action: 'Revisar la cuenta antes de iniciar un pago nuevo.',
+  },
+  PAGO_IDEMPOTENCIA_CONFLICTO: {
+    status: 409,
+    cause: 'El intento corresponde a otra operación. Consulta el estado del pago.',
+    student: 'El intento corresponde a otra operación. Consulta el estado del pago.',
+    admin: 'El intento corresponde a otra operación. Consulta el estado del pago.',
+    action: 'Comprobar la clave idempotente y sus entidades.',
+  },
+  PAGO_INTENTO_PENDIENTE: {
+    status: 409,
+    cause: 'Ya hay un pago pendiente o recibido. No pagues otra vez.',
+    student: 'Ya hay un pago pendiente o recibido. No pagues otra vez.',
+    admin: 'Ya hay un pago pendiente o recibido. No pagues otra vez.',
+    action: 'Resolver el intento existente antes de crear otro.',
+  },
+  PAGO_NO_ENCONTRADO: {
+    status: 404,
+    cause: 'No encontramos ese pago.',
+    student: 'No encontramos ese pago.',
+    admin: 'No encontramos ese pago.',
+    action: 'Consultar el intento asociado a la inscripción.',
+  },
+  PAGO_REFERENCIA_CONFLICTO: {
+    status: 409,
+    cause: 'La respuesta del pago requiere revisión. No pagues otra vez.',
+    student: 'La respuesta del pago requiere revisión. No pagues otra vez.',
+    admin: 'La respuesta del pago requiere revisión. No pagues otra vez.',
+    action: 'Conciliar la referencia con el intento original.',
+  },
+  PAGO_RESERVA_INVALIDA: {
+    status: 409,
+    cause: 'La reserva no permite iniciar este pago. Consulta su estado.',
+    student: 'La reserva no permite iniciar este pago. Consulta su estado.',
+    admin: 'La reserva no permite iniciar este pago. Consulta su estado.',
+    action: 'Comprobar retenciones, estado y precio fijado.',
+  },
+  PAGO_RESERVA_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos la reserva de ese pago.',
+    student: 'No encontramos la reserva de ese pago.',
+    admin: 'No encontramos la reserva de ese pago.',
+    action: 'Revisar la reserva y la pertenencia del intento.',
+  },
+  PAGO_APROBADO_SIN_RECURSOS: {
+    status: 409,
+    cause: 'Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo.',
+    student: 'Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo.',
+    admin: 'Recibimos el pago y la escuela debe revisar la asignación. No pagues de nuevo.',
+    action: 'Resolver la asignación o documentar la devolución; no simular reembolsos.',
+  },
+  PAGO_ACTIVACION_REVISION: {
+    status: 409,
+    cause: 'La escuela está revisando la asignación de tu pago.',
+    student: 'La escuela está revisando la asignación de tu pago.',
+    admin: 'La escuela está revisando la asignación de tu pago.',
+    action: 'Revisar el pago y las prácticas retenidas antes de resolver.',
+  },
+  PERMISO_REQUERIDO: {
+    status: 403,
+    cause: 'No tienes permiso para realizar esta operación.',
+    student: 'No tienes permiso para realizar esta operación.',
+    admin: 'No tienes permiso para realizar esta operación.',
+    action: 'Solicitar el permiso específico a un administrador autorizado.',
+  },
+  COHORTE_NOMBRE_DUPLICADO: {
+    status: 409,
+    cause: 'Ya existe una cohorte con ese nombre.',
+    student: 'Ya existe una cohorte con ese nombre.',
+    admin: 'Ya existe una cohorte con ese nombre.',
+    action: 'Renombrar la cohorte indicada; se ignoran acentos, mayúsculas y espacios exteriores.',
+  },
+  COHORTE_TERMINADA: {
+    status: 409,
+    cause: 'Ese período ya terminó y es de solo lectura.',
+    student: 'Ese período ya terminó y es de solo lectura.',
+    admin: 'Ese período ya terminó y es de solo lectura.',
+    action: 'Crear un período nuevo; no reabrir el terminado.',
+  },
+  COHORTE_INICIO_INMUTABLE: {
+    status: 409,
+    cause: 'El inicio ya tiene inscripciones asociadas.',
+    student: 'El inicio ya tiene inscripciones asociadas.',
+    admin: 'El inicio ya tiene inscripciones asociadas.',
+    action: 'Conservar el inicio; gestionar una reasignación si corresponde.',
+  },
+  COHORTE_CODIGO_INMUTABLE: {
+    status: 409,
+    cause: 'El código ya tiene inscripciones asociadas.',
+    student: 'El código ya tiene inscripciones asociadas.',
+    admin: 'El código ya tiene inscripciones asociadas.',
+    action: 'Conservar el código autogenerado.',
+  },
+  COHORTE_FIN_CON_COMPROMISOS: {
+    status: 409,
+    cause: 'El fin dejaría prácticas fuera del período.',
+    student: 'El fin dejaría prácticas fuera del período.',
+    admin: 'El fin dejaría prácticas fuera del período.',
+    action: 'Revisar el último fin individual de matrículas y reservas.',
+  },
+  COHORTE_CUPO_INFERIOR: {
+    status: 409,
+    cause: 'El cupo es inferior a la ocupación del período.',
+    student: 'El cupo es inferior a la ocupación del período.',
+    admin: 'El cupo es inferior a la ocupación del período.',
+    action: 'Mantener al menos el máximo ocupado por intervalo.',
+  },
+  COHORTE_CANCELACION_BLOQUEADA: {
+    status: 409,
+    cause: 'Hay matrículas que deben resolverse antes de cancelar.',
+    student: 'Hay matrículas que deben resolverse antes de cancelar.',
+    admin: 'Hay matrículas que deben resolverse antes de cancelar.',
+    action: 'Reasignar o documentar una devolución antes de cancelar.',
+  },
+  COHORTE_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La operación aún no está habilitada.',
+    student: 'La operación aún no está habilitada.',
+    admin: 'La operación aún no está habilitada.',
+    action: 'Verificar los indicadores y sus dependencias antes de activar.',
+  },
+  COHORTE_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa los datos y el motivo de la operación.',
+    student: 'Revisa los datos y el motivo de la operación.',
+    admin: 'Revisa los datos y el motivo de la operación.',
+    action: 'Corregir formato, campos permitidos, rangos y motivo.',
+  },
+  COHORTE_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos el período solicitado.',
+    student: 'No encontramos el período solicitado.',
+    admin: 'No encontramos el período solicitado.',
+    action: 'Recargar el listado.',
+  },
+  COHORTE_CURSO_NO_ENCONTRADO: {
+    status: 404,
+    cause: 'No encontramos el curso seleccionado.',
+    student: 'No encontramos el curso seleccionado.',
+    admin: 'No encontramos el curso seleccionado.',
+    action: 'Seleccionar un curso existente.',
+  },
+  COHORTE_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'Los datos cambiaron mientras los editabas.',
+    student: 'Los datos cambiaron mientras los editabas.',
+    admin: 'Los datos cambiaron mientras los editabas.',
+    action: 'Recargar los datos actuales antes de volver a guardar.',
+  },
+  PAGO_PRECIO_INVALIDO: {
+    status: 400,
+    cause: 'Revisa el importe y el motivo del cambio.',
+    student: 'Revisa el importe y el motivo del cambio.',
+    admin: 'Revisa el importe y el motivo del cambio.',
+    action: 'Indicar centavos enteros dentro de 0–999999 y un motivo.',
+  },
+  PAGO_PRECIO_CARGA_INICIAL: {
+    status: 409,
+    cause: 'El precio inicial requiere una carga revisada.',
+    student: 'El precio inicial requiere una carga revisada.',
+    admin: 'El precio inicial requiere una carga revisada.',
+    action: 'Usar exclusivamente la plantilla explícita de precios A/B; nunca 064.',
+  },
+  CAPACIDAD_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa la cantidad de recursos y el motivo.',
+    student: 'Revisa la cantidad de recursos y el motivo.',
+    admin: 'Revisa la cantidad de recursos y el motivo.',
+    action: 'Indicar un entero de 0–1000 y un motivo.',
+  },
+  MATRICULA_TIPO_VIGENTE: {
+    status: 409,
+    cause: 'Ya tienes una matrícula vigente de ese tipo.',
+    student: 'Ya tienes una matrícula vigente de ese tipo.',
+    admin: 'Ya tienes una matrícula vigente de ese tipo.',
+    action: 'Retomar la inscripción existente; A y B pueden coexistir.',
+  },
+  MATRICULA_REPETICION_REQUIERE_EXCEPCION: {
+    status: 409,
+    cause: 'Ya finalizaste ese tipo de curso. La escuela debe autorizar una excepción.',
+    student: 'Ya finalizaste ese tipo de curso. La escuela debe autorizar una excepción.',
+    admin: 'Ya finalizaste ese tipo de curso. La escuela debe autorizar una excepción.',
+    action: 'Registrar motivo y autorización antes de crear la repetición.',
+  },
+  MATRICULA_CUENTA_NO_HABILITADA: {
+    status: 403,
+    cause: 'La cuenta no está habilitada para esta operación.',
+    student: 'La cuenta no está habilitada para esta operación.',
+    admin: 'La cuenta no está habilitada para esta operación.',
+    action: 'Revisar el estado de la cuenta.',
+  },
+  MATRICULA_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La operación individual aún no está habilitada.',
+    student: 'La operación individual aún no está habilitada.',
+    admin: 'La operación individual aún no está habilitada.',
+    action: 'Revisar el indicador de acceso individual.',
+  },
+  MATRICULA_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos la matrícula solicitada.',
+    student: 'No encontramos la matrícula solicitada.',
+    admin: 'No encontramos la matrícula solicitada.',
+    action: 'Recargar la ficha del alumno.',
+  },
+  MATRICULA_ACCESO_ESTADO_INVALIDO: {
+    status: 409,
+    cause: 'Las fechas de esta matrícula requieren revisión antes de ampliar el acceso.',
+    student: 'Las fechas de esta matrícula requieren revisión antes de ampliar el acceso.',
+    admin: 'Las fechas de esta matrícula requieren revisión antes de ampliar el acceso.',
+    action: 'Comprobar pago, estado y evidencia de fechas del preflight.',
+  },
+  MATRICULA_EXTENSION_INVALIDA: {
+    status: 400,
+    cause: 'Revisa la fecha y el motivo de la ampliación.',
+    student: 'Revisa la fecha y el motivo de la ampliación.',
+    admin: 'Revisa la fecha y el motivo de la ampliación.',
+    action: 'Solo extender el fin actual con fecha válida y motivo obligatorio.',
+  },
+  MATRICULA_REPETICION_ESTADO_INVALIDO: {
+    status: 409,
+    cause: 'No hay un curso finalizado que permita esta excepción.',
+    student: 'No hay un curso finalizado que permita esta excepción.',
+    admin: 'No hay un curso finalizado que permita esta excepción.',
+    action: 'Revisar las matrículas finalizadas del mismo tipo.',
+  },
+  MATRICULA_ROLLBACK_CONVIVENCIA: {
+    status: 409,
+    cause: 'Hay inscripciones A y B vigentes que deben resolverse antes de desactivar.',
+    student: 'Hay inscripciones A y B vigentes que deben resolverse antes de desactivar.',
+    admin: 'Hay inscripciones A y B vigentes que deben resolverse antes de desactivar.',
+    action: 'No borrar datos: decidir el rollback compatible para los casos exportados.',
+  },
+  PAGO_MONTO_NO_COINCIDE: {
+    status: 409,
+    cause: 'El importe recibido requiere revisión. No pagues nuevamente.',
+    student: 'El importe recibido requiere revisión. No pagues nuevamente.',
+    admin: 'El importe recibido requiere revisión. No pagues nuevamente.',
+    action: 'Conciliar importe y moneda con la instantánea de la reserva.',
+  },
+  ESPERA_CUENTA_NO_HABILITADA: {
+    status: 403,
+    cause: 'Tu cuenta no está habilitada para solicitar este aviso.',
+    student: 'Tu cuenta no está habilitada para solicitar este aviso.',
+    admin: 'Tu cuenta no está habilitada para solicitar este aviso.',
+    action: 'Revisar el estado de la cuenta.',
+  },
+  ESPERA_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'Los avisos de apertura todavía no están habilitados.',
+    student: 'Los avisos de apertura todavía no están habilitados.',
+    admin: 'Los avisos de apertura todavía no están habilitados.',
+    action: 'Revisar el indicador y sus dependencias.',
+  },
+  ESPERA_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa el tipo de curso y el horario preferido.',
+    student: 'Revisa el tipo de curso y el horario preferido.',
+    admin: 'Revisa el tipo de curso y el horario preferido.',
+    action: 'Usar tipo A/B y preferencias estructuradas válidas.',
+  },
+  ESPERA_NOTIFICAR_NO_DISPONIBLE: {
+    status: 503,
+    cause: 'No se pudo encolar el aviso de apertura.',
+    student: 'No se pudo enviar el aviso.',
+    admin: 'No pudimos enviar el aviso. Intenta nuevamente.',
+    action: 'Reintentar la misma acción; no duplica el evento. Revisar el registro del servidor.',
+  },
+  ESPERA_PREVIEW_NO_DISPONIBLE: {
+    status: 503,
+    cause: 'No se pudo comprobar el aviso de disponibilidad.',
+    student: 'No se pudo comprobar el aviso de disponibilidad.',
+    admin: 'No se pudo comprobar el aviso de disponibilidad.',
+    action:
+      'La cohorte puede estar guardada: recargar y comprobar disponibilidad antes de notificar.',
+  },
+  MATRICULA_AJENA: {
+    status: 403,
+    cause: 'No puedes operar sobre esa matrícula.',
+    student: 'No puedes operar sobre esa matrícula.',
+    admin: 'No puedes operar sobre esa matrícula.',
+    action: 'Usar una matrícula que corresponda al sujeto de la operación.',
+  },
+  PLAN_CAMBIO_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'Los cambios de plan todavía no están habilitados.',
+    student: 'Los cambios de plan todavía no están habilitados.',
+    admin: 'Los cambios de plan todavía no están habilitados.',
+    action: 'Revisar el indicador y las dependencias antes de activar.',
+  },
+  PLAN_CAMBIO_ESTADO_INVALIDO: {
+    status: 409,
+    cause: 'Esta matrícula requiere revisión antes de cambiar su plan.',
+    student: 'Esta matrícula requiere revisión antes de cambiar su plan.',
+    admin: 'Esta matrícula requiere revisión antes de cambiar su plan.',
+    action: 'Comprobar estado pagado, fechas demostradas y plan actual.',
+  },
+  PLAN_CAMBIO_FUERA_PLAZO: {
+    status: 409,
+    cause: 'El plazo para cambiar este plan ya terminó. Conservamos tu horario actual.',
+    student: 'El plazo para cambiar este plan ya terminó. Conservamos tu horario actual.',
+    admin: 'El plazo para cambiar este plan ya terminó. Conservamos tu horario actual.',
+    action:
+      'Comparar el instante del servidor con la primera práctica menos la ventana configurada (48 horas iniciales).',
+  },
+  PLAN_CAMBIO_LIMITE: {
+    status: 409,
+    cause: 'Ya utilizaste los cambios de plan disponibles. Conservamos tu horario actual.',
+    student: 'Ya utilizaste los cambios de plan disponibles. Conservamos tu horario actual.',
+    admin: 'Ya utilizaste los cambios de plan disponibles. Conservamos tu horario actual.',
+    action: 'Revisar el límite configurado; no crear un cobro alternativo.',
+  },
+  PLAN_CAMBIO_MOTIVO_REQUERIDO: {
+    status: 400,
+    cause: 'Escribe el motivo de la reasignación.',
+    student: 'Escribe el motivo de la reasignación.',
+    admin: 'Escribe el motivo de la reasignación.',
+    action: 'Indicar un motivo de 1 a 500 caracteres.',
+  },
+  PLAN_CAMBIO_RESERVA_VENCIDA: {
+    status: 409,
+    cause: 'La propuesta venció. Tu horario original se conserva.',
+    student: 'La propuesta venció. Tu horario original se conserva.',
+    admin: 'La propuesta venció. Tu horario original se conserva.',
+    action: 'Consultar el estado y elegir otra propuesta si sigue dentro del plazo.',
+  },
+  PLAN_CAMBIO_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'La matrícula cambió mientras revisabas la propuesta. Conservamos el plan actual.',
+    student: 'La matrícula cambió mientras revisabas la propuesta. Conservamos el plan actual.',
+    admin: 'La matrícula cambió mientras revisabas la propuesta. Conservamos el plan actual.',
+    action: 'Recargar matrícula y capacidad antes de confirmar.',
+  },
+  PLAN_CAMBIO_RETENCION_INCOMPLETA: {
+    status: 409,
+    cause: 'La propuesta ya no tiene todas las horas disponibles. Tu horario actual se conserva.',
+    student: 'La propuesta ya no tiene todas las horas disponibles. Tu horario actual se conserva.',
+    admin: 'La propuesta ya no tiene todas las horas disponibles. Tu horario actual se conserva.',
+    action: 'Liberar la propuesta y consultar un plan completo.',
+  },
+  PLAN_CAMBIO_SIN_COBRO: {
+    status: 409,
+    cause: 'El cambio de plan no requiere otro pago.',
+    student: 'El cambio de plan no requiere otro pago.',
+    admin: 'El cambio de plan no requiere otro pago.',
+    action: 'Confirmar desde la operación de cambio; no usar caja ni pasarela.',
+  },
+  PLAN_REASIGNACION_ENTRADA_INVALIDA: {
+    status: 400,
+    cause: 'Revisa las inscripciones, fechas, versiones y el motivo de la reasignación.',
+    student: 'Revisa las inscripciones, fechas, versiones y el motivo de la reasignación.',
+    admin: 'Revisa las inscripciones, fechas, versiones y el motivo de la reasignación.',
+    action: 'Seleccionar de 1 a 100 matrículas distintas con versiones actuales y planes válidos.',
+  },
+  MATRICULA_ROLLBACK_HISTORIAL: {
+    status: 409,
+    cause: 'El historial necesita una revisión antes de restituir la restricción anterior.',
+    student: 'El historial necesita una revisión antes de restituir la restricción anterior.',
+    admin: 'El historial necesita una revisión antes de restituir la restricción anterior.',
+    action:
+      'Conservar filas y desplegar un rollback compatible; no borrar historia para forzar el índice.',
+  },
+  PLAN_CAMBIO_SIN_CAMBIOS: {
+    status: 400,
+    cause: 'La propuesta conserva las mismas franjas y asignación',
+    student: 'Ese es tu horario actual. Elige una propuesta distinta.',
+    admin: 'No hay cambios en las franjas ni en la asignación.',
+    action: 'Conservar el plan o elegir una alternativa; no consumir un cambio gratis.',
+  },
+  FACTURA_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'La facturación todavía no está habilitada.',
+    student: 'La facturación todavía no está habilitada.',
+    admin: 'La facturación todavía no está habilitada.',
+    action: 'Revisar indicador y fecha de activación.',
+  },
+  FACTURA_DATOS_INVALIDOS: {
+    status: 400,
+    cause: 'Revisa los datos de facturación del pagador.',
+    student: 'Revisa los datos de facturación del pagador.',
+    admin: 'Revisa los datos de facturación del pagador.',
+    action:
+      'Completar nombre, tipo/número de documento, dirección y correo; pueden ser distintos del alumno.',
+  },
+  FACTURA_ALUMNO_NO_ENCONTRADO: {
+    status: 404,
+    cause: 'No encontramos el titular de estos pagos.',
+    student: 'No encontramos el titular de estos pagos.',
+    admin: 'No encontramos el titular de estos pagos.',
+    action: 'Recargar la ficha del alumno y comprobar pertenencia.',
+  },
+  FACTURA_EN_PROCESO: {
+    status: 409,
+    cause: 'La factura se está procesando. Consulta su estado antes de modificarla.',
+    student: 'La factura se está procesando. Consulta su estado antes de modificarla.',
+    admin: 'La factura se está procesando. Consulta su estado antes de modificarla.',
+    action: 'Esperar lease o reintentar tras vencer; no duplicar emisión.',
+  },
+  FACTURA_LEASE_INVALIDO: {
+    status: 409,
+    cause: 'El procesamiento cambió. Consulta el estado fiscal actual.',
+    student: 'El procesamiento cambió. Consulta el estado fiscal actual.',
+    admin: 'El procesamiento cambió. Consulta el estado fiscal actual.',
+    action: 'No finalizar con un token vencido o ajeno.',
+  },
+  FACTURA_RESULTADO_INVALIDO: {
+    status: 400,
+    cause: 'La operación fiscal solicitada no es válida.',
+    student: 'La operación fiscal solicitada no es válida.',
+    admin: 'La operación fiscal solicitada no es válida.',
+    action: 'Usar reintento o registro de autorización existente.',
+  },
+  FACTURA_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos ese documento fiscal.',
+    student: 'No encontramos ese documento fiscal.',
+    admin: 'No encontramos ese documento fiscal.',
+    action: 'Comprobar pago y fecha de activación; históricos no se encolan.',
+  },
+  FACTURA_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'El documento fiscal cambió. Recarga antes de continuar.',
+    student: 'El documento fiscal cambió. Recarga antes de continuar.',
+    admin: 'El documento fiscal cambió. Recarga antes de continuar.',
+    action: 'Usar updatedAt actual sin redondear.',
+  },
+  FACTURA_YA_EMITIDA: {
+    status: 409,
+    cause: 'La autorización de este documento ya está registrada.',
+    student: 'La autorización de este documento ya está registrada.',
+    admin: 'La autorización de este documento ya está registrada.',
+    action: 'No volver a emitir; revisar la autorización existente.',
+  },
+  FACTURA_AUTORIZACION_INVALIDA: {
+    status: 400,
+    cause: 'Revisa la clave de acceso y la autorización fiscal.',
+    student: 'Revisa la clave de acceso y la autorización fiscal.',
+    admin: 'Revisa la clave de acceso y la autorización fiscal.',
+    action:
+      'Registrar únicamente autorización real del canal fiscal autorizado, fecha válida y RUC del proveedor.',
+  },
+  FACTURA_DEVOLUCION_INVALIDA: {
+    status: 422,
+    cause: 'Revisa el importe, motivo y evidencia de la devolución documentada.',
+    student: 'Revisa el importe, motivo y evidencia de la devolución documentada.',
+    admin: 'Revisa el importe, motivo y evidencia de la devolución documentada.',
+    action:
+      'No superar importe facturado; emitir nota de crédito solo para devolución real documentada, sin operación del proveedor.',
+  },
+  FACTURA_IDEMPOTENCIA_CONFLICTO: {
+    status: 409,
+    cause: 'Esa devolución ya fue documentada con datos distintos.',
+    student: 'Esa devolución ya fue documentada con datos distintos.',
+    admin: 'Esa devolución ya fue documentada con datos distintos.',
+    action: 'Consultar el evento original; no repetir con otra clave para el mismo hecho.',
+  },
+  SOLICITUD_NO_ENCONTRADA: {
+    status: 404,
+    cause: 'No encontramos esa solicitud.',
+    student: 'No encontramos esa solicitud.',
+    admin: 'No encontramos esa solicitud.',
+    action: 'Recargar la lista y verificar el expediente solicitado.',
+  },
+  SOLICITUD_ESTADO_INVALIDO: {
+    status: 409,
+    cause: 'El estado actual de la solicitud no permite esa operación.',
+    student: 'El estado actual de la solicitud no permite esa operación.',
+    admin: 'El estado actual de la solicitud no permite esa operación.',
+    action: 'Revisar estado, datos completos y correo verificado antes de continuar.',
+  },
+  SOLICITUD_REVISION_REQUERIDA: {
+    status: 409,
+    cause: 'Reclama o renueva la revisión antes de continuar.',
+    student: 'Reclama o renueva la revisión antes de continuar.',
+    admin: 'Reclama o renueva la revisión antes de continuar.',
+    action: 'La exclusión venció o pertenece a otro revisor; recargar y reclamar.',
+  },
+  SOLICITUD_REVISION_OCUPADA: {
+    status: 409,
+    cause: 'Otra persona está revisando esta solicitud.',
+    student: 'Otra persona está revisando esta solicitud.',
+    admin: 'Otra persona está revisando esta solicitud.',
+    action: 'Esperar el vencimiento de la revisión o coordinar su cierre; no sustituir el actor.',
+  },
+  SOLICITUD_VERIFICACION_ACTUALIZAR: {
+    status: 409,
+    cause: 'Usa el formulario actualizado de verificación.',
+    student: 'Usa el formulario actualizado de verificación.',
+    admin: 'Usa el formulario actualizado de verificación.',
+    action: 'Registrar modo, observación y escaneo presencial con la RPC nueva.',
+  },
+  SOLICITUD_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'Las reglas nuevas de revisión todavía no están habilitadas.',
+    student: 'Las reglas nuevas de revisión todavía no están habilitadas.',
+    admin: 'Las reglas nuevas de revisión todavía no están habilitadas.',
+    action: 'Mantener apagadas hasta cierre y despliegue aprobado.',
+  },
+  SOLICITUD_VERIFICACION_INVALIDA: {
+    status: 400,
+    cause: 'Revisa el tipo, método, modo, resultado y observación.',
+    student: 'Revisa el tipo, método, modo, resultado y observación.',
+    admin: 'Revisa el tipo, método, modo, resultado y observación.',
+    action: 'El modo presencial requiere método presencial y observación obligatoria.',
+  },
+  SOLICITUD_HOMOLOGACION_REQUERIDA: {
+    status: 422,
+    cause: 'Falta el documento homologado necesario para esa verificación.',
+    student: 'Falta el documento homologado necesario para esa verificación.',
+    admin: 'Falta el documento homologado necesario para esa verificación.',
+    action: 'Comprobar certificado de resolución de homologación vigente.',
+  },
+  SOLICITUD_ESCANEO_REQUERIDO: {
+    status: 422,
+    cause: 'La verificación presencial necesita un escaneo legible.',
+    student: 'La verificación presencial necesita un escaneo legible.',
+    admin: 'La verificación presencial necesita un escaneo legible.',
+    action:
+      'Adjuntar PDF/JPG/PNG válido, hasta 2 MiB, al mismo expediente; SQL comprueba el objeto.',
+  },
+  SOLICITUD_ESCANEO_NO_DISPONIBLE: {
+    status: 503,
+    cause: 'No se pudo guardar o abrir el escaneo.',
+    student: 'No se pudo guardar o abrir el escaneo.',
+    admin: 'No se pudo guardar o abrir el escaneo.',
+    action: 'Revisar Storage, retención y registro de auditoría; no afirmar que está guardado.',
+  },
+  SOLICITUD_APROBACION_SIN_COHORTE: {
+    status: 409,
+    cause: 'La aprobación debe crear una inscripción pendiente de horario.',
+    student: 'La aprobación debe crear una inscripción pendiente de horario.',
+    admin: 'La aprobación debe crear una inscripción pendiente de horario.',
+    action: 'No asignar cohorte, precio ni monto en la aprobación.',
+  },
+  SOLICITUD_ARCHIVO_NO_BORRABLE: {
+    status: 409,
+    cause: 'El expediente aprobado o archivado se conserva.',
+    student: 'El expediente aprobado o archivado se conserva.',
+    admin: 'El expediente aprobado o archivado se conserva.',
+    action: 'Usar revocación auditada; nunca eliminar solicitud enlazada.',
+  },
+  SOLICITUD_VERSION_CONFLICTO: {
+    status: 409,
+    cause: 'La solicitud cambió. Recarga antes de continuar.',
+    student: 'La solicitud cambió. Recarga antes de continuar.',
+    admin: 'La solicitud cambió. Recarga antes de continuar.',
+    action: 'Usar la versión actual del servidor.',
+  },
+  SOLICITUD_MOTIVO_REQUERIDO: {
+    status: 400,
+    cause: 'Escribe el motivo de la revocación.',
+    student: 'Escribe el motivo de la revocación.',
+    admin: 'Escribe el motivo de la revocación.',
+    action: 'Motivo de 1 a 500 caracteres; no incluir transcripciones de documentos.',
+  },
+  SOLICITUD_CORREO_LEASE_INVALIDO: {
+    status: 409,
+    cause: 'El envío cambió. Consulta su estado antes de reintentar.',
+    student: 'El envío cambió. Consulta su estado antes de reintentar.',
+    admin: 'El envío cambió. Consulta su estado antes de reintentar.',
+    action: 'No finalizar con lease ajeno o vencido.',
+  },
+  SOLICITUD_RETENCION_INVALIDA: {
+    status: 400,
+    cause: 'Revisa los plazos y el motivo de retención.',
+    student: 'Revisa los plazos y el motivo de retención.',
+    admin: 'Revisa los plazos y el motivo de retención.',
+    action:
+      'Usar días enteros positivos; aprobadas/archivadas se conservan, rechazadas puede heredar configuración.',
+  },
+  SOLICITUD_ACCESO_REVOCADO: {
+    status: 403,
+    cause: 'Tu acceso requiere revisión de la escuela.',
+    student: 'Tu acceso requiere revisión de la escuela.',
+    admin: 'Tu acceso requiere revisión de la escuela.',
+    action: 'Revisar revocación e identidad; no cobrar ni devolver automáticamente.',
+  },
+  DOCUMENTO_TIPO_INVALIDO: {
+    status: 400,
+    cause: 'Selecciona cédula, pasaporte u otro documento.',
+    student: 'Selecciona cédula, pasaporte u otro documento.',
+    admin: 'Selecciona cédula, pasaporte u otro documento.',
+    action: 'Usar un tipo del catálogo; no inferirlo del número.',
+  },
+  DOCUMENTO_NUMERO_INVALIDO: {
+    status: 400,
+    cause: 'Revisa el número y el tipo de documento.',
+    student: 'Revisa el número y el tipo de documento.',
+    admin: 'Revisa el número y el tipo de documento.',
+    action:
+      'Cédula ecuatoriana con verificador válido; pasaporte/otro de 3 a 30 letras ASCII, números o guion, sin espacios interiores.',
+  },
+  DOCUMENTO_DUPLICADO: {
+    status: 409,
+    cause: 'Ese documento ya está registrado para el mismo tipo.',
+    student: 'Ese documento ya está registrado para el mismo tipo.',
+    admin: 'Ese documento ya está registrado para el mismo tipo.',
+    action: 'Buscar por tipo y número; tipos distintos pueden compartir número.',
+  },
+  DOCUMENTO_REGLAS_INACTIVAS: {
+    status: 409,
+    cause: 'Ese tipo de documento todavía no está habilitado en línea.',
+    student: 'Ese tipo de documento todavía no está habilitado en línea.',
+    admin: 'Ese tipo de documento todavía no está habilitado en línea.',
+    action: 'Activar únicamente después de migración, permisos, QA y autorización operativa.',
+  },
+  DOCUMENTO_ESTADO_NO_EDITABLE: {
+    status: 409,
+    cause: 'El documento no se puede cambiar en este estado.',
+    student: 'El documento no se puede cambiar en este estado.',
+    admin: 'El documento no se puede cambiar en este estado.',
+    action:
+      'Devolver para corrección antes de modificar; conservar evidencia/verificaciones anteriores.',
+  },
+  PAGO_PRECIO_CAMBIO: {
+    status: 409,
+    cause: 'El precio cambió desde la consulta. Revisa el precio y confirma nuevamente.',
+    student: 'El precio cambió desde la consulta. Revisa el precio y confirma nuevamente.',
+    admin: 'El precio cambió desde la consulta. Revisa el precio y confirma nuevamente.',
+    action: 'Recargar la vista previa; no aceptar un cobro distinto sin confirmación.',
+  },
+  CONFIG_DEPENDENCIA_REQUERIDA: {
+    status: 409,
+    cause: 'La configuración requiere activar sus dependencias en una misma transacción.',
+    student: 'La configuración requiere activar sus dependencias en una misma transacción.',
+    admin: 'La configuración requiere activar sus dependencias en una misma transacción.',
+    action:
+      'Revisar el orden del guion de activación y conservar todos los indicadores apagados si falla.',
+  },
+  CONFIG_OBSERVACION_INVALIDA: {
+    status: 400,
+    cause: 'El identificador o resultado del trabajo periódico no es válido.',
+    student: 'El identificador o resultado del trabajo periódico no es válido.',
+    admin: 'El identificador o resultado del trabajo periódico no es válido.',
+    action: 'Usar solo el catálogo cerrado de trabajos y estados.',
+  },
+  FACTURA_DEVOLUCION_DOCUMENTADA: {
+    status: 409,
+    cause: 'La reducción de un cobro requiere una devolución documentada.',
+    student: 'La reducción de un cobro requiere una devolución documentada.',
+    admin: 'La reducción de un cobro requiere una devolución documentada.',
+    action:
+      'Documentar importe, motivo y referencia; no sobrescribir el abono ni simular al proveedor.',
+  },
+  MATRICULA_PLAN_REQUERIDO: {
+    status: 409,
+    cause: 'La ruta anterior no recibe el plan individual requerido.',
+    student: 'El registro requiere el formulario actualizado de matrícula.',
+    admin: 'Usa la caja de matrícula manual con vista previa del plan individual y su precio.',
+    action:
+      'Usar /admin/manual-enrollments; no crear Auth ni una matrícula parcial desde la ruta anterior.',
+  },
+} as const;
+export type CohortErrorCode = keyof typeof COHORT_ERRORS;
+export function cohortError(code: CohortErrorCode): AppError {
+  return new AppError(COHORT_ERRORS[code].student, COHORT_ERRORS[code].status, { code });
+}
+
+/** Solo códigos catalogados; nunca devuelve el detalle SQL ni su mensaje arbitrario. */
+export function translateCohortSqlError(error: unknown): AppError | null {
+  if (!error || typeof error !== 'object') return null;
+  const value = error as { code?: unknown; message?: unknown };
+  if (
+    value.code !== 'P7000' ||
+    typeof value.message !== 'string' ||
+    !(value.message in COHORT_ERRORS)
+  )
+    return null;
+  if (
+    value.message === 'COHORTE_CANCELACION_BLOQUEADA' &&
+    'details' in error &&
+    typeof error.details === 'string'
+  ) {
+    try {
+      const detail = JSON.parse(error.details) as { cantidad?: unknown };
+      if (
+        typeof detail.cantidad === 'number' &&
+        Number.isInteger(detail.cantidad) &&
+        detail.cantidad >= 0
+      )
+        return new AppError(
+          `No puedes cancelar: ${String(detail.cantidad)} alumnos tienen matrículas activas o reservas vigentes en esta cohorte.`,
+          409,
+          { code: 'COHORTE_CANCELACION_BLOQUEADA', detalles: { cantidad: detail.cantidad } },
+        );
+    } catch {
+      /* Usar el catálogo si no hay detalle válido. */
+    }
+  }
+  if (
+    value.message === 'COHORTE_FIN_CON_COMPROMISOS' &&
+    'details' in error &&
+    typeof error.details === 'string'
+  ) {
+    try {
+      const detail = JSON.parse(error.details) as { ultimoFin?: string; cantidad?: number };
+      if (detail.ultimoFin && Number.isInteger(detail.cantidad))
+        return new AppError(
+          `No puedes acortar: ${String(detail.cantidad)} compromisos requieren prácticas hasta el ${detail.ultimoFin}.`,
+          409,
+          { code: 'COHORTE_FIN_CON_COMPROMISOS' },
+        );
+    } catch {
+      /* Usar catálogo si no hay detalle válido. */
+    }
+  }
+  if (
+    value.message === 'RESERVA_SOLAPE_PROPIO' &&
+    'details' in error &&
+    typeof error.details === 'string'
+  ) {
+    try {
+      const d = JSON.parse(error.details) as { course?: unknown; date?: unknown; hour?: unknown };
+      if (typeof d.course === 'string' && typeof d.date === 'string' && typeof d.hour === 'string')
+        return new AppError(
+          `Se solapa con tu práctica de ${d.course} del ${d.date} a las ${d.hour}. Elige otra hora.`,
+          409,
+          { code: 'RESERVA_SOLAPE_PROPIO' },
+        );
+    } catch {
+      /* Mensaje estático seguro si detalle inválido. */
+    }
+  }
+  return cohortError(value.message as CohortErrorCode);
+}

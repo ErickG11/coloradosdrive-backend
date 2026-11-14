@@ -15,6 +15,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { alumnoActivo, sinInscripcionPendiente } from '../helpers/authMocks';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const from = supabaseAdmin.from as jest.Mock;
 const rpc = supabaseAdmin.rpc as jest.Mock;
@@ -61,7 +62,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         debe_cambiar_password: false }, error: null }));
       expect((await request(app).post(`${base}/duplicates`).set('Authorization', token('instructor'))
         .send({ cedula: '1710034065' })).status).toBe(403);
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     });
 
     it('responde solo booleanos por campo, sin datos personales', async () => {
@@ -82,7 +83,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
       const res = await request(app).post(`${base}/duplicates`).set('Authorization', token())
         .send({ cedula: '1710034065' });
       expect(res.body).toEqual({ cedula: false, correo: false });
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
       rpc.mockResolvedValueOnce({ data: [], error: null });
       const res2 = await request(app).post(`${base}/duplicates`).set('Authorization', token())
         .send({ correo: 'nadie@example.com' });
@@ -113,18 +114,18 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
       expect(res.body).toMatchObject({ code: 'INVALID_FIELD', message });
       if (field) expect(res.body.field).toBe(field);
       expect(from).not.toHaveBeenCalled();
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     });
   });
 
   describe('POST /confirm: validación por paso con field, code y mensaje', () => {
     it.each([
       // Paso 1
-      ['cédula vacía', withStudent({ cedula: '' }), 'student.cedula', 'Ingresa la cédula.'],
+      ['cédula vacía', withStudent({ cedula: '' }), 'student', 'Revisa el número y el tipo de documento.'],
       ['cédula con dígito verificador incorrecto', withStudent({ cedula: '1710034066' }),
-        'student.cedula', 'Ingresa una cédula ecuatoriana válida de 10 dígitos.'],
+        'student', 'Revisa el número y el tipo de documento.'],
       ['cédula con letras', withStudent({ cedula: '17100340AB' }),
-        'student.cedula', 'Ingresa una cédula ecuatoriana válida de 10 dígitos.'],
+        'student', 'Revisa el número y el tipo de documento.'],
       ['nombre vacío', withStudent({ nombreCompleto: '   ' }),
         'student.nombreCompleto', 'Ingresa el nombre completo.'],
       ['nombre de 201 caracteres', withStudent({ nombreCompleto: 'a'.repeat(201) }),
@@ -158,7 +159,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         'practice.fechaInicio', 'La fecha de inicio no es válida.'],
       ['hora vacía', withPractice({ horaDeseada: '' }), 'practice.horaDeseada', 'Ingresa la hora deseada.'],
       ['hora fuera de formato', withPractice({ horaDeseada: '8am' }), 'practice.horaDeseada',
-        'La hora deseada debe estar entre 06:00 y 22:00.'],
+        'Elige una hora válida desde las 06:00, dentro del horario de la escuela.'],
       ['horas por día 7', withPractice({ horasPorDia: 7 }), 'practice.horasPorDia',
         'Las horas por día deben ser un entero entre 1 y 6.'],
       ['horas por día 0', withPractice({ horasPorDia: 0 }), 'practice.horasPorDia',
@@ -190,7 +191,7 @@ describe('matrícula manual: duplicados y validaciones por paso', () => {
         .set('Idempotency-Key', uuid).send(payload);
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field, message });
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     });
 
     it('sin Idempotency-Key responde con mensaje en español', async () => {

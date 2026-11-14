@@ -4,12 +4,8 @@ import type { Database } from '../config/database.types';
 import type { StudentCohortOptions, StudentCohortResult } from '../models/studentCohort.model';
 import { AppError } from '../utils/AppError';
 import { SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
-import {
-  assignCohort,
-  CohortAssignmentService,
-  isCohortWindowOpen,
-  schoolToday,
-} from './cohortAssignment.service';
+import { assignCohort, CohortAssignmentService, schoolToday } from './cohortAssignment.service';
+import type { CandidateCohort } from '../models/cohortAssignment.model';
 import { assertStudentMutable } from './studentDeletion.service';
 
 export function studentCohortError(error: unknown): AppError {
@@ -49,6 +45,26 @@ export function studentCohortError(error: unknown): AppError {
   );
 }
 
+export function studentCohortWindowOpen(today: Date, cohort: CandidateCohort): boolean {
+  const day = DateTime.fromJSDate(today, { zone: SCHOOL_TIMEZONE }).startOf('day');
+  const end = DateTime.fromJSDate(cohort.fechaFinMatricula, { zone: SCHOOL_TIMEZONE })
+    .startOf('day')
+    .minus({ days: 5 });
+  return (
+    cohort.habilitada !== false &&
+    !cohort.cancelledAt &&
+    day.toMillis() >=
+      DateTime.fromJSDate(cohort.fechaInicioMatricula, { zone: SCHOOL_TIMEZONE })
+        .startOf('day')
+        .toMillis() &&
+    day.toMillis() <= end.toMillis() &&
+    (!cohort.fechaFinCurso ||
+      day.toMillis() <=
+        DateTime.fromJSDate(cohort.fechaFinCurso, { zone: SCHOOL_TIMEZONE })
+          .endOf('day')
+          .toMillis())
+  );
+}
 export class StudentCohortService {
   constructor(
     private readonly db: SupabaseClient<Database>,
@@ -93,9 +109,12 @@ export class StudentCohortService {
       return {
         enrollmentId: e.id,
         courseId: e.course_id,
-        suggestion: assignCohort(today, candidates),
+        suggestion: assignCohort(
+          today,
+          candidates.filter((c) => studentCohortWindowOpen(today, c)),
+        ),
         items: candidates
-          .filter((c) => assignCohort(today, [c]).cohortId !== null)
+          .filter((c) => studentCohortWindowOpen(today, c) && c.cupoOcupado < c.cupoMaximo)
           .map((c) => ({
             id: c.id,
             nombre: c.nombre ?? null,
@@ -104,6 +123,7 @@ export class StudentCohortService {
             fechaInicioMatricula: civil(c.fechaInicioMatricula),
             fechaFinMatricula: civil(c.fechaFinMatricula),
             fechaInicioCurso: civil(c.fechaInicioCurso),
+            fechaFinCurso: c.fechaFinCurso ? civil(c.fechaFinCurso) : undefined,
           })),
       };
     } catch (error) {
@@ -116,6 +136,7 @@ export class StudentCohortService {
     student: string,
     enrollment: string,
     cohort: string,
+    reason: string,
   ): Promise<StudentCohortResult> {
     try {
       const e = await this.enrollment(student, enrollment);
@@ -129,23 +150,27 @@ export class StudentCohortService {
         throw studentCohortError({ code: other.data ? 'CD043' : 'CD042' });
       }
       const today = schoolToday();
-      if (!repeat && !isCohortWindowOpen(today, chosen)) {
+      if (!repeat && !studentCohortWindowOpen(today, chosen)) {
         throw new AppError('La ventana de matrícula no está abierta', 409, {
           code: 'COHORT_WINDOW_CLOSED',
         });
       }
       // No convertir updatedAt a Date: preservar todos los microsegundos recibidos.
       if (!chosen.updatedAt) throw studentCohortError(null);
-      const { data, error } = await this.db.rpc('assign_pending_enrollment_cohort', {
-        p_actor: actor,
-        p_student: student,
-        p_enrollment: enrollment,
-        p_cohort: cohort,
-        p_cohort_version: chosen.updatedAt,
-        p_validated_day: DateTime.fromJSDate(today, { zone: SCHOOL_TIMEZONE }).toFormat(
-          'yyyy-MM-dd',
-        ),
-      });
+      const { data, error } = await this.db.rpc(
+        'assign_pending_enrollment_cohort_with_reason_v13',
+        {
+          p_actor: actor,
+          p_reason: reason,
+          p_student: student,
+          p_enrollment: enrollment,
+          p_cohort: cohort,
+          p_cohort_version: chosen.updatedAt,
+          p_validated_day: DateTime.fromJSDate(today, { zone: SCHOOL_TIMEZONE }).toFormat(
+            'yyyy-MM-dd',
+          ),
+        },
+      );
       if (error) throw error;
       if (data.status !== 'activo' || data.cohort_id !== cohort || data.monto_total === null)
         throw studentCohortError(null);

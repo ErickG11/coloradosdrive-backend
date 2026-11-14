@@ -1,3 +1,4 @@
+import { requireEnrollmentPermission } from '../middlewares/enrollmentPermission.middleware';
 import { paymentWithWelcome } from '../services/paymentWelcome';
 import { Router } from 'express';
 import { body, param, matchedData } from 'express-validator';
@@ -13,6 +14,7 @@ import { env } from '../config/env';
 import { paymentService, strictPaymentBody, paymentRateKey } from './studentPayment.routes';
 export const adminPaymentRouter = Router();
 adminPaymentRouter.use(asyncHandler(authenticate), requireRole('admin'));
+adminPaymentRouter.use(requireEnrollmentPermission('view_payments_invoices'));
 adminPaymentRouter.use((req, _res, next) => {
   if (Object.keys(req.query).length) {
     next(new AppError('No se admiten parámetros.', 400, { code: 'INVALID_FIELD' }));
@@ -46,7 +48,11 @@ adminPaymentRouter.get(
       throwStudentPaymentError(payments.error ?? reservation.error);
     let reserva = reservation.data;
     let cotizacion: Awaited<ReturnType<typeof paymentService.quote>> | null = null;
-    if (reserva && ['vigente', 'pago_en_curso'].includes(reserva.estado)) {
+    if (
+      reserva &&
+      !reserva.replacement_enrollment_id &&
+      ['vigente', 'pago_en_curso'].includes(reserva.estado)
+    ) {
       try {
         cotizacion = await paymentService.quote(data.id, reserva.id);
       } catch (error) {
@@ -54,7 +60,13 @@ adminPaymentRouter.get(
         else throw error;
       }
     }
-    res.json({ pagos: payments.data, reserva, cotizacion });
+    res.json({
+      pagos: payments.data,
+      reserva: reserva
+        ? { ...reserva, purpose: reserva.replacement_enrollment_id ? 'plan_change' : 'initial' }
+        : null,
+      cotizacion,
+    });
   }),
 );
 adminPaymentRouter.post(

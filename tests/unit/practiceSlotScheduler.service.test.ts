@@ -51,6 +51,7 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
       ['practice_slots_scheduler_candidates', { p_transition: 'remind' }],
       ['practice_slots_scheduler_candidates', { p_transition: 'close' }],
       ['practice_slots_scheduler_candidates', { p_transition: 'complete' }],
+      ['maintain_waitlist_v12'],
       ['claim_notification_email'],
     ]);
     expect(from).not.toHaveBeenCalled();
@@ -113,6 +114,7 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
     expect(h.email.sendNoPracticeEmail).not.toHaveBeenCalled();
     expect(h.realtime.broadcast.mock.calls).toEqual([
       ['user-instructor-1-practice-slots', 'no-practice', { scheduledAt: slot.scheduled_at }],
+      ['user-instructor-1-notifications', 'notifications-updated', {}],
     ]);
   });
 
@@ -141,6 +143,6 @@ describe('PracticeSlotSchedulerService: RPC y efectos tras transición', () => {
     h.rpc.mockImplementation((name, args): unknown => name === 'claim_notification_email'
       ? createChain({ data: null, error }) : original(name, args));
     await expect(h.service.runOnce()).rejects.toEqual(error);
-    expect(h.realtime.broadcast).toHaveBeenCalledTimes(1);
+    expect(h.realtime.broadcast).toHaveBeenCalledTimes(2);
   });
 });

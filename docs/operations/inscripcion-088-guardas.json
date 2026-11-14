@@ -1,0 +1,42 @@
+{
+  "functions": [
+    {
+      "signature": "private.reserve_schedule_v2(uuid,uuid,jsonb)",
+      "before": "b6b2ee2afd0866b255ccaa9ef1fbd26c",
+      "after": "b6b2ee2afd0866b255ccaa9ef1fbd26c",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text)",
+      "before": "6fbf8dea16054980095bd760988b2baf",
+      "after": "6fbf8dea16054980095bd760988b2baf",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.confirm_plan_change_v2(uuid,uuid,uuid)",
+      "before": "7367c7611d0c2eba97f64f2d8aa422c6",
+      "after": "7367c7611d0c2eba97f64f2d8aa422c6",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.integrated_manual_commit_v2(uuid,uuid,uuid,jsonb,uuid,uuid,jsonb,timestamp with time zone[],uuid,jsonb,jsonb)",
+      "before": "294934f121eb4be6e46b41cf1e427342",
+      "after": "294934f121eb4be6e46b41cf1e427342",
+      "kind": "dependency"
+    }
+  ],
+  "newFunctions": [
+    "private.resolve_practice_contract_v14",
+    "private.write_practice_contract_v14"
+  ],
+  "newFunctionHashes": [
+    {
+      "signature": "private.write_practice_contract_v14()",
+      "after": "bc246e4370f15426d192f5b7bd7d05df"
+    },
+    {
+      "signature": "private.resolve_practice_contract_v14(enrollments)",
+      "after": "63409564a3b7ca540b85c1919968a8ab"
+    }
+  ]
+}

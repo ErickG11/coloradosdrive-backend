@@ -11,6 +11,17 @@ import { throwPracticeWriteError } from '../utils/practiceSlotIntegrity';
 
 function toNotification(row: NotificationRow): Notification {
   return {
+    ...(row.domain_code
+      ? {
+          alert: {
+            code: row.domain_code,
+            entityId: row.domain_entity_id ?? null,
+            severity: row.domain_severity ?? 'alta',
+            lastSeenAt: row.domain_last_seen_at ?? null,
+            resolvedAt: row.domain_resolved_at ?? null,
+          },
+        }
+      : {}),
     id: row.id,
     tipo: row.tipo,
     titulo: row.titulo,

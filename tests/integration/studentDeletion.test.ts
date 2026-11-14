@@ -14,6 +14,7 @@ import { supabaseAdmin } from '../../src/config/supabase';
 import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createChain } from '../helpers/supabaseMock';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 const id = '22222222-2222-4222-8222-222222222222',
   path = '/admin/estudiantes';
 const rpc = supabaseAdmin.rpc as jest.Mock,
@@ -35,7 +36,7 @@ describe('D endpoints solo admin', () => {
         : request(app).get(`${path}/eliminaciones`);
     expect((await call()).status).toBe(401);
     expect((await call().set('Authorization', token('instructor'))).status).toBe(403);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
     expect(from).not.toHaveBeenCalled();
   });
   it.each([
@@ -52,7 +53,7 @@ describe('D endpoints solo admin', () => {
       .set('Content-Type', 'application/json')
       .send(body ?? 'null');
     expect(res.status).toBe(400);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
   it.each([{ confirmacionCedula: '1710034065' }, {}])(
     'pasa confirmación o reanudación a RPC: %p',
@@ -98,7 +99,7 @@ describe('D endpoints solo admin', () => {
       expect(res.status).toBe(400);
       expect(JSON.stringify(res.body)).not.toContain('1710034065');
       expect(JSON.stringify(log.mock.calls)).not.toContain('1710034065');
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     } finally {
       log.mockRestore();
     }
@@ -120,7 +121,7 @@ describe('D endpoints solo admin', () => {
     expect(from).toHaveBeenCalledTimes(1);
     expect(chain.in).toHaveBeenCalledWith('status', ['fallido']);
     expect(chain.range).toHaveBeenCalledWith(3, 5);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
   it.each([{ page: 0 }, { pageSize: 101 }, { estado: 'completo' }, { q: 'no-permitido' }])(
     'valida filtros: %p',

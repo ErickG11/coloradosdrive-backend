@@ -1,3 +1,4 @@
+import { observeJob } from '../services/enrollmentObservation.service';
 import cron from 'node-cron';
 import { supabaseAdmin } from '../config/supabase';
 import { SolicitudApprovalRecoveryService } from '../services/solicitudApprovalRecovery.service';
@@ -10,8 +11,7 @@ export function startSolicitudApprovalRecoveryCron(): void {
     () => {
       if (running) return;
       running = true;
-      service
-        .run()
+      observeJob('approval_recovery', () => service.run())
         .then((report) => {
           console.warn(JSON.stringify({ event: 'approval_recovery_done', ...report }));
         })

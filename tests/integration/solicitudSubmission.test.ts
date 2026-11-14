@@ -29,6 +29,7 @@ import { mailer } from '../../src/config/mailer';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { signSolicitudToken } from '../../src/utils/solicitudToken';
 import { createChain } from '../helpers/supabaseMock';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const otra = '22222222-2222-4222-8222-222222222222';
@@ -117,13 +118,13 @@ it('sin token, de otra solicitud o de solo lectura no llega a la RPC', async () 
         .set('Authorization', bearer(id, 'estado'))
     ).status,
   ).toBe(403);
-  expect(rpc).not.toHaveBeenCalled();
+  expect(dataRpcCalls(rpc)).toHaveLength(0);
 });
 it.each(['aprobada', 'rechazada'])('estado %s: 409 sin llegar a la RPC', async (estado) => {
   mockState.estado = estado;
   const res = await request(app).post(`/solicitudes/${id}/enviar`).set('Authorization', bearer());
   expect(res.status).toBe(409);
-  expect(rpc).not.toHaveBeenCalled();
+  expect(dataRpcCalls(rpc)).toHaveLength(0);
 });
 it('una enviada sigue rechazando datos y consentimiento aunque el token sea de edición', async () => {
   mockState.estado = 'enviada';

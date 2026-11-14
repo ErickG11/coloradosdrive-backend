@@ -1,3 +1,9 @@
+import { configuredEnrollmentPlan } from './studentPlanRules.service';
+import { planEndHour } from './planEndHour.service';
+import { cohortCalendar } from '../utils/enrollmentRules';
+import { normalizeIdentityDocument, type IdentityDocumentType } from '../utils/identityDocument';
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
+import { cohortError, translateCohortSqlError } from '../config/cohortErrors';
 import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
@@ -12,7 +18,12 @@ import { MANUAL_MESSAGES as M, manualError } from '../utils/manualEnrollmentRule
 import { assertStudentMutable } from './studentDeletion.service';
 import { manualPracticePlan, type ManualPracticePlan } from '../utils/manualPracticePlan';
 import { SCHOOL_TIMEZONE } from '../utils/schoolTimezone';
-import { applyVotingExemption, normalizeDocuments, validateInitialPayment, type InitialPayment } from '../utils/manualEnrollmentDetails';
+import {
+  applyVotingExemption,
+  normalizeDocuments,
+  validateInitialPayment,
+  type InitialPayment,
+} from '../utils/manualEnrollmentDetails';
 import {
   CohortAssignmentService,
   type AssignCohortForCourseResult,
@@ -21,6 +32,14 @@ import type { EmailService } from './email.service';
 import { PracticeSlotGenerationService } from './practiceSlotGeneration.service';
 import type { SugerirPracticaResult } from '../models/practiceSlotGeneration.model';
 
+interface ExactManualPreview {
+  plan: ManualPracticePlan;
+  cohort: Database['public']['Tables']['cohorts']['Row'];
+  courseId: string;
+  precioCentavos: number;
+  instructors: { id: string; nombreCompleto: string }[];
+  serverNow: string;
+}
 interface CatalogEntry {
   tipo: CourseType;
   nombre: string;
@@ -29,11 +48,14 @@ interface CatalogEntry {
 interface StudentSearchResult {
   id: string;
   cedula: string;
+  documentType?: IdentityDocumentType;
+  documentNumber?: string;
   nombreCompleto: string;
   correo: string;
   vigentes: { tipo: CourseType; status: string }[];
 }
 interface CoursePreviewResult {
+  rulesActive?: boolean;
   courseId: string;
   tipo: CourseType;
   suggestion: AssignCohortForCourseResult;
@@ -51,14 +73,21 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 export function manualEnrollmentError(error: PostgrestError): Error {
+  const domain = translateCohortSqlError(error);
+  if (domain) return domain;
   if (['IR409', '55P03', '40P01', '40001'].includes(error.code))
     return new AppError('El horario cambió o está reservado. Consulta una nueva sugerencia.', 409, {
       code: 'HORARIO_NO_DISPONIBLE',
     });
   if (error.code === 'CD030')
-    return new AppError('El alumno tiene una eliminación pendiente', 409, { code: 'DELETION_PENDING' });
+    return new AppError('El alumno tiene una eliminación pendiente', 409, {
+      code: 'DELETION_PENDING',
+    });
   if (error.code === 'CD023')
-    return new AppError('El instructor dejó de estar disponible. Consulta una nueva sugerencia.', 409);
+    return new AppError(
+      'El instructor dejó de estar disponible. Consulta una nueva sugerencia.',
+      409,
+    );
   // Dos administradores a la vez: la restricción única de cédula identifica el campo.
   // Otras restricciones únicas (matrícula vigente del mismo tipo) conservan el 409 general.
   if (error.code === '23505' && error.message.includes('users_cedula_unique'))
@@ -102,10 +131,10 @@ export class ManualEnrollmentService {
     }));
   }
   async search(actor: string, query: string): Promise<StudentSearchResult[]> {
-    const { data, error } = await this.db.rpc('find_manual_students', {
-      p_actor: actor,
-      p_query: query.trim(),
-    });
+    const args = { p_actor: actor, p_query: query.trim() };
+    const { data, error } = await ((await enrollmentRuleEnabled(this.db, 'foreign_identity'))
+      ? this.db.rpc('find_manual_students_v2', args)
+      : this.db.rpc('find_manual_students', args));
     if (error) throw error;
     const ids = data.map((s) => s.id);
     if (!ids.length) return [];
@@ -117,7 +146,10 @@ export class ManualEnrollmentService {
     if (e) throw e;
     return data.map((s) => ({
       id: s.id,
-      cedula: s.cedula,
+      cedula: s.cedula ?? '',
+      ...('documentType' in s
+        ? { documentType: s.documentType, documentNumber: s.documentNumber }
+        : {}),
       nombreCompleto: s.nombre_completo,
       correo: s.correo,
       vigentes: enrollments
@@ -132,10 +164,26 @@ export class ManualEnrollmentService {
   // instructor o admin solo lo detecta Auth al confirmar.
   async duplicates(
     actor: string,
-    input: { cedula?: string; correo?: string },
+    input: {
+      cedula?: string;
+      correo?: string;
+      documentType?: IdentityDocumentType;
+      documentNumber?: string;
+    },
   ): Promise<{ cedula: boolean; correo: boolean }> {
     let cedula = false;
-    if (input.cedula !== undefined) {
+    if (input.documentNumber !== undefined) {
+      if (!(await enrollmentRuleEnabled(this.db, 'foreign_identity')))
+        throw cohortError('DOCUMENTO_REGLAS_INACTIVAS');
+      const doc = normalizeIdentityDocument(input.documentType ?? 'cedula', input.documentNumber);
+      const result = await this.db
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('identity_document_type', doc.type)
+        .eq('identity_document_number', doc.number);
+      if (result.error) throw result.error;
+      cedula = (result.count ?? 0) > 0;
+    } else if (input.cedula !== undefined) {
       const { count, error } = await this.db
         .from('users')
         .select('id', { count: 'exact', head: true })
@@ -166,7 +214,10 @@ export class ManualEnrollmentService {
   }
   async coursePreview(tipo: CourseType): Promise<CoursePreviewResult> {
     const courseId = await this.catalogCourse(tipo);
-    const suggestion = await this.cohorts.assignCohortForCourse(courseId);
+    const exact = await enrollmentRuleEnabled(this.db, 'date_rules');
+    const suggestion = exact
+      ? { cohortId: null, warning: null, precio: null, cohortNombre: null }
+      : await this.cohorts.assignCohortForCourse(courseId);
     const { data: courses, error: ce } = await this.db
       .from('courses')
       .select('id')
@@ -194,6 +245,51 @@ export class ManualEnrollmentService {
           today <= c.fecha_fin_matricula &&
           c.ocupados < c.cupo_maximo,
       );
+    if (exact) {
+      const price = await this.db
+        .from('course_type_prices')
+        .select('precio_centavos')
+        .eq('tipo', tipo)
+        .maybeSingle();
+      if (price.error) throw price.error;
+      if (!price.data) throw cohortError('PAGO_PRECIO_NO_CONFIGURADO');
+      const open = cohorts
+        .filter(
+          (c) =>
+            c.cancelled_at === null &&
+            cohortCalendar(
+              {
+                enrollmentStart: c.fecha_inicio_matricula,
+                enrollmentEnd: c.fecha_fin_matricula,
+                practiceStart: c.fecha_inicio_curso,
+                practiceEnd: c.fecha_fin_curso,
+                enabled: c.habilitada,
+              },
+              new Date(),
+            ).open,
+        )
+        .sort(
+          (a, b) => a.fecha_fin_curso.localeCompare(b.fecha_fin_curso) || a.id.localeCompare(b.id),
+        );
+      const first = open.at(0);
+      const precio = price.data.precio_centavos / 100;
+      return {
+        rulesActive: true,
+        courseId: first?.course_id ?? courseId,
+        tipo,
+        suggestion: {
+          cohortId: first?.id ?? null,
+          cohortNombre: first?.nombre ?? null,
+          precio,
+          warning: null,
+        },
+        cohorts: open.map((c) => ({
+          ...c,
+          precio: String(precio),
+          ocupados: 0,
+        })),
+      };
+    }
     return { courseId, tipo, suggestion, cohorts: eligible };
   }
   private async resolveCourse(
@@ -222,8 +318,7 @@ export class ManualEnrollmentService {
       .eq('id', input.cohortId)
       .maybeSingle();
     if (error) throw error;
-    if (!cohort)
-      throw manualError(M.cohorteNoExiste, 'cohortId', 404, 'COHORT_NOT_FOUND');
+    if (!cohort) throw manualError(M.cohorteNoExiste, 'cohortId', 404, 'COHORT_NOT_FOUND');
     const { data: course, error: ce } = await this.db
       .from('courses')
       .select('tipo')
@@ -237,10 +332,71 @@ export class ManualEnrollmentService {
       throw manualError(M.cohorteCerrada, 'cohortId', 409, 'COHORT_ENROLLMENT_CLOSED');
     return { courseId: cohort.course_id, price: Number(cohort.precio) };
   }
+  async plan(input: ManualPracticeInput): Promise<ManualPracticePlan> {
+    const exact = await enrollmentRuleEnabled(this.db, 'date_rules');
+    const configured = exact
+      ? await configuredEnrollmentPlan(this.db, {
+          modalidad: input.modalidad,
+          fechaInicio: input.fechaInicio,
+          horasPorDia: input.horasPorDia,
+          horaInicio: parseInt(input.horaResuelta ?? input.horaDeseada, 10),
+        })
+      : null;
+    return manualPracticePlan(input, exact, await planEndHour(this.db), configured?.totalHoras);
+  }
+  private async exactPreview(
+    actor: string,
+    type: CourseType,
+    input: ManualPracticeInput,
+    student?: string,
+  ): Promise<ExactManualPreview> {
+    const configured = await configuredEnrollmentPlan(this.db, {
+      modalidad: input.modalidad,
+      fechaInicio: input.fechaInicio,
+      horasPorDia: input.horasPorDia,
+      horaInicio: parseInt(input.horaResuelta ?? input.horaDeseada, 10),
+    });
+    const plan = manualPracticePlan(input, true, await planEndHour(this.db), configured.totalHoras);
+    const result = await this.db.rpc('manual_plan_preview_v2', {
+      p_actor: actor,
+      p_type: type,
+      p_input: {
+        modalidad: input.modalidad,
+        fechaInicio: input.fechaInicio,
+        horasPorDia: input.horasPorDia,
+        horaInicio: parseInt(input.horaResuelta ?? input.horaDeseada, 10),
+      },
+      p_student: student ?? null,
+    });
+    if (result.error) throw manualEnrollmentError(result.error);
+    return { ...result.data, plan: { ...plan, precioCentavos: result.data.precioCentavos } };
+  }
   async practicePreview(
     input: Pick<ManualEnrollmentInput, 'courseType' | 'cohortId' | 'automatic' | 'practice'>,
-  ): Promise<{ plan: ManualPracticePlan; suggestion: SugerirPracticaResult | null }> {
-    const plan = manualPracticePlan(input.practice);
+    actor: string,
+  ): Promise<{
+    plan: ManualPracticePlan;
+    suggestion: SugerirPracticaResult | null;
+    resolved?: { cohort: Database['public']['Tables']['cohorts']['Row']; courseId: string };
+  }> {
+    if (await enrollmentRuleEnabled(this.db, 'date_rules')) {
+      const r = await this.exactPreview(actor, input.courseType, input.practice);
+      return {
+        plan: r.plan,
+        resolved: { cohort: r.cohort, courseId: r.courseId },
+        suggestion: {
+          fechas: r.plan.fechas,
+          horaDeseada: input.practice.horaDeseada,
+          horaResuelta: input.practice.horaDeseada,
+          horaAjustada: false,
+          instructoresSugeridos: r.instructors,
+          totalSesiones: r.plan.dias,
+          horasProgramadas: r.plan.horas,
+          horasRequeridas: r.plan.horas,
+        },
+      };
+    }
+    const plan = manualPracticePlan(input.practice, false, await planEndHour(this.db));
     const { courseId } = await this.resolveCourse(input);
     const suggestion = input.cohortId
       ? await this.generator.suggestForCourse(courseId, {
@@ -272,14 +428,39 @@ export class ManualEnrollmentService {
     id: string,
     input: ManualEnrollmentInput,
   ): Promise<ManualEnrollmentResult> {
+    if (
+      input.student.mode === 'new' &&
+      (input.student.documentType || input.student.documentNumber)
+    ) {
+      const active = await enrollmentRuleEnabled(this.db, 'foreign_identity');
+      const doc = normalizeIdentityDocument(
+        input.student.documentType ?? 'cedula',
+        input.student.documentNumber ?? input.student.cedula,
+      );
+      if (!active && doc.type !== 'cedula') throw cohortError('DOCUMENTO_REGLAS_INACTIVAS');
+      if (active)
+        input = {
+          ...input,
+          student: {
+            ...input.student,
+            documentType: doc.type,
+            documentNumber: doc.number,
+            cedula: doc.type === 'cedula' ? doc.number : '',
+          },
+        };
+    }
     if (input.student.mode === 'existing') await assertStudentMutable(this.db, input.student.id);
     const worker = randomUUID();
     const documents = normalizeDocuments(input.documentos);
     const payment: InitialPayment = input.pago ?? {
-      modalidad: 'abono', descuento: 0, montoAbonado: 0,
+      modalidad: 'abono',
+      descuento: 0,
+      montoAbonado: 0,
     };
     // Ninguna contraseña forma parte del payload ni del registro de idempotencia.
-    const hash = createHash('sha256').update(stable({ ...input, documentos: documents, pago: payment })).digest('hex');
+    const hash = createHash('sha256')
+      .update(stable({ ...input, documentos: documents, pago: payment }))
+      .digest('hex');
     const { data: op, error: re } = await this.db.rpc('reserve_manual_enrollment', {
       p_id: id,
       p_actor: actor,
@@ -297,19 +478,39 @@ export class ManualEnrollmentService {
     let authCreationUncertain = false;
     let password: string | undefined;
     try {
-      const plan = manualPracticePlan(input.practice);
-      const { courseId, price } = await this.resolveCourse(input);
+      const exact = await enrollmentRuleEnabled(this.db, 'date_rules');
+      const current = exact
+        ? await this.exactPreview(
+            actor,
+            input.courseType,
+            input.practice,
+            input.student.mode === 'existing' ? input.student.id : undefined,
+          )
+        : null;
+      if (current && input.practice.precioCentavos !== current.precioCentavos)
+        throw cohortError('PAGO_PRECIO_CAMBIO');
+      if (current && input.cohortId !== current.cohort.id)
+        throw cohortError('RESERVA_RECURSO_OCUPADO');
+      const plan =
+        current?.plan ?? manualPracticePlan(input.practice, false, await planEndHour(this.db));
+      const { courseId, price } = current
+        ? { courseId: current.courseId, price: current.precioCentavos / 100 }
+        : await this.resolveCourse(input);
       validateInitialPayment(price, payment, input.pago !== undefined);
-      const scheduled = input.cohortId
-        ? await this.generator.prepareForTransaction({
-            fechaInicio: input.practice.fechaInicio,
-            fechaFin: plan.fechaFinElegida,
-            modalidad: input.practice.modalidad,
-            horasPorDia: input.practice.horasPorDia,
-            horaResuelta: input.practice.horaResuelta ?? input.practice.horaDeseada,
-            instructorId: this.requireInstructor(input.practice),
-          })
-        : [];
+      const exactSlots = current ? current.plan.franjas : undefined;
+      if (current && !exactSlots) throw cohortError('PLAN_CONFIG_NO_DISPONIBLE');
+      const scheduled =
+        exactSlots ??
+        (input.cohortId
+          ? await this.generator.prepareForTransaction({
+              fechaInicio: input.practice.fechaInicio,
+              fechaFin: plan.fechaFinElegida,
+              modalidad: input.practice.modalidad,
+              horasPorDia: input.practice.horasPorDia,
+              horaResuelta: input.practice.horaResuelta ?? input.practice.horaDeseada,
+              instructorId: this.requireInstructor(input.practice),
+            })
+          : []);
       let studentId: string;
       let birthDate: string | null;
       if (input.student.mode === 'existing') {
@@ -332,12 +533,15 @@ export class ManualEnrollmentService {
           );
       } else {
         birthDate = input.student.fechaNacimiento ?? null;
-        const { data: profile, error } = await this.db
-          .from('users')
-          .select('id')
-          .eq('cedula', input.student.cedula)
-          .maybeSingle();
+        let duplicateQuery = this.db.from('users').select('id');
+        duplicateQuery = input.student.documentType
+          ? duplicateQuery
+              .eq('identity_document_type', input.student.documentType)
+              .eq('identity_document_number', input.student.documentNumber ?? '')
+          : duplicateQuery.eq('cedula', input.student.cedula);
+        const { data: profile, error } = await duplicateQuery.maybeSingle();
         if (error) throw error;
+        if (profile && input.student.documentType) throw cohortError('DOCUMENTO_DUPLICADO');
         if (profile)
           throw manualError(M.cedulaDuplicada, 'student.cedula', 409, 'DUPLICATE_CEDULA');
         password = randomBytes(18).toString('base64url');
@@ -365,6 +569,7 @@ export class ManualEnrollmentService {
         ...input.practice,
         ...plan,
         horaResuelta: input.practice.horaResuelta ?? input.practice.horaDeseada,
+        horaInicio: parseInt(input.practice.horaResuelta ?? input.practice.horaDeseada, 10),
       };
       const { data, error: we } = await this.db.rpc('commit_manual_enrollment', {
         p_id: id,
@@ -376,8 +581,13 @@ export class ManualEnrollmentService {
         p_plan: storedPlan,
         p_scheduled_ats: scheduled,
         p_instructor: input.practice.instructorId ?? null,
-        p_documents: applyVotingExemption(documents, birthDate,
-          DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd')),
+        p_documents: current
+          ? documents
+          : applyVotingExemption(
+              documents,
+              birthDate,
+              DateTime.now().setZone(SCHOOL_TIMEZONE).toFormat('yyyy-MM-dd'),
+            ),
         p_payment: payment,
       });
       if (we) throw manualEnrollmentError(we);
@@ -435,8 +645,7 @@ export class ManualEnrollmentService {
     }
   }
   private requireInstructor(plan: ManualPracticeInput): string {
-    if (!plan.instructorId)
-      throw manualError(M.instructorObligatorio, 'practice.instructorId');
+    if (!plan.instructorId) throw manualError(M.instructorObligatorio, 'practice.instructorId');
     return plan.instructorId;
   }
   private async updateOperation(

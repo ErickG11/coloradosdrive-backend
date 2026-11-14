@@ -1,6 +1,7 @@
 import type { Database } from '../config/database.types';
 
 export interface StudentListQuery {
+  interesadoEn?: 'A' | 'B';
   q?: string;
   activo?: boolean;
   courseId?: string;
@@ -15,11 +16,13 @@ export interface StudentListQuery {
 export interface StudentListResult extends Record<string, unknown> {
   items: {
     id: string;
-    cedula: string;
+    cedula: string | null;
+    document?: { type: string; number: string };
     nombreCompleto: string;
     telefono: string | null;
     activo: boolean;
     createdAt: string;
+    paymentStatus?: string;
     requirements?: { pending: string[]; unavailable: string[] };
     matchingEnrollments: {
       id: string;

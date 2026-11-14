@@ -145,7 +145,11 @@ export class SolicitudApprovalService {
           'APROBACION_NO_CONFIRMADA',
         ),
       );
-    if (confirmed.data?.estado === 'aprobada' && confirmed.data.student_id === studentId) return;
+    if (
+      (confirmed.data?.estado === 'aprobada' || confirmed.data?.estado === 'archivada') &&
+      confirmed.data.student_id === studentId
+    )
+      return;
     if (result.error?.code === '23505')
       throw solicitudError('Ya existe un usuario con esta cédula.', 409, 'CEDULA_DUPLICADA');
     throw result.error

@@ -1,3 +1,6 @@
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
+import { cohortError as domainCohortError } from '../config/cohortErrors';
+import { translateCohortSqlError } from '../config/cohortErrors';
 import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import type { StudentListQuery, StudentListResult } from '../models/studentAdmin.model';
@@ -22,6 +25,7 @@ type CohortRow = Database['public']['Tables']['cohorts']['Row'];
 export interface StudentDetail {
   id: string;
   cedula: string;
+  document?: { type: string; number: string };
   nombreCompleto: string;
   telefono: string | null;
   activo: boolean;
@@ -77,6 +81,18 @@ export class StudentAdminService {
   ) {}
 
   async list(actor: string, query: StudentListQuery): Promise<StudentListResult> {
+    if (query.interesadoEn) {
+      if (!(await enrollmentRuleEnabled(this.db, 'waitlist')))
+        throw domainCohortError('ESPERA_REGLAS_INACTIVAS');
+      const filtered = await this.db.rpc('list_admin_waitlist_students_v2', {
+        p_actor: actor,
+        p_type: query.interesadoEn,
+        p_filters: { ...query },
+      });
+      if (filtered.error)
+        throw translateCohortSqlError(filtered.error) ?? databaseError(filtered.error);
+      return this.withPaymentStatuses(actor, filtered.data);
+    }
     const { data, error } = await this.db.rpc('list_admin_students', {
       p_actor: actor,
       p_q: query.q ?? null,
@@ -90,7 +106,42 @@ export class StudentAdminService {
       p_page_size: query.pageSize,
     });
     if (error) throw databaseError(error);
-    return data;
+    return this.withPaymentStatuses(actor, data);
+  }
+
+  private async withPaymentStatuses(
+    actor: string,
+    page: StudentListResult,
+  ): Promise<StudentListResult> {
+    if ((await enrollmentRuleEnabled(this.db, 'foreign_identity')) && page.items.length) {
+      const documents = await this.db.rpc('identity_documents_v2', {
+        p_actor: actor,
+        p_students: page.items.map((row) => row.id),
+      });
+      if (documents.error) throw databaseError(documents.error);
+      page = {
+        ...page,
+        items: page.items.map((row) => ({
+          ...row,
+          cedula: row.cedula ?? '',
+          document: documents.data[row.id],
+        })),
+      };
+    }
+    if (!(await enrollmentRuleEnabled(this.db, 'identity')) || !page.items.length) return page;
+    const result = await this.db.rpc('student_payment_statuses_v2', {
+      p_actor: actor,
+      p_students: page.items.map((row) => row.id),
+    });
+    if (result.error) {
+      if (result.error.code === 'P7000' && result.error.message === 'PERMISO_REQUERIDO')
+        return page;
+      throw databaseError(result.error);
+    }
+    return {
+      ...page,
+      items: page.items.map((row) => ({ ...row, paymentStatus: result.data[row.id] })),
+    };
   }
 
   private async user(id: string): Promise<UserRow> {
@@ -217,7 +268,8 @@ export class StudentAdminService {
       ),
       practiceSchedule: studentSchedule(slots, recovery, instructors.data, this.now()),
       id: user.id,
-      cedula: user.cedula,
+      cedula: user.cedula ?? '',
+      document: { type: user.identity_document_type, number: user.identity_document_number },
       nombreCompleto: user.nombre_completo,
       telefono: user.telefono,
       activo: user.activo,

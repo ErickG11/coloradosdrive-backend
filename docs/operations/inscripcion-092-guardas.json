@@ -1,0 +1,72 @@
+{
+  "functions": [
+    {
+      "signature": "private.practice_block_v14(uuid,uuid,date)",
+      "before": "884fb434efa35e480627daa4d92f1814",
+      "after": "884fb434efa35e480627daa4d92f1814",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.notify_released_block_v14(uuid)",
+      "before": "1ece6f5e6cd66087ea65e8b29f826fbb",
+      "after": "1ece6f5e6cd66087ea65e8b29f826fbb",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.practice_block_instructor_notice_v14(uuid,uuid,text)",
+      "before": "318b205fca48cd7b7707779dbe95e1e9",
+      "after": "318b205fca48cd7b7707779dbe95e1e9",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.practice_block_absence_notice_v14(uuid,uuid,jsonb)",
+      "before": "47c6819d802f7333e64819b6858989da",
+      "after": "47c6819d802f7333e64819b6858989da",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.free_instructors_v2(timestamp with time zone[],uuid,uuid)",
+      "before": "231b1953a2b029dcf350147fa2d92b02",
+      "after": "231b1953a2b029dcf350147fa2d92b02",
+      "kind": "dependency"
+    },
+    {
+      "signature": "private.practice_block_options_v14(uuid,date)",
+      "before": "acb4a4722fd4c32746b2da0acbbcd737",
+      "after": "c1a5007099b04d0d4be142502f181396",
+      "kind": "replacement"
+    },
+    {
+      "signature": "take_practice_block_v14(uuid,uuid,text)",
+      "before": "8cb5513f1f4f47c5c12eb97973f1c6af",
+      "after": "7f7fab465f4d7c629b85465780a639a3",
+      "kind": "replacement"
+    }
+  ],
+  "newFunctionHashes": [
+    {
+      "signature": "private.practice_day_label_v17(timestamp with time zone)",
+      "after": "73e61b6c03b4776b1be89ab81a555cc7"
+    },
+    {
+      "signature": "private.practice_range_label_v17(timestamp with time zone,integer)",
+      "after": "27008205bb90afabbd5d9a7602e8cd7b"
+    },
+    {
+      "signature": "private.practice_result_notice_v17(uuid,text,text,text,uuid,timestamp with time zone)",
+      "after": "37b3afcd34a77098a33f0e316e38a0f7"
+    },
+    {
+      "signature": "private.practice_day_options_v17(uuid,date)",
+      "after": "fabf0bbe77adef60ed32247c0e4a2184"
+    },
+    {
+      "signature": "preview_practice_block_resolution_v17(uuid,uuid,date)",
+      "after": "88afc2b1f25acdef773834e3e8028772"
+    },
+    {
+      "signature": "resolve_practice_block_v17(uuid,uuid,date,text,timestamp with time zone,text,text)",
+      "after": "5830d65348aa442de0a95842895b9393"
+    }
+  ]
+}

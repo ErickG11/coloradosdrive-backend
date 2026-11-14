@@ -64,13 +64,25 @@ function escapeHtml(value: string): string {
 export class EmailService {
   constructor(private readonly transporter: MailTransport) {}
 
-  async sendPaymentWelcomeEmail(params: { to: string; nombreCompleto: string; paymentId: string }): Promise<void> {
+  async sendPaymentWelcomeEmail(params: {
+    to: string;
+    nombreCompleto: string;
+    paymentId: string;
+  }): Promise<void> {
     const url = new URL('/student', env.FRONTEND_URL);
-    const intro = 'Tu pago fue confirmado y tu matrícula ya está activa. Puedes consultar tus prácticas, documentos y exámenes en la plataforma.';
+    const intro =
+      'Tu pago fue confirmado y tu matrícula ya está activa. Puedes consultar tus prácticas, documentos y exámenes en la plataforma.';
     await this.transporter.sendMail({
-      from: env.EMAIL_FROM, to: params.to, subject: 'Bienvenido a ColoradosDrive: tu matrícula está activa',
+      from: env.EMAIL_FROM,
+      to: params.to,
+      subject: 'Bienvenido a ColoradosDrive: tu matrícula está activa',
       messageId: `<pago-bienvenida-${params.paymentId}@${url.hostname}>`,
-      text: [`Hola ${params.nombreCompleto},`, intro, `Ingresar: ${url.toString()}`, 'Recuerda llevar tus documentos físicos antes de tu primera práctica.'].join('\n'),
+      text: [
+        `Hola ${params.nombreCompleto},`,
+        intro,
+        `Ingresar: ${url.toString()}`,
+        'Recuerda llevar tus documentos físicos antes de tu primera práctica.',
+      ].join('\n'),
       html: `<p>Hola ${escapeHtml(params.nombreCompleto)},</p><p>${intro}</p><p><a href="${escapeHtml(url.toString())}">Ingresar a la plataforma</a></p><p>Recuerda llevar tus documentos físicos antes de tu primera práctica.</p>`,
     });
   }
@@ -81,7 +93,9 @@ export class EmailService {
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to: params.to,
-      subject: reset ? 'Restablecimiento de contraseña de instructor' : 'Acceso de instructor a ColoradosDrive',
+      subject: reset
+        ? 'Restablecimiento de contraseña de instructor'
+        : 'Acceso de instructor a ColoradosDrive',
       text: [
         `Hola ${params.nombreCompleto},`,
         ...(reset ? ['Un administrador solicitó restablecer tu contraseña.'] : []),
@@ -96,7 +110,9 @@ export class EmailService {
         ...(reset ? ['<p>Un administrador solicitó restablecer tu contraseña.</p>'] : []),
         '<p>Tus credenciales de instructor son:</p>',
         `<p>Correo: ${escapeHtml(params.to)}<br>Contraseña temporal: <strong>${escapeHtml(params.temporaryPassword)}</strong></p>`,
-        reset ? '<p>Debes cambiarla al ingresar.</p>' : '<p>Debes cambiarla al ingresar por primera vez.</p>',
+        reset
+          ? '<p>Debes cambiarla al ingresar.</p>'
+          : '<p>Debes cambiarla al ingresar por primera vez.</p>',
         `<p><a href="${escapeHtml(login)}">Acceder a ColoradosDrive</a></p>`,
       ].join('\n'),
     });
@@ -114,7 +130,7 @@ export class EmailService {
     const credentials = p.temporaryPassword
       ? `Contraseña temporal: ${p.temporaryPassword}\nDeberás cambiarla al ingresar por primera vez.`
       : 'Usa tus credenciales actuales. Esta matrícula no cambia tu contraseña.';
-    const summary = `Tipo ${p.courseType} · ${p.cohortName ?? 'Pendiente de cohorte'}\nEstado: ${p.status}\nPlan: ${String(p.days)} días, ${String(p.blocks)} bloques de 60 minutos (${formatEcuadorDateTime(p.start)} a ${formatEcuadorDateTime(p.end)}).`;
+    const summary = `Tipo ${p.courseType} · ${p.status === 'pendiente_cohorte' ? 'Horario por asignar' : 'Horario asignado'}\nEstado: ${p.status}\nPlan: ${String(p.days)} días, ${String(p.blocks)} bloques de 60 minutos (${formatEcuadorDateTime(p.start)} a ${formatEcuadorDateTime(p.end)}).`;
     const pending =
       p.status === 'pendiente_cohorte'
         ? 'El plan se conservó; aún no se generaron franjas. La asignación posterior de cohorte queda pendiente.'
@@ -194,6 +210,42 @@ export class EmailService {
         `<p>Ya tenemos el resultado de tu examen "${examTitle}":</p>`,
         `<p>Puntaje: <strong>${scoreFormatted}%</strong><br>Resultado: <strong>${resultado}</strong></p>`,
       ].join('\n'),
+    });
+  }
+
+  async sendEnrollmentPlanChangedEmail(params: {
+    to: string;
+    summary: string;
+    messageId: string;
+  }): Promise<void> {
+    const url = new URL('/student/inscripcion', env.FRONTEND_URL).toString();
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      messageId: params.messageId,
+      subject: 'Tu plan de prácticas fue actualizado',
+      text: `${params.summary}\n${url}`,
+      html: `<p>${escapeHtml(params.summary)}</p><p><a href="${escapeHtml(url)}">Consultar mi plan</a></p>`,
+    });
+  }
+  async sendWaitlistAvailabilityEmail(params: {
+    to: string;
+    type: 'A' | 'B';
+    summary?: string;
+    messageId: string;
+  }): Promise<void> {
+    const url = new URL('/student/inscripcion?paso=2', env.FRONTEND_URL).toString();
+    const unsubscribe = new URL('/student/inscripcion?avisos=retirar', env.FRONTEND_URL).toString();
+    const text =
+      params.summary ??
+      `Puedes consultar fechas y precio para el tipo ${params.type} en Mi inscripción. La asignación está sujeta a cupos disponibles.`;
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
+      messageId: params.messageId,
+      subject: 'Hay horarios disponibles para tu inscripción',
+      text: `${text}\n${url}\nNo recibir más avisos: ${unsubscribe}`,
+      html: `<p>${escapeHtml(text)}</p><p><a href="${escapeHtml(url)}">Elegir horario</a></p><p><a href="${escapeHtml(unsubscribe)}">No recibir más avisos</a></p>`,
     });
   }
 
@@ -313,7 +365,8 @@ export class EmailService {
     const intro = params.reenvio
       ? 'Te enviamos un enlace nuevo para crear tu contraseña de ColoradosDrive.'
       : 'Tu solicitud de inscripción en ColoradosDrive fue aprobada. Crea tu contraseña con este enlace.';
-    const aviso = 'El enlace es de un solo uso y vence pronto. Si no lo solicitaste, ignora este correo.';
+    const aviso =
+      'El enlace es de un solo uso y vence pronto. Si no lo solicitaste, ignora este correo.';
     await this.transporter.sendMail({
       from: env.EMAIL_FROM,
       to: params.to,
@@ -344,10 +397,34 @@ export class EmailService {
   }
 
   async sendApplicationRejectedEmail(params: { to: string; motivo: string }): Promise<void> {
-    await this.transporter.sendMail({ from: env.EMAIL_FROM, to: params.to,
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: params.to,
       subject: 'Revisión de tu solicitud de ColoradosDrive',
       text: `Tu solicitud no fue aprobada. Motivo: ${params.motivo}\nPuedes contactar a la escuela para más información.`,
     });
   }
-
+  async sendRequestStateEmail(event: {
+    id: string;
+    to: string;
+    kind: 'devuelta' | 'rechazada' | 'archivada' | 'revocada';
+  }): Promise<void> {
+    const message = {
+      devuelta:
+        'Tu solicitud necesita una corrección. Ingresa con tu correo para consultar su estado.',
+      rechazada:
+        'La revisión de tu solicitud ha finalizado. Ingresa para consultar el resultado o contacta a la escuela.',
+      archivada:
+        'Tu solicitud fue aprobada y su expediente quedó archivado. Recibirás las instrucciones de acceso por separado.',
+      revocada:
+        'El acceso de tu inscripción requiere revisión. Contacta a la escuela para recibir instrucciones.',
+    }[event.kind];
+    await this.transporter.sendMail({
+      from: env.EMAIL_FROM,
+      to: event.to,
+      subject: 'Estado de tu inscripción',
+      messageId: `<${event.id}@notifications.coloradosdrive>`,
+      text: `${message} ${env.FRONTEND_URL}/inscripcion`,
+    });
+  }
 }

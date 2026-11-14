@@ -26,7 +26,7 @@ async function assertPasswordNotPendingChange(req: Request, studentId: string): 
     (req.method === 'GET' && `${req.baseUrl}${req.path}` === '/estudiantes/account-status');
   const { data, error } = await supabaseAdmin
     .from('users')
-    .select('activo,debe_cambiar_password')
+    .select('activo,debe_cambiar_password,identity_access_blocked_at')
     .eq('id', studentId)
     .eq('rol', 'estudiante')
     .maybeSingle();
@@ -39,6 +39,10 @@ async function assertPasswordNotPendingChange(req: Request, studentId: string): 
       code: 'ACCOUNT_INACTIVE',
     });
   }
+  if (data.identity_access_blocked_at)
+    throw new AppError('Tu acceso requiere revisión de la escuela.', 403, {
+      code: 'SOLICITUD_ACCESO_REVOCADO',
+    });
   if (!isChangePasswordRequest && data.debe_cambiar_password) {
     throw new AppError('Debes cambiar tu contraseña temporal antes de continuar', 403);
   }
@@ -100,6 +104,7 @@ export async function authenticate(
 
     const payload = await verifySupabaseJwt(token);
     const user = toAuthenticatedUser(payload);
+    req.user = user;
 
     if (user.role === 'estudiante') {
       await assertPasswordNotPendingChange(req, user.id);

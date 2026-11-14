@@ -1,0 +1,53 @@
+{
+  "schema": {
+    "table": "public.enrollment_plan_options",
+    "constraint": "enrollment_plan_options_horas_objetivo_check",
+    "before": "CHECK ((horas_objetivo = 15))",
+    "after": "CHECK ((horas_objetivo > 0))",
+    "defaultBefore": "15",
+    "defaultAfter": "10",
+    "notNull": true
+  },
+  "functions": [
+    {
+      "signature": "private.enrollment_plan_v2(jsonb)",
+      "before": "275869129957f6cf838783efeeb98b6b",
+      "after": "3705c839cee115b16f3ff6fe0f4e0a48"
+    },
+    {
+      "signature": "private.reserve_schedule_v2(uuid,uuid,jsonb)",
+      "before": "be937a1c439a4560074a33058cc44bad",
+      "after": "b6b2ee2afd0866b255ccaa9ef1fbd26c"
+    },
+    {
+      "signature": "private.confirm_payment_v2(uuid,text,text,text,bigint,text,text,text)",
+      "before": "6e9505424bddc57b6b3dd5ae765db688",
+      "after": "6fbf8dea16054980095bd760988b2baf"
+    },
+    {
+      "signature": "private.mark_payment_dates_proven()",
+      "before": "dfbfa45f06c15fca9ed374d339810ae3",
+      "after": "372384c168e9915672d7223d677a7676"
+    },
+    {
+      "signature": "authorize_repeat_enrollment_v2(uuid,uuid,uuid,text)",
+      "before": "2c32f1bf4c498d7545b3644f61df25ec",
+      "after": "ee032d0b693fd90343509dc662b3ee4f"
+    },
+    {
+      "signature": "private.reserve_plan_change_v2(uuid,uuid,jsonb,uuid,text,boolean,uuid)",
+      "before": "8f2564cfd6ed9e03085745c53e13d8c0",
+      "after": "1953031eabdf9df6559174a432595d28"
+    },
+    {
+      "signature": "private.confirm_plan_change_v2(uuid,uuid,uuid)",
+      "before": "910b76ac285d3652da3b4ededc8edd01",
+      "after": "7367c7611d0c2eba97f64f2d8aa422c6"
+    },
+    {
+      "signature": "private.integrated_manual_commit_v2(uuid,uuid,uuid,jsonb,uuid,uuid,jsonb,timestamp with time zone[],uuid,jsonb,jsonb)",
+      "before": "7a72553f201af934856b949e42fef9a9",
+      "after": "294934f121eb4be6e46b41cf1e427342"
+    }
+  ]
+}

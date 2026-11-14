@@ -1,3 +1,4 @@
+import { normalizeIdentityDocument, type IdentityDocumentType } from './identityDocument';
 import { DateTime } from 'luxon';
 import {
   NACIONALIDADES,
@@ -104,21 +105,30 @@ export function validateCertificateSubtype(
   return enumValue(value, permitidos, 'subtipo', 'SUBTIPO_CERTIFICADO_INVALIDO');
 }
 export interface EnrollmentPersonalData {
+  documentType?: IdentityDocumentType;
+  documentNumber?: string;
   nombres: string;
   apellidos: string;
   nombreCompleto: string;
   cedula: string;
   fechaNacimiento: string;
   telefono: string;
-  nacionalidadTipo: Exclude<Nacionalidad, 'extranjero_sin_cedula'>;
+  nacionalidadTipo: Nacionalidad;
   tipoSangre: TipoSangre;
   nivelEstudios?: Exclude<NivelEstudios, 'menos_de_decimo' | 'cursando_bachillerato'>;
-  representante?: { nombre: string; cedula: string; acepta: true };
+  representante?: {
+    nombre: string;
+    cedula: string;
+    acepta: true;
+    documentType?: IdentityDocumentType;
+    documentNumber?: string;
+  };
 }
 export function validateEnrollmentData(
   value: unknown,
   edadMinima: number,
   now = new Date(),
+  foreignIdentity = false,
 ): EnrollmentPersonalData {
   requireKnownFields(value, [
     'nombres',
@@ -130,9 +140,10 @@ export function validateEnrollmentData(
     'tipoSangre',
     'nivelEstudios',
     'representante',
+    ...(foreignIdentity ? ['documentType', 'documentNumber'] : []),
   ]);
   const nacionalidadTipo = enumValue(value.nacionalidadTipo, NACIONALIDADES, 'nacionalidadTipo');
-  if (nacionalidadTipo === 'extranjero_sin_cedula')
+  if (nacionalidadTipo === 'extranjero_sin_cedula' && !foreignIdentity)
     invalidField(
       'nacionalidadTipo',
       'Atendemos tu inscripción por WhatsApp.',
@@ -140,7 +151,13 @@ export function validateEnrollmentData(
     );
   const nombres = validateNamePart(value.nombres, 'nombres');
   const apellidos = validateNamePart(value.apellidos, 'apellidos');
-  validateCedula(value.cedula);
+  const document = foreignIdentity
+    ? normalizeIdentityDocument(
+        value.documentType ?? 'cedula',
+        value.documentNumber ?? value.cedula,
+      )
+    : null;
+  if (!document) validateCedula(value.cedula);
   const birth = validateEnrollmentBirthDate(value.fechaNacimiento, edadMinima, now);
   const telefono = normalizePhone(value.telefono);
   const tipoSangre = enumValue(value.tipoSangre, TIPOS_SANGRE, 'tipoSangre');
@@ -154,7 +171,16 @@ export function validateEnrollmentData(
         'Completa los datos y autorización del representante.',
         'REPRESENTANTE_REQUERIDO',
       );
-    requireKnownFields(value.representante, ['nombre', 'cedula', 'acepta'], 'representante');
+    requireKnownFields(
+      value.representante,
+      [
+        'nombre',
+        'cedula',
+        'acepta',
+        ...(foreignIdentity ? ['documentType', 'documentNumber'] : []),
+      ],
+      'representante',
+    );
     const rep = value.representante;
     if (rep.acepta !== true)
       invalidField(
@@ -162,8 +188,15 @@ export function validateEnrollmentData(
         'El representante debe autorizar la inscripción.',
         'REPRESENTANTE_REQUERIDO',
       );
-    validateCedula(rep.cedula, 'representanteCedula');
-    if (rep.cedula === value.cedula)
+    const guardian = foreignIdentity
+      ? normalizeIdentityDocument(rep.documentType ?? 'cedula', rep.documentNumber ?? rep.cedula)
+      : null;
+    if (!guardian) validateCedula(rep.cedula, 'representanteCedula');
+    if (
+      guardian && document
+        ? guardian.type === document.type && guardian.number === document.number
+        : rep.cedula === value.cedula
+    )
       invalidField(
         'representanteCedula',
         'La cédula del representante debe ser distinta.',
@@ -171,7 +204,12 @@ export function validateEnrollmentData(
       );
     representante = {
       nombre: normalizeName(rep.nombre, 'representanteNombre'),
-      cedula: rep.cedula,
+      cedula: guardian
+        ? guardian.type === 'cedula'
+          ? guardian.number
+          : ''
+        : (rep.cedula as string),
+      ...(guardian ? { documentType: guardian.type, documentNumber: guardian.number } : {}),
       acepta: true,
     };
   } else if (value.representante !== undefined)
@@ -184,7 +222,12 @@ export function validateEnrollmentData(
     nombres,
     apellidos,
     nombreCompleto: `${nombres} ${apellidos}`,
-    cedula: value.cedula,
+    cedula: document
+      ? document.type === 'cedula'
+        ? document.number
+        : ''
+      : (value.cedula as string),
+    ...(document ? { documentType: document.type, documentNumber: document.number } : {}),
     fechaNacimiento: birth.fecha,
     nacionalidadTipo,
     tipoSangre,

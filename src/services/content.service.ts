@@ -23,6 +23,8 @@ const MESSAGES: Record<string, string> = {
   ITEM_CERRADO: 'La ventana de acceso terminó',
   ATTEMPTS_EXHAUSTED: 'Se agotaron los intentos permitidos',
   ALREADY_PASSED: 'El definitivo ya fue aprobado',
+  MARCA_NO_REVERSIBLE: 'Un material completado no se puede volver a marcar como pendiente.',
+  MATERIALES_PENDIENTES: 'Antes de rendir este examen, completa los materiales obligatorios previos.',
   EXAM_NOT_PUBLISHED: 'El examen no está publicado',
   ATTEMPT_COMPLETED: 'Este intento ya fue calificado',
   ATTEMPT_EXPIRED:
@@ -52,14 +54,38 @@ export function contentError(code: string, status?: number): AppError {
   );
 }
 
+export interface PendingMaterial {
+  item_id: string;
+  titulo: string;
+}
+
+function pendingMaterials(value: unknown): PendingMaterial[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const row = entry as { item_id?: unknown; titulo?: unknown };
+    return typeof row.item_id === 'string' && typeof row.titulo === 'string'
+      ? [{ item_id: row.item_id, titulo: row.titulo }]
+      : [];
+  });
+}
+
 export function checkContentResult(value: ContentValue): ContentValue {
   if (
     value &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
     typeof value.error === 'string'
-  )
+  ) {
+    if (value.error === 'MATERIALES_PENDIENTES') {
+      const pendientes = pendingMaterials(value.pendientes);
+      throw new AppError(
+        `Antes de rendir este examen, completa: ${pendientes.map((p) => p.titulo).join(', ')}.`,
+        409,
+        { code: 'MATERIALES_PENDIENTES', detalles: { pendientes } },
+      );
+    }
     throw contentError(value.error);
+  }
   return value;
 }
 

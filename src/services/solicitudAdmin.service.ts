@@ -1,3 +1,4 @@
+import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from '../config/database.types';
@@ -18,7 +19,13 @@ import { recordSolicitudAudit } from './solicitudAudit.service';
 import { CERTIFICATE_BUCKET } from './solicitudCertificateStorage.service';
 
 export const CERTIFICATE_URL_SECONDS = 300;
-export const ADMIN_ESTADOS_LISTA = ['enviada', 'devuelta', 'aprobada', 'rechazada'] as const;
+export const ADMIN_ESTADOS_LISTA = [
+  'enviada',
+  'devuelta',
+  'aprobada',
+  'rechazada',
+  'archivada',
+] as const;
 export type AdminEstadoLista = (typeof ADMIN_ESTADOS_LISTA)[number];
 
 export interface AdminListResult {
@@ -51,7 +58,7 @@ export class SolicitudAdminService {
     return data;
   }
 
-  async detalle(id: string): Promise<Record<string, unknown>> {
+  async detalle(id: string, actor?: string): Promise<Record<string, unknown>> {
     const { data: s, error } = await this.db
       .from('solicitudes_inscripcion')
       .select()
@@ -150,6 +157,9 @@ export class SolicitudAdminService {
             aceptadoAt: consent.data.aceptado_at,
             representanteNombre: consent.data.representante_nombre,
             representanteCedula: consent.data.representante_cedula,
+            representanteDocumentType: consent.data.representante_document_type,
+            representanteDocumentNumber:
+              consent.data.representante_document_number ?? consent.data.representante_cedula,
             representanteAcepta: consent.data.representante_acepta,
           }
         : null,
@@ -162,6 +172,8 @@ export class SolicitudAdminService {
         porNombre: names.get(v.actor_id) ?? null,
         createdAt: v.creado_at,
         // Una verificación anterior a un cambio de datos o de certificado ya no sirve.
+        mode: v.mode,
+        scanAvailable: Boolean(v.scan_path && !v.scan_deleted_at),
         vigente: isVerificationFresh(v, ctx),
       })),
       devolucionMotivoCodigo: s.devolucion_motivo_codigo,
@@ -169,7 +181,17 @@ export class SolicitudAdminService {
       devolucionNotaInterna: s.devolucion_nota_interna,
       rechazoMotivoCodigo: s.rechazo_motivo_codigo,
       rechazoNotaInterna: s.rechazo_nota_interna,
+      documentType: s.identity_document_type,
+      documentNumber: s.identity_document_number,
       studentId: s.student_id,
+      updatedAt: s.updated_at,
+      archivedAt: s.archived_at,
+      revokedAt: s.revoked_at,
+      revocationPaymentReview: s.revocation_payment_review,
+      reviewOwned:
+        s.review_owner === actor &&
+        Boolean(s.review_until && Date.parse(s.review_until) > Date.now()),
+      identityRulesActive: await enrollmentRuleEnabled(this.db, 'identity'),
     };
   }
 
@@ -202,7 +224,11 @@ export class SolicitudAdminService {
     if (rpcError) throw normalizeSolicitudError(rpcError);
     if (!data)
       throw solicitudError('No se pudo registrar la verificación.', 503, 'SERVICIO_NO_DISPONIBLE');
-    const user = await this.db.from('users').select('nombre_completo').eq('id', actor).maybeSingle();
+    const user = await this.db
+      .from('users')
+      .select('nombre_completo')
+      .eq('id', actor)
+      .maybeSingle();
     return { ...data, porNombre: user.data?.nombre_completo ?? null };
   }
 

@@ -1,4 +1,17 @@
+import { adminFinancialPrivacy } from '../middlewares/adminFinancialPrivacy.middleware';
+import { PlanChangeService } from '../services/planChange.service';
+import {
+  safeNotify,
+  safeReleaseUnusedSlots,
+  snapshotFuturePractices,
+  type FuturePractice,
+} from '../services/planChangeInstructorNotice.service';
+import { RealtimeService } from '../services/realtime.service';
+import { logSafeError } from '../utils/safeLog';
+import { enrollmentRuleEnabled } from '../services/enrollmentRuleFlags.service';
+import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { Router, type Request } from 'express';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertBirthDate, BIRTH_DATE_MESSAGES } from '../utils/birthDate';
 import { body, param, query } from 'express-validator';
 import { supabaseAdmin } from '../config/supabase';
@@ -29,14 +42,419 @@ const accessService = new StudentAccessService(supabaseAdmin);
 const deletionService = new StudentDeletionService(supabaseAdmin);
 const cohortService = new StudentCohortService(supabaseAdmin);
 studentAdminRouter.use(asyncHandler(authenticate), requireRole('admin'));
+studentAdminRouter.use(adminFinancialPrivacy);
 
 function actor(req: Request): string {
   if (!req.user) throw new AppError('Authentication required', 401);
   return req.user.id;
 }
 
+studentAdminRouter.get(
+  '/:id/matriculas/:enrollment/gestion',
+  param('id').isUUID(),
+  param('enrollment').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const result = await supabaseAdmin.rpc('admin_enrollment_management_v12', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_enrollment: req.params.enrollment,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/:enrollment/documento',
+  param('id').isUUID(),
+  param('enrollment').isUUID(),
+  body('tipo').isIn(['cedula', 'papeleta_votacion', 'tipo_sangre', 'titulo_bachiller']),
+  body('estado').isIn(['pendiente', 'entregado', 'no_aplica']),
+  body('anterior').optional({ values: 'null' }).isIn(['pendiente', 'entregado', 'no_aplica']),
+  validate,
+  asyncHandler(async (req, res) => {
+    const input = req.body as { tipo: string; estado: string; anterior?: string | null };
+    const result = await supabaseAdmin.rpc('set_enrollment_document_v12', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_enrollment: req.params.enrollment,
+      p_type: input.tipo,
+      p_status: input.estado,
+      p_expected: input.anterior ?? null,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/:enrollment/cohorte',
+  param('id').isUUID(),
+  param('enrollment').isUUID(),
+  body('cohortId').isUUID(),
+  body('version').isISO8601(),
+  body('motivo').isString().trim().isLength({ min: 1, max: 500 }),
+  body('excepcion').isBoolean({ strict: true }),
+  validate,
+  asyncHandler(async (req, res) => {
+    const input = req.body as {
+      cohortId: string;
+      version: string;
+      motivo: string;
+      excepcion: boolean;
+    };
+    const result = await supabaseAdmin.rpc('transfer_enrollment_cohort_v12', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_enrollment: req.params.enrollment,
+      p_target: input.cohortId,
+      p_version: input.version,
+      p_reason: input.motivo,
+      p_exception: input.excepcion,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+
+studentAdminRouter.get(
+  '/:id/matriculas/acceso',
+  param('id').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const flag = await supabaseAdmin
+      .from('enrollment_rule_flags')
+      .select('enabled,implemented')
+      .eq('key', 'enrollment_access')
+      .single();
+    if (flag.error) throwStudentScheduleError(flag.error);
+    if (!flag.data.enabled || !flag.data.implemented) {
+      res.json({ active: false, serverNow: new Date().toISOString(), enrollments: [] });
+      return;
+    }
+    const result = await supabaseAdmin.rpc('admin_enrollment_access_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.set('Cache-Control', 'no-store').json(result.data);
+  }),
+);
+studentAdminRouter.patch(
+  '/:id/matriculas/:enrollmentId/acceso',
+  param('id').isUUID(),
+  param('enrollmentId').isUUID(),
+  body('fin').isISO8601({ strict: true }),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validate,
+  asyncHandler(async (req, res) => {
+    const { fin, motivo } = req.body as { fin: string; motivo: string };
+    const own = await supabaseAdmin.rpc('admin_enrollment_access_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+    });
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data.enrollments.some((e) => e.id === req.params.enrollmentId))
+      throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
+    const result = await supabaseAdmin.rpc('extend_enrollment_access_v2', {
+      p_actor: actor(req),
+      p_enrollment: req.params.enrollmentId,
+      p_end: fin,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/repeticion',
+  param('id').isUUID(),
+  body('courseId').isUUID(),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validate,
+  asyncHandler(async (req, res) => {
+    const { courseId, motivo } = req.body as { courseId: string; motivo: string };
+    const result = await supabaseAdmin.rpc('authorize_repeat_enrollment_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_course: courseId,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.status(201).json({ id: result.data });
+  }),
+);
+studentAdminRouter.get(
+  '/espera/resumen',
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist'))) {
+      res.json({ active: false, A: 0, B: 0 });
+      return;
+    }
+    const result = await supabaseAdmin.rpc('admin_waitlist_counts_v2', { p_actor: actor(req) });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json(result.data);
+  }),
+);
+studentAdminRouter.post(
+  '/espera/reintentar',
+  body('tipo').isIn(['A', 'B']),
+  body('motivo').isString().isLength({ min: 1, max: 500 }),
+  validate,
+  asyncHandler(async (req, res) => {
+    if (!(await enrollmentRuleEnabled(supabaseAdmin, 'waitlist')))
+      throw new AppError('Los avisos de apertura aún no están habilitados.', 409, {
+        code: 'ESPERA_REGLAS_INACTIVAS',
+      });
+    const { tipo, motivo } = req.body as { tipo: 'A' | 'B'; motivo: string };
+    const result = await supabaseAdmin.rpc('retry_waitlist_emails_v2', {
+      p_actor: actor(req),
+      p_type: tipo,
+      p_reason: motivo,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json({ retried: result.data });
+  }),
+);
+const changeService = new PlanChangeService(supabaseAdmin);
+const planChangeRealtime = new RealtimeService(supabaseAdmin);
+studentAdminRouter.get(
+  '/:id/matriculas/:enrollmentId/cambio',
+  param('id').isUUID(),
+  param('enrollmentId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const state = await changeService.state(req.params.id, req.params.enrollmentId, actor(req));
+    res.json(state);
+  }),
+);
+for (const changeAction of ['preview', 'reservar', 'opciones'] as const)
+  studentAdminRouter.post(
+    `/:id/matriculas/:enrollmentId/cambio/${changeAction}`,
+    param('id').isUUID(),
+    param('enrollmentId').isUUID(),
+    body('modalidad').isIn(['entre_semana', 'fin_de_semana']),
+    body('fechaInicio').matches(/^\d{4}-\d{2}-\d{2}$/),
+    body('horasPorDia').isInt({ min: 1, max: 6 }).toInt(),
+    body('horaInicio').isInt({ min: 6, max: 23 }).toInt(),
+    body('motivo').isString().isLength({ min: 1, max: 500 }),
+    body('cohortId').optional().isUUID(),
+    validate,
+    asyncHandler(async (req, res) => {
+      // Cualquier cohortId enviado por el cliente se ignora: el destino es la cohorte actual.
+      const {
+        motivo,
+        cohortId: _ignoredTarget,
+        ...input
+      } = req.body as {
+        motivo: string;
+        cohortId?: string;
+        modalidad: 'entre_semana' | 'fin_de_semana';
+        fechaInicio: string;
+        horasPorDia: number;
+        horaInicio: number;
+      };
+      const source = await supabaseAdmin.rpc('admin_plan_change_state_v2', {
+        p_actor: actor(req),
+        p_enrollment: req.params.enrollmentId,
+      });
+      if (source.error) throwStudentScheduleError(source.error);
+      // La RPC deriva el propietario: el id de URL se verifica antes de mutar.
+      const own = await supabaseAdmin
+        .from('enrollments')
+        .select('id, cohort_id')
+        .eq('id', req.params.enrollmentId)
+        .eq('student_id', req.params.id)
+        .maybeSingle();
+      if (own.error) throwStudentScheduleError(own.error);
+      if (!own.data)
+        throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
+      const admin = {
+        id: actor(req),
+        reason: motivo,
+        target: own.data.cohort_id ?? undefined,
+      };
+      res.json(
+        changeAction === 'opciones'
+          ? await changeService.options(req.params.id, req.params.enrollmentId, input, admin)
+          : changeAction === 'preview'
+            ? await changeService.preview(req.params.id, req.params.enrollmentId, input, admin)
+            : await changeService.reserve(req.params.id, req.params.enrollmentId, input, admin),
+      );
+    }),
+  );
+studentAdminRouter.post(
+  '/:id/matriculas/cambio/:reservationId/confirmar',
+  param('id').isUUID(),
+  param('reservationId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const permission = await supabaseAdmin.rpc('assert_reassignment_permission_v2', {
+      p_actor: actor(req),
+    });
+    if (permission.error) throwStudentScheduleError(permission.error);
+    const own = await supabaseAdmin
+      .from('student_schedule_reservations')
+      .select('id, cohort_id')
+      .eq('id', req.params.reservationId)
+      .eq('student_id', req.params.id)
+      .maybeSingle();
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data)
+      throw new AppError('Reserva no encontrada.', 404, { code: 'RESERVA_NO_ENCONTRADA' });
+    // Foto de las prácticas futuras antes de confirmar; si falla, el cambio sigue igual.
+    let before: FuturePractice[] | null = null;
+    const cohortId = own.data.cohort_id;
+    if (cohortId)
+      try {
+        before = await snapshotFuturePractices(supabaseAdmin, req.params.id, cohortId);
+      } catch (error) {
+        logSafeError('plan_change_snapshot_failed', error);
+      }
+    const confirmed = await changeService.confirm(
+      req.params.id,
+      req.params.reservationId,
+      actor(req),
+    );
+    let warning: string | undefined;
+    if (!before || !cohortId) warning = 'No se pudo avisar a los instructores afectados.';
+    else
+      try {
+        const after = await snapshotFuturePractices(supabaseAdmin, req.params.id, cohortId);
+        await safeReleaseUnusedSlots(supabaseAdmin, before, after);
+        const student = await supabaseAdmin
+          .from('users')
+          .select('nombre_completo')
+          .eq('id', req.params.id)
+          .maybeSingle();
+        const result = await safeNotify(supabaseAdmin, {
+          studentName: student.data?.nombre_completo ?? 'un alumno',
+          reservationId: req.params.reservationId,
+          before,
+          after,
+        });
+        if (!result.ok) warning = 'No se pudo avisar a los instructores afectados.';
+        else
+          await Promise.allSettled(
+            result.notified.flatMap((id) => [
+              planChangeRealtime.broadcast(`user-${id}-notifications`, 'notifications-updated', {}),
+            ]),
+          );
+      } catch (error) {
+        logSafeError('plan_change_instructor_notice_failed', error);
+        warning = 'No se pudo avisar a los instructores afectados.';
+      }
+    res.json(warning ? { ...confirmed, advertencia: warning } : confirmed);
+  }),
+);
+// Solo lectura: instructor propuesto por hora (retenciones de la reserva) y el actual del alumno.
+studentAdminRouter.get(
+  '/:id/matriculas/cambio/:reservationId/horarios',
+  param('id').isUUID(),
+  param('reservationId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const permission = await supabaseAdmin.rpc('assert_reassignment_permission_v2', {
+      p_actor: actor(req),
+    });
+    if (permission.error) throwStudentScheduleError(permission.error);
+    const own = await supabaseAdmin
+      .from('student_schedule_reservations')
+      .select('id, cohort_id')
+      .eq('id', req.params.reservationId)
+      .eq('student_id', req.params.id)
+      .maybeSingle();
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data)
+      throw new AppError('Reserva no encontrada.', 404, { code: 'RESERVA_NO_ENCONTRADA' });
+    const untyped = supabaseAdmin as unknown as SupabaseClient;
+    const holds = await untyped
+      .from('student_schedule_holds')
+      .select('scheduled_at, instructor_id')
+      .eq('reservation_id', req.params.reservationId)
+      .is('released_at', null)
+      .order('scheduled_at');
+    if (holds.error) throwStudentScheduleError(holds.error);
+    const current = own.data.cohort_id
+      ? await snapshotFuturePractices(supabaseAdmin, req.params.id, own.data.cohort_id)
+      : [];
+    const proposed = holds.data as { scheduled_at: string; instructor_id: string }[];
+    const ids = [
+      ...new Set([...proposed.map((h) => h.instructor_id), ...current.map((c) => c.instructorId)]),
+    ];
+    const names = ids.length
+      ? await supabaseAdmin.from('users').select('id, nombre_completo').in('id', ids)
+      : { data: [], error: null };
+    if (names.error) throwStudentScheduleError(names.error);
+    const nameOf = new Map(names.data.map((u) => [u.id, u.nombre_completo]));
+    res.set('Cache-Control', 'no-store').json({
+      propuesto: proposed.map((h) => ({
+        scheduledAt: h.scheduled_at,
+        instructorId: h.instructor_id,
+        instructorName: nameOf.get(h.instructor_id) ?? 'Instructor por informar',
+      })),
+      actual: current.map((c) => ({
+        scheduledAt: c.scheduledAt,
+        instructorId: c.instructorId,
+        instructorName: nameOf.get(c.instructorId) ?? 'Instructor por informar',
+      })),
+    });
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/cambio/:reservationId/liberar',
+  param('id').isUUID(),
+  param('reservationId').isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    const result = await supabaseAdmin.rpc('release_admin_plan_change_v2', {
+      p_actor: actor(req),
+      p_student: req.params.id,
+      p_reservation: req.params.reservationId,
+    });
+    if (result.error) throwStudentScheduleError(result.error);
+    res.json({ reserva: result.data, serverNow: result.data.serverNow });
+  }),
+);
+studentAdminRouter.post(
+  '/:id/matriculas/:enrollmentId/cambio/calendario',
+  param('id').isUUID(),
+  param('enrollmentId').isUUID(),
+  body('fechaInicio').matches(/^\d{4}-\d{2}-\d{2}$/),
+  body('modalidad').isIn(['entre_semana', 'fin_de_semana']),
+  body('horasPorDia').isInt({ min: 1, max: 6 }).toInt(),
+  body('cohortId').optional().isUUID(),
+  validate,
+  asyncHandler(async (req, res) => {
+    // Cualquier cohortId enviado por el cliente se ignora: el destino es la cohorte actual.
+    const { cohortId: _ignoredTarget, ...input } = req.body as {
+      cohortId?: string;
+      fechaInicio: string;
+      modalidad: 'entre_semana' | 'fin_de_semana';
+      horasPorDia: number;
+    };
+    await changeService.state(req.params.id, req.params.enrollmentId, actor(req));
+    const own = await supabaseAdmin
+      .from('enrollments')
+      .select('cohort_id')
+      .eq('id', req.params.enrollmentId)
+      .eq('student_id', req.params.id)
+      .maybeSingle();
+    if (own.error) throwStudentScheduleError(own.error);
+    if (!own.data)
+      throw new AppError('Matrícula no encontrada.', 404, { code: 'MATRICULA_NO_ENCONTRADA' });
+    res.json(
+      await changeService.calendar(
+        req.params.id,
+        req.params.enrollmentId,
+        { ...input, horaInicio: 6 },
+        { id: actor(req), target: own.data.cohort_id ?? undefined },
+      ),
+    );
+  }),
+);
 const listFields = [
   'q',
+  'interesadoEn',
   'activo',
   'courseId',
   'cohortId',
@@ -52,6 +470,7 @@ studentAdminRouter.get(
     query().custom((value: Record<string, unknown>) =>
       Object.keys(value).every((k) => listFields.includes(k)),
     ),
+    query('interesadoEn').optional().isIn(['A', 'B']),
     query('q').optional().isString().trim().isLength({ min: 1, max: 80 }),
     ...['activo', 'pendienteCohorte', 'documentosPendientes', 'incluirHistorial'].map((name) =>
       query(name).optional().isIn(['true', 'false']),
@@ -68,6 +487,7 @@ studentAdminRouter.get(
     res.json(
       await service.list(actor(req), {
         q: req.query.q as string | undefined,
+        interesadoEn: req.query.interesadoEn as 'A' | 'B' | undefined,
         courseId: req.query.courseId as string | undefined,
         cohortId: req.query.cohortId as string | undefined,
         activo: boolean('activo'),
@@ -101,9 +521,14 @@ studentAdminRouter.post(
         !!value &&
         typeof value === 'object' &&
         !Array.isArray(value) &&
-        Object.keys(value).every((key) => key === 'cohortId'),
+        Object.keys(value).every((key) => ['cohortId', 'motivo'].includes(key)),
     ),
     body('cohortId').isUUID().withMessage('Selecciona una cohorte válida'),
+    body('motivo')
+      .isString()
+      .trim()
+      .isLength({ min: 1, max: 500 })
+      .withMessage('Escribe el motivo de la asignación'),
   ],
   validateStudentProfile,
   asyncHandler(async (req, res) => {
@@ -113,6 +538,7 @@ studentAdminRouter.post(
         req.params.id,
         req.params.enrollmentId,
         (req.body as { cohortId: string }).cohortId,
+        (req.body as { motivo: string }).motivo,
       ),
     );
   }),

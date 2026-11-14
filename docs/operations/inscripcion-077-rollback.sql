@@ -1,0 +1,23 @@
+begin;
+set local lock_timeout='5s';
+do $$ begin
+ if exists(select 1 from public.enrollment_rule_flags where enabled or(implemented and key in('billing','identity','foreign_identity','permissions','metrics'))) then raise exception 'Apagar indicadores y revertir lotes posteriores';end if;
+ if exists(select 1 from public.student_schedule_reservations where replacement_enrollment_id is not null and estado in ('vigente','pago_en_curso')) then raise exception 'Resolver cambios pendientes sin liberar el plan original';end if;
+end $$;
+drop function public.admin_plan_change_calendar_v2(uuid,uuid,date,text,integer,uuid);
+drop function public.preview_admin_plan_change_v2(uuid,uuid,jsonb,text,uuid);
+drop function public.release_admin_plan_change_v2(uuid,uuid,uuid);
+drop function public.assert_reassignment_permission_v2(uuid);
+drop function public.reserve_admin_plan_change_v2(uuid,uuid,jsonb,text,uuid);
+drop function public.confirm_admin_plan_change_v2(uuid,uuid);
+drop function public.admin_plan_change_state_v2(uuid,uuid);
+drop function public.bulk_reassign_enrollments_v2(uuid,jsonb,text,boolean);
+drop function public.cohort_reassignment_source_v2(uuid,uuid);
+drop function public.cancel_cohort_v2(uuid,uuid,timestamptz,text);
+drop trigger enrollment_access_activation on public.enrollment_rule_flags;
+drop function private.enrollment_access_activation();
+alter function private.legacy077_enrollment_access_activation() rename to enrollment_access_activation;
+create trigger enrollment_access_activation before update on public.enrollment_rule_flags for each row execute function private.enrollment_access_activation();
+update public.enrollment_rule_flags set enabled=false,implemented=false where key='schedule_changes';
+notify pgrst,'reload schema';
+commit;

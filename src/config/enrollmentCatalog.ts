@@ -152,7 +152,12 @@ export const DOCUMENTOS_FISICOS = [
     obligatorio: true,
     bloqueaPago: false,
   },
-  { tipo: 'cedula', label: 'Cédula original para cotejo', obligatorio: true, bloqueaPago: false },
+  {
+    tipo: 'cedula',
+    label: 'Documento de identidad original para cotejo',
+    obligatorio: true,
+    bloqueaPago: false,
+  },
 ] as const;
 export const RETENCION_INSCRIPCION = {
   borradorDias: 7,

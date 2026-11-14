@@ -10,6 +10,7 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
+import { dataRpcCalls } from '../helpers/rpcCalls';
 
 const rpc = supabaseAdmin.rpc as jest.Mock;
 const from = supabaseAdmin.from as jest.Mock;
@@ -93,7 +94,7 @@ describe('Asistencia E4: contratos y permisos HTTP', () => {
         .send({ attended: true, motivo });
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({ code: 'INVALID_FIELD', field: 'motivo' });
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     },
   );
   it.each([null, '', ' corto ', 'x'.repeat(501)])(
@@ -105,7 +106,7 @@ describe('Asistencia E4: contratos y permisos HTTP', () => {
         .send({ attended: true, motivo });
       expect(res.status).toBe(400);
       expect(res.body.message).not.toBe('Invalid value');
-      expect(rpc).not.toHaveBeenCalled();
+      expect(dataRpcCalls(rpc)).toHaveLength(0);
     },
   );
   it.each(['false', 0, null, undefined])('exige attended boolean real %p', async (attended) => {
@@ -115,7 +116,7 @@ describe('Asistencia E4: contratos y permisos HTTP', () => {
       .send({ attended });
     expect(res.status).toBe(400);
     expect(res.body.field).toBe('attended');
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
   it.each([
     ['AT404', 404, 'PRACTICE_NOT_FOUND'],
@@ -154,7 +155,7 @@ describe('Asistencia E4: contratos y permisos HTTP', () => {
           .set('Authorization', auth())
       ).status,
     ).toBe(403);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
   it('pagina auditoria administrativa y oculta metadatos internos', async () => {
     rpc.mockResolvedValue({
@@ -255,7 +256,7 @@ describe('Asistencia E4: contratos y permisos HTTP', () => {
       .get(`/estudiantes/practice-history?${query}`)
       .set('Authorization', auth('estudiante'));
     expect(res.status).toBe(400);
-    expect(rpc).not.toHaveBeenCalled();
+    expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
   it('matricula ajena devuelve 404 y exige rol estudiante y sesion', async () => {
     rpc.mockResolvedValue({

@@ -337,7 +337,7 @@ describe('Errores de confirmación con field y code (paso 5 vuelve al paso afect
       );
       const service = new ManualEnrollmentService({ from } as unknown as SupabaseClient<Database>,
         {} as EmailService);
-      return service.practicePreview({ ...input, automatic: false, cohortId: 'c' });
+      return service.practicePreview({ ...input, automatic: false, cohortId: 'c' }, 'admin-1');
     };
     jest.useFakeTimers().setSystemTime(new Date('2026-10-21T15:00:00Z'));
     try {

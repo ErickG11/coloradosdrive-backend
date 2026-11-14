@@ -1,4 +1,6 @@
+import { adminBillingRouter } from './billing.routes';
 import { adminPaymentRouter } from './adminPayment.routes';
+import { examQuestionImageRouter } from './examQuestionImage.routes';
 import { contentAdminRouter, contentStudentRouter } from './content.routes';
 import { kushkiWebhookRouter } from './kushkiWebhook.routes';
 import { Router } from 'express';
@@ -32,9 +34,11 @@ import { adminMfaGuard } from '../middlewares/adminMfa.middleware';
 export const apiRouter = Router();
 // B2 · F21: debe ir antes de cualquier router /admin/*; no hace nada con ADMIN_MFA_REQUIRED=false.
 apiRouter.use('/admin', adminMfaGuard());
+apiRouter.use('/admin/exams', examQuestionImageRouter);
 apiRouter.use('/admin/content', contentAdminRouter);
 apiRouter.use('/estudiantes/content', contentStudentRouter);
 apiRouter.use('/admin/pagos', adminPaymentRouter);
+apiRouter.use('/admin/facturacion', adminBillingRouter);
 apiRouter.use('/webhooks/kushki', kushkiWebhookRouter);
 apiRouter.use('/public/inscripcion', publicEnrollmentConfigRouter);
 apiRouter.use('/admin/inscripciones', adminEnrollmentConfigRouter);

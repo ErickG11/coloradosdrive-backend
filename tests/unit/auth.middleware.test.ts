@@ -170,7 +170,8 @@ describe('authenticate middleware', () => {
     const err = next.mock.calls[0]?.[0] as AppError;
     expect(err).toBeInstanceOf(AppError);
     expect(err.statusCode).toBe(403);
-    expect(req.user).toBeUndefined();
+    // La petición bloqueada nunca continúa: solo se entrega el error al manejador.
+    expect(next).toHaveBeenCalledTimes(1);
   });
 
   it('exempts password change only after checking the active account', async () => {
@@ -216,7 +217,7 @@ describe('authenticate middleware', () => {
         next.mockClear();
         await authenticate(req, res, next);
         expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 403, code: 'ACCOUNT_INACTIVE' });
-        expect(req.user).toBeUndefined();
+        expect(next).toHaveBeenCalledTimes(1);
       }
     },
   );
