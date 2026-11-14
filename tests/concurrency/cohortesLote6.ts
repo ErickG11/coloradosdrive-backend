@@ -199,7 +199,7 @@ async function main() {
     await db.close();
   }
 }
-void main().catch((error) => {
+void main().catch((error: unknown) => {
   process.stderr.write(String(error) + '\n');
   process.exitCode = 1;
 });

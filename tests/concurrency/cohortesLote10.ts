@@ -254,7 +254,7 @@ async function main() {
     await db.close();
   }
 }
-void main().catch((e) => {
+void main().catch((e: unknown) => {
   process.stderr.write(String(e) + '\n');
   process.exitCode = 1;
 });

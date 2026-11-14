@@ -88,7 +88,7 @@ async function main() {
     );
     for (let n = 1; n <= 2; n++)
       await db.exec(`insert into public.enrollments(id,student_id,course_id,course_type,status,origen,etapa_inscripcion) values('${enrollment(n)}','${student(n)}','${course}','A','pendiente_cohorte','solicitud','por_agendar');
- insert into public.solicitudes_inscripcion(id,correo,course_id,estado,correo_verificado,student_id,linked_enrollment_id,archived_at) values('${request(n + 1)}','revocacion${n}@example.test','${course}','archivada',true,'${student(n)}','${enrollment(n)}',clock_timestamp());`);
+ insert into public.solicitudes_inscripcion(id,correo,course_id,estado,correo_verificado,student_id,linked_enrollment_id,archived_at) values('${request(n + 1)}','revocacion${String(n)}@example.test','${course}','archivada',true,'${student(n)}','${enrollment(n)}',clock_timestamp());`);
     await db.exec(
       `insert into public.payments(student_id,enrollment_id,attempt_key,proveedor,estado,subtotal_centavos,recargo_centavos,iva_centavos,total_centavos) values('${student(2)}','${enrollment(2)}','10000000-0000-0000-0000-000000000001','manual','aprobado',15000,0,0,15000);`,
     );
@@ -189,7 +189,7 @@ async function main() {
     await db.close();
   }
 }
-void main().catch((e) => {
+void main().catch((e: unknown) => {
   process.stderr.write(String(e) + '\n');
   process.exitCode = 1;
 });

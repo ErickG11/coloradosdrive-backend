@@ -18,8 +18,12 @@ export async function nativePostgres() {
     persistent: false,
     createPostgresUser: false,
     postgresFlags: ['-c', 'listen_addresses=127.0.0.1', '-c', `unix_socket_directories=${socket}`],
-    onLog: () => {},
-    onError: () => {},
+    onLog: () => {
+      /* se silencia el registro del clúster temporal */
+    },
+    onError: () => {
+      /* los errores del clúster temporal se notifican al detenerlo */
+    },
   });
   const clients: Client[] = [];
   try {
@@ -54,7 +58,9 @@ export async function nativePostgres() {
     };
   } catch (error) {
     await Promise.allSettled(clients.map((c) => c.end()));
-    await cluster.stop().catch(() => {});
+    await cluster.stop().catch(() => {
+      /* ya se informa el error original */
+    });
     throw error;
   }
 }

@@ -70,7 +70,12 @@ async function main() {
           (
             await db.query<{ p: { estado: string } }>(
               "select public.confirm_student_payment($1,'kushki',$2,'aprobado',15000,'USD',$3,$4) p",
-              [payment.id, 'fixture-' + n, hash('event' + n), hash('body' + n)],
+              [
+                payment.id,
+                `fixture-${String(n)}`,
+                hash(`event${String(n)}`),
+                hash(`body${String(n)}`),
+              ],
             )
           ).rows[0].p.estado,
           'aprobado',
@@ -200,7 +205,7 @@ async function main() {
           ).rows;
           const version = (n: number): string => {
             const row = versions.find((e) => e.id === enrollment(n));
-            assert.ok(row, `no existe la matrícula ${n}`);
+            assert.ok(row, `no existe la matrícula ${String(n)}`);
             return row.version;
           };
           const conflicting = [
@@ -290,7 +295,7 @@ async function main() {
     await db.close();
   }
 }
-void main().catch((error) => {
+void main().catch((error: unknown) => {
   process.stderr.write(String(error) + '\n');
   process.exitCode = 1;
 });

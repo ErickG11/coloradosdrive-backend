@@ -26,7 +26,7 @@ beforeAll(async () => {
   await setupEnrollmentDatabase(db, '070');
 });
 afterAll(async () => {
-  await db?.close();
+  await db.close();
 });
 async function sqlPlan(input: object) {
   return (
