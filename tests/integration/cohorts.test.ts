@@ -15,6 +15,7 @@ import { verifySupabaseJwt } from '../../src/config/jwks';
 import { createApp } from '../../src/app';
 import { supabaseAdmin } from '../../src/config/supabase';
 import { maxCohortDate } from '../../src/utils/cohortRules';
+import { CohortService } from '../../src/services/cohort.service';
 import { createChain } from '../helpers/supabaseMock';
 import { sinInscripcionPendiente } from '../helpers/authMocks';
 import { mockAuthToken } from '../helpers/tokens';
@@ -46,6 +47,11 @@ describe('cohorts endpoints', () => {
     mockedFrom.mockReset();
     mockedRpc.mockReset();
     mockedVerifySupabaseJwt.mockReset();
+    // Estas pruebas cubren el contrato con el indicador cohort_admin apagado; con él encendido
+    // el servicio usa funciones SQL que se verifican contra PostgreSQL aislado.
+    jest
+      .spyOn(CohortService.prototype as unknown as { enabled(): Promise<boolean> }, 'enabled')
+      .mockResolvedValue(false);
   });
 
   describe('protección por autenticación y rol (RNF-03)', () => {

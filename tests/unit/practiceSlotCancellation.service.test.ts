@@ -36,6 +36,7 @@ describe('cancelación: efectos posteriores al commit', () => {
     expect(h.email.sendNoPracticeEmail).not.toHaveBeenCalled();
     expect(h.realtime.broadcast.mock.calls).toEqual([
       ['user-instructor-practice-slots', 'no-practice', { scheduledAt: result.slot.scheduled_at }],
+      ['user-instructor-notifications', 'notifications-updated', {}],
     ]);
   });
   it('espera la respuesta de la transacción antes de notificar', async () => {
@@ -70,7 +71,8 @@ describe('cancelación: efectos posteriores al commit', () => {
     const log = jest.spyOn(console, 'error').mockImplementation();
     try {
       await expect(h.service.cancelSlot('slot', 'student', reason)).resolves.toMatchObject({ status: 'sin_practica' });
-      expect(h.realtime.broadcast).toHaveBeenCalledTimes(1);
+      // Aviso de franja libre al instructor y actualización de su bandeja de notificaciones.
+      expect(h.realtime.broadcast).toHaveBeenCalledTimes(2);
     } finally { log.mockRestore(); }
   });
 });
