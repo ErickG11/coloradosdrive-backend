@@ -151,7 +151,7 @@ export function errorHandler(
     code && code in COHORT_ERRORS ? COHORT_ERRORS[code as keyof typeof COHORT_ERRORS] : undefined;
   const body: ErrorResponseBody = {
     status: 'error',
-    message: authenticatedAdmin && catalog && message === catalog.student ? catalog.admin : message,
+    message: authenticatedAdmin && catalog?.student === message ? catalog.admin : message,
     correlationId: res.locals.correlationId as string | undefined,
   };
   if (authenticatedAdmin) {

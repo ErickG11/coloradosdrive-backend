@@ -54,11 +54,11 @@ export class RequestReviewService {
     const result = await this.db.rpc('register_request_verification_v2', {
       p_actor: actor,
       p_id: id,
-      p_token: String(input.token),
+      p_token: input.token,
       p_type: String(input.tipo),
       p_method: String(input.metodo),
       p_result: String(input.resultado),
-      p_note: String(input.nota ?? ''),
+      p_note: typeof input.nota === 'string' ? input.nota : '',
       p_mode: String(input.mode),
       p_scan: scan,
     });

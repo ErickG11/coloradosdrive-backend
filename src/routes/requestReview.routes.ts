@@ -36,8 +36,8 @@ requestReviewRouter.patch(
   asyncHandler(async (req, res) => {
     const result = await supabaseAdmin.rpc('set_request_retention_v2', {
       p_actor: authenticatedUserId(req),
-      p_policy: req.body.policy as Json,
-      p_reason: String(req.body.reason),
+      p_policy: (req.body as { policy: Json }).policy,
+      p_reason: (req.body as { reason: string }).reason,
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json(result.data);
@@ -97,8 +97,8 @@ requestReviewRouter.post(
     const result = await supabaseAdmin.rpc('revoke_request_approval_v2', {
       p_actor: authenticatedUserId(req),
       p_id: req.params.id,
-      p_version: String(req.body.updatedAt),
-      p_reason: String(req.body.reason),
+      p_version: (req.body as { updatedAt: string }).updatedAt,
+      p_reason: (req.body as { reason: string }).reason,
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json(result.data);
@@ -113,7 +113,7 @@ requestReviewRouter.post(
     const result = await supabaseAdmin.rpc('retry_request_emails_v2', {
       p_actor: authenticatedUserId(req),
       p_id: req.params.id,
-      p_reason: String(req.body.reason),
+      p_reason: (req.body as { reason: string }).reason,
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json({ retried: result.data });

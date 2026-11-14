@@ -10,6 +10,9 @@ const student = (req: Request): string => {
   if (!req.user) throw new AppError('La sesión venció. Vuelve a iniciar sesión.', 401);
   return req.user.id;
 };
+/** Valor de la consulta como texto; la validación de la ruta ya exige una cadena. */
+const queryText = (value: unknown): string => (typeof value === 'string' ? value : '');
+
 async function invalidate(result: PracticeBlockMutation | PracticeBlockResolution): Promise<void> {
   const recipients = [...new Set(result.audience ?? [])];
   const jobs = recipients.flatMap((id) => [
@@ -68,7 +71,7 @@ export async function confirmBlock(req: Request, res: Response): Promise<void> {
   if (error) throwPracticeWriteError(error);
   await realtime
     .broadcast(`user-${student(req)}-practice-slots`, 'blocks-updated', {})
-    .catch((e) => {
+    .catch((e: unknown) => {
       logSafeError('practice_block_realtime_failed', e);
     });
   res.json(data);
@@ -97,8 +100,8 @@ export async function practiceAbsences(req: Request, res: Response): Promise<voi
 export async function instructorBlocks(req: Request, res: Response): Promise<void> {
   const { data, error } = await supabaseAdmin.rpc('instructor_practice_blocks_v14', {
     p_actor: student(req),
-    p_from: String(req.query.from),
-    p_to: String(req.query.to),
+    p_from: queryText(req.query.from),
+    p_to: queryText(req.query.to),
   });
   if (error) throwPracticeWriteError(error);
   res.json(data);

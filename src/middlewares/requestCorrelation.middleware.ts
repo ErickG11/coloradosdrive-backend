@@ -8,12 +8,14 @@ export const requestCorrelation: RequestHandler = (req, res, next) => {
     const entities = Object.values(req.params).filter((v) =>
       /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(v),
     );
+    const errorCode = res.locals.errorCode as string | undefined;
+    const routePath = (req.route as { path?: unknown } | undefined)?.path;
     console.warn(
       JSON.stringify({
         correlationId,
-        code: res.locals.errorCode ?? (res.statusCode < 400 ? 'OK' : 'HTTP_' + res.statusCode),
+        code: errorCode ?? (res.statusCode < 400 ? 'OK' : `HTTP_${String(res.statusCode)}`),
         entities,
-        operation: typeof req.route?.path === 'string' ? req.route.path : 'unmatched',
+        operation: typeof routePath === 'string' ? routePath : 'unmatched',
         lot: 11,
         result: res.statusCode < 400 ? 'ok' : 'rejected',
       }),

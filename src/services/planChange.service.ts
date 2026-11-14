@@ -13,7 +13,7 @@ import type {
 } from '../models/studentSchedule.model';
 import type {
   PlanChangeCalendar,
-  PlanChangePreview,
+  PlanChangePreviewWithPlan,
   PlanChangeState,
 } from '../models/planChange.model';
 import { summarizeSlots } from '../utils/studentFixedPlan';
@@ -63,7 +63,7 @@ export class PlanChangeService {
     enrollment: string,
     input: StudentScheduleSelection,
     admin?: { id: string; reason: string; target?: string },
-  ): Promise<PlanChangePreview> {
+  ): Promise<PlanChangePreviewWithPlan> {
     const result = admin
       ? await this.db.rpc('preview_admin_plan_change_v2', {
           p_actor: admin.id,

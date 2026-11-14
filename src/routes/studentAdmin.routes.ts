@@ -377,7 +377,7 @@ studentAdminRouter.get(
     const current = own.data.cohort_id
       ? await snapshotFuturePractices(supabaseAdmin, req.params.id, own.data.cohort_id)
       : [];
-    const proposed = (holds.data ?? []) as { scheduled_at: string; instructor_id: string }[];
+    const proposed = holds.data as { scheduled_at: string; instructor_id: string }[];
     const ids = [
       ...new Set([...proposed.map((h) => h.instructor_id), ...current.map((c) => c.instructorId)]),
     ];
@@ -385,7 +385,7 @@ studentAdminRouter.get(
       ? await supabaseAdmin.from('users').select('id, nombre_completo').in('id', ids)
       : { data: [], error: null };
     if (names.error) throwStudentScheduleError(names.error);
-    const nameOf = new Map((names.data ?? []).map((u) => [u.id, u.nombre_completo]));
+    const nameOf = new Map(names.data.map((u) => [u.id, u.nombre_completo]));
     res.set('Cache-Control', 'no-store').json({
       propuesto: proposed.map((h) => ({
         scheduledAt: h.scheduled_at,

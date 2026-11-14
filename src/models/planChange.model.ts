@@ -49,10 +49,6 @@ export interface PlanChangeCalendar {
   dias: { fecha: string; disponible: boolean; motivo?: string | null }[];
 }
 
-export interface PlanChangePreview {
+export interface PlanChangePreviewWithPlan extends PlanChangePreview {
   plan: ReservationPlanSummary | null;
-  factible: boolean;
-  franjas: { scheduledAt: string }[];
-  precioCentavos: number;
-  serverNow: string;
 }
