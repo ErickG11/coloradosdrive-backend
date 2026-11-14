@@ -13,7 +13,9 @@ export function startBillingCron(): void {
       if (running) return;
       running = true;
       void observeJob('billing', () => service.run())
-        .catch((error: unknown) => logSafeError('billing_queue_failed', error))
+        .catch((error: unknown) => {
+          logSafeError('billing_queue_failed', error);
+        })
         .finally(() => {
           running = false;
         });

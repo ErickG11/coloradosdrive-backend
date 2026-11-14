@@ -68,7 +68,9 @@ export async function confirmBlock(req: Request, res: Response): Promise<void> {
   if (error) throwPracticeWriteError(error);
   await realtime
     .broadcast(`user-${student(req)}-practice-slots`, 'blocks-updated', {})
-    .catch((e) => logSafeError('practice_block_realtime_failed', e));
+    .catch((e) => {
+      logSafeError('practice_block_realtime_failed', e);
+    });
   res.json(data);
 }
 export async function takeBlock(req: Request, res: Response): Promise<void> {

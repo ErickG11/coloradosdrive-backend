@@ -97,11 +97,15 @@ test('inicio hoy con franjas futuras; TS y SQL rechazan una franja comenzada', a
     sql,
     '2026-11-16T10:59:59Z',
   ]);
-  expect(() => assertFuturePlan(ts, new Date('2026-11-16T11:00:00Z'))).toThrow('hora ya pasó');
+  expect(() => {
+    assertFuturePlan(ts, new Date('2026-11-16T11:00:00Z'));
+  }).toThrow('hora ya pasó');
   await expect(
     db.query('select private.assert_enrollment_plan_future($1,$2)', [sql, '2026-11-16T11:00:00Z']),
   ).rejects.toThrow('PLAN_FRANJA_PASADA');
-  expect(() => assertFuturePlan(ts, new Date('2026-11-17T10:00:00Z'))).toThrow('desde hoy');
+  expect(() => {
+    assertFuturePlan(ts, new Date('2026-11-17T10:00:00Z'));
+  }).toThrow('desde hoy');
   await expect(
     db.query('select private.assert_enrollment_plan_future($1,$2)', [sql, '2026-11-17T10:00:00Z']),
   ).rejects.toThrow('PLAN_INICIO_PASADO');

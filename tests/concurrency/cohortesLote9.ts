@@ -29,10 +29,9 @@ async function main() {
       b.query('select public.request_review_v2($1,$2,true)', [other, request(1)]),
     ]);
     assert.equal(race.filter((r) => r.status === 'fulfilled').length, 1);
-    assert.match(
-      String((race.find((r) => r.status === 'rejected') as PromiseRejectedResult).reason),
-      /SOLICITUD_REVISION_OCUPADA/,
-    );
+    const rejected = race.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    assert.ok(rejected, 'una de las dos revisiones debe rechazarse');
+    assert.match(String(rejected.reason), /SOLICITUD_REVISION_OCUPADA/);
     const owner = (
       await db.query<{ review_owner: string; review_token: string }>(
         'select review_owner,review_token from public.solicitudes_inscripcion where id=$1',

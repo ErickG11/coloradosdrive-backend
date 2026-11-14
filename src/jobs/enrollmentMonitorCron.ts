@@ -21,7 +21,9 @@ export function startEnrollmentMonitorCron(): void {
         );
         await monitorEnrollmentRules();
       })
-        .catch((e) => logSafeError('enrollment_monitor_failed', e))
+        .catch((e) => {
+          logSafeError('enrollment_monitor_failed', e);
+        })
         .finally(() => {
           running = false;
         });

@@ -26,7 +26,9 @@ void heartbeat(
   env.NODE_ENV === 'production' && process.env.DISABLE_CRON === 'true',
 )
   .then(monitorEnrollmentRules)
-  .catch((e) => logSafeError('enrollment_startup_monitor_failed', e));
+  .catch((e) => {
+    logSafeError('enrollment_startup_monitor_failed', e);
+  });
 startEnrollmentMonitorCron();
 if (process.env.DISABLE_CRON !== 'true') {
   startPracticeSlotCron();

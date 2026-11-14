@@ -16,7 +16,9 @@ export function startPaymentReconciliationCron(): void {
       if (running) return;
       running = true;
       void observeJob('reconciliation', () => service.run())
-        .catch((error: unknown) => logSafeError('payment_reconciliation_failed', error))
+        .catch((error: unknown) => {
+          logSafeError('payment_reconciliation_failed', error);
+        })
         .finally(() => {
           running = false;
         });

@@ -36,8 +36,10 @@ cohortRouter.use((req, res, next) => {
     ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) &&
     !req.path.includes('reasign') &&
     !req.path.includes('cambio')
-  )
-    return requireEnrollmentPermission('manage_cohorts_prices')(req, res, next);
+  ) {
+    requireEnrollmentPermission('manage_cohorts_prices')(req, res, next);
+    return;
+  }
   next();
 });
 cohortRouter.get(
