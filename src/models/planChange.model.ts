@@ -1,4 +1,5 @@
 import type { StudentScheduleReservation } from './studentSchedule.model';
+import type { ReservationPlanSummary } from '../utils/studentFixedPlan';
 export interface PlanChangeState {
   active: boolean;
   calendarEndDate?: string | null;
@@ -46,4 +47,12 @@ export interface AdminReassignmentSource {
 export interface PlanChangeCalendar {
   serverNow: string;
   dias: { fecha: string; disponible: boolean; motivo?: string | null }[];
+}
+
+export interface PlanChangePreview {
+  plan: ReservationPlanSummary | null;
+  factible: boolean;
+  franjas: { scheduledAt: string }[];
+  precioCentavos: number;
+  serverNow: string;
 }

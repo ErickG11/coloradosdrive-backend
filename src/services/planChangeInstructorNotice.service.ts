@@ -33,8 +33,8 @@ export async function snapshotFuturePractices(
   }));
 }
 
-const key = (p: FuturePractice) => `${p.instructorId}|${Date.parse(p.scheduledAt)}`;
-const part = (parts: Intl.DateTimeFormatPart[], type: string) =>
+const key = (p: FuturePractice): string => `${p.instructorId}|${Date.parse(p.scheduledAt)}`;
+const part = (parts: Intl.DateTimeFormatPart[], type: string): string =>
   parts.find((p) => p.type === type)?.value ?? '';
 function dayLabel(ms: number): string {
   const parts = new Intl.DateTimeFormat('es-EC', {

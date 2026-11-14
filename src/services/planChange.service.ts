@@ -3,7 +3,7 @@ import { planEndHour } from './planEndHour.service';
 import { possibleStartHours } from '../utils/studentFixedPlan';
 import { AppError } from '../utils/AppError';
 import type { StudentScheduleStartOption } from '../models/studentSchedule.model';
-import { calendarWithPlans } from './planCalendar.service';
+import { calendarWithPlans, type CalendarWithPlans } from './planCalendar.service';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../config/database.types';
 import { cohortError, COHORT_ERRORS, type CohortErrorCode } from '../config/cohortErrors';
@@ -11,11 +11,17 @@ import type {
   StudentScheduleSelection,
   StudentScheduleReservation,
 } from '../models/studentSchedule.model';
-import type { PlanChangeState } from '../models/planChange.model';
+import type {
+  PlanChangeCalendar,
+  PlanChangePreview,
+  PlanChangeState,
+} from '../models/planChange.model';
 import { summarizeSlots } from '../utils/studentFixedPlan';
 import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
-const inputJson = (input: StudentScheduleSelection) => ({
+const inputJson = (
+  input: StudentScheduleSelection,
+): Pick<StudentScheduleSelection, 'modalidad' | 'fechaInicio' | 'horasPorDia' | 'horaInicio'> => ({
   modalidad: input.modalidad,
   fechaInicio: input.fechaInicio,
   horasPorDia: input.horasPorDia,
@@ -57,7 +63,7 @@ export class PlanChangeService {
     enrollment: string,
     input: StudentScheduleSelection,
     admin?: { id: string; reason: string; target?: string },
-  ) {
+  ): Promise<PlanChangePreview> {
     const result = admin
       ? await this.db.rpc('preview_admin_plan_change_v2', {
           p_actor: admin.id,
@@ -125,7 +131,7 @@ export class PlanChangeService {
     enrollment: string,
     input: StudentScheduleSelection,
     admin?: { id: string; target?: string },
-  ) {
+  ): Promise<CalendarWithPlans<PlanChangeCalendar>> {
     const result = admin
       ? await this.db.rpc('admin_plan_change_calendar_v2', {
           p_actor: admin.id,
@@ -150,7 +156,7 @@ export class PlanChangeService {
     enrollment: string,
     input: StudentScheduleSelection,
     admin?: { id: string; reason: string; target?: string },
-  ) {
+  ): Promise<StudentScheduleReservation> {
     const result = admin
       ? await this.db.rpc('reserve_admin_plan_change_v2', {
           p_actor: admin.id,
@@ -167,7 +173,11 @@ export class PlanChangeService {
     if (result.error) throwStudentScheduleError(result.error);
     return presentChangeReservation(result.data);
   }
-  async confirm(student: string, reservation: string, actor?: string) {
+  async confirm(
+    student: string,
+    reservation: string,
+    actor?: string,
+  ): Promise<StudentScheduleReservation> {
     const result = actor
       ? await this.db.rpc('confirm_admin_plan_change_v2', {
           p_actor: actor,

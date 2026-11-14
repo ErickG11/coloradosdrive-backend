@@ -1,4 +1,8 @@
-import { calendarWithPlans } from './planCalendar.service';
+import {
+  calendarWithPlans,
+  type CalendarWithPlans,
+  type ScheduleCalendar,
+} from './planCalendar.service';
 import { planEndHour } from './planEndHour.service';
 import { configuredEnrollmentPlan } from './studentPlanRules.service';
 import { cohortError } from '../config/cohortErrors';
@@ -75,7 +79,7 @@ export class StudentScheduleService {
     studentId: string,
     enrollmentId: string,
     input: StudentScheduleSelection,
-  ) {
+  ): Promise<Database['public']['Functions']['schedule_unavailable_v12']['Returns']> {
     const result = await this.db.rpc('schedule_unavailable_v12', {
       p_student: studentId,
       p_enrollment: enrollmentId,
@@ -556,7 +560,11 @@ export class StudentScheduleService {
     return result.data ? this.present(result.data) : null;
   }
 
-  async calendar(studentId: string, enrollmentId: string, input: StudentScheduleInput) {
+  async calendar(
+    studentId: string,
+    enrollmentId: string,
+    input: StudentScheduleInput,
+  ): Promise<CalendarWithPlans<ScheduleCalendar>> {
     if (!(await this.newRules())) {
       const month = DateTime.fromISO(input.fechaInicio, { zone: SCHOOL_TIMEZONE });
       if (!month.isValid || month.day !== 1) throw cohortError('PLAN_ENTRADA_INVALIDA');
@@ -598,7 +606,10 @@ export class StudentScheduleService {
     if (result.error) throwStudentScheduleError(result.error);
     return calendarWithPlans(this.db, input, result.data);
   }
-  async currentForEnrollment(studentId: string, enrollmentId: string) {
+  async currentForEnrollment(
+    studentId: string,
+    enrollmentId: string,
+  ): Promise<StudentScheduleReservation | null> {
     const own = await this.db
       .from('enrollments')
       .select('id')

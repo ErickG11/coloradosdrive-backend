@@ -1,5 +1,5 @@
 import { COHORT_ERRORS } from '../config/cohortErrors';
-import type { RequestHandler } from 'express';
+import type { RequestHandler, Response } from 'express';
 const cohortContainers = new Set(['cohort', 'cohorte', 'cohorts', 'cohortes', 'cohortsummary']);
 const flattened = new Set([
   'cohortname',
@@ -31,7 +31,7 @@ export function studentResponse(value: unknown, cohort = false): unknown {
 }
 export const studentPrivacy: RequestHandler = (req, res, next) => {
   const json = res.json.bind(res);
-  res.json = (body: unknown) => {
+  res.json = (body: unknown): Response => {
     const student =
       req.user?.role === 'estudiante' ||
       /^\/(?:solicitudes|public\/inscripcion)(?:\/|$)/.test(req.originalUrl);

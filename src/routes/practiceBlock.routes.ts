@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { body, param, query } from 'express-validator';
+import type { ValidationChain } from 'express-validator';
 import {
   blockOptions,
   blockPreview,
@@ -38,8 +39,9 @@ practiceBlockRouter.get(
   asyncHandler(instructorBlocks),
 );
 practiceBlockRouter.use(requireRole('estudiante'));
-const enrollment = () => param('enrollmentId').isUUID().withMessage('La matrícula no es válida');
-const date = () =>
+const enrollment = (): ValidationChain =>
+  param('enrollmentId').isUUID().withMessage('La matrícula no es válida');
+const date = (): ValidationChain =>
   param('date')
     .matches(/^\d{4}-\d{2}-\d{2}$/)
     .isISO8601({ strict: true })

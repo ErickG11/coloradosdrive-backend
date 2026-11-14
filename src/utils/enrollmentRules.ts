@@ -27,7 +27,14 @@ export function assertFuturePlan(plan: FixedPlan, now: Date): void {
   if (plan.franjas.some((slot) => Date.parse(slot) <= now.getTime()))
     throw cohortError('PLAN_FRANJA_PASADA');
 }
-export function cohortCalendar(input: CohortCalendarInput, now: Date) {
+export interface CohortCalendar {
+  cutoff: string;
+  cutoffExclusive: string;
+  open: boolean;
+  finished: boolean;
+  state: 'terminada' | 'matricula_abierta' | 'matricula_cerrada_en_curso';
+}
+export function cohortCalendar(input: CohortCalendarInput, now: Date): CohortCalendar {
   let dates: DateTime[];
   try {
     dates = [

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../config/database.types';
 import type { UploadedFile } from '../models/solicitud.model';
+import type { RequestReviewState } from '../models/requestReview.model';
 import { prepareCertificate } from '../utils/certificateFile';
 import { CERTIFICATE_BUCKET } from './solicitudCertificateStorage.service';
 import { cohortError } from '../config/cohortErrors';
@@ -9,7 +10,7 @@ import { throwStudentScheduleError } from '../utils/studentScheduleError';
 import { enrollmentRuleEnabled } from './enrollmentRuleFlags.service';
 export class RequestReviewService {
   constructor(private readonly db: SupabaseClient<Database>) {}
-  async state(actor: string, id: string, claim = false) {
+  async state(actor: string, id: string, claim = false): Promise<RequestReviewState> {
     if (!(await enrollmentRuleEnabled(this.db, 'identity'))) return { active: false };
     const result = await this.db.rpc('request_review_v2', {
       p_actor: actor,
@@ -24,7 +25,7 @@ export class RequestReviewService {
     id: string,
     input: Record<string, unknown>,
     file?: UploadedFile & { originalname: string },
-  ) {
+  ): Promise<Record<string, unknown>> {
     const review = await this.state(actor, id);
     if (
       !review.active ||
