@@ -5,6 +5,7 @@ module.exports = {
   rootDir: '.',
   testMatch: ['<rootDir>/tests/**/*.test.ts'],
   setupFiles: ['<rootDir>/tests/setupEnv.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tests/setupEnrollmentDefaults.ts'],
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.eslint.json' }],
   },
