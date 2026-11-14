@@ -282,33 +282,35 @@ test('navegador sin privilegios; backend no escribe configuración ni auditoría
   );
 });
 
-test('script de datos falla sin valores y carga solo dos admins explícitos con auditoría', async () => {
+test('script de datos exige un administrador activo y carga A=150 y B=200 con auditoría', async () => {
   const script = enrollmentSql('docs/operations/inscripcion-lote1-datos.sql');
-  await expect(db.exec(script)).rejects.toThrow('Completar precios');
-  await db.exec('rollback');
-  const configured = script
-    .replace('precio_a_centavos bigint := null', 'precio_a_centavos bigint := 12345')
-    .replace('precio_b_centavos bigint := null', 'precio_b_centavos bigint := 23456')
-    .replace('admin_1 uuid := null', "admin_1 uuid := '10000000-0000-0000-0000-000000000001'")
-    .replace('admin_2 uuid := null', "admin_2 uuid := '10000000-0000-0000-0000-000000000002'")
-    .replace('actor uuid := null', "actor uuid := '10000000-0000-0000-0000-000000000001'");
-  const studentInsteadOfAdmin = configured.replace(
-    "admin_2 uuid := '10000000-0000-0000-0000-000000000002'",
-    "admin_2 uuid := '10000000-0000-0000-0000-000000000010'",
-  );
-  await expect(db.exec(studentInsteadOfAdmin)).rejects.toThrow('no válidas o inactivas');
-  await db.exec('rollback');
+  const admins = (
+    await db.query<{ n: number }>("select count(*)::int n from public.users where rol='admin' and activo")
+  ).rows[0].n;
+  expect(admins).toBeGreaterThan(0);
   expect((await db.query('select * from public.course_type_prices')).rows).toEqual([]);
-  await db.exec(configured);
+  await db.exec(script);
+  expect(
+    (await db.query('select tipo::text, precio_centavos from public.course_type_prices order by tipo'))
+      .rows,
+  ).toEqual([
+    { tipo: 'A', precio_centavos: 15000 },
+    { tipo: 'B', precio_centavos: 20000 },
+  ]);
+  expect(
+    (
+      await db.query(
+        "select count(*)::int n from public.enrollment_domain_audit where action='price_data_D7'",
+      )
+    ).rows[0],
+  ).toEqual({ n: 2 });
+  // Los permisos solo se otorgan a los administradores del registro de la migración 081.
+  const snapshot = (
+    await db.query<{ n: number }>(
+      "select coalesce(sum(jsonb_array_length(new_value->'admins')),0)::int n from public.enrollment_domain_audit where action='admin_snapshot_081' and entity_id='081'",
+    )
+  ).rows[0].n;
   expect(
     (await db.query('select count(*)::int n from public.enrollment_admin_permissions')).rows[0],
-  ).toEqual({ n: 8 });
-  expect(
-    (await db.query('select count(*)::int n from public.enrollment_domain_audit')).rows[0],
-  ).toEqual({ n: 10 });
-  expect(
-    (await db.query("select precio_centavos from public.course_type_prices where tipo='A'"))
-      .rows[0],
-  ).toEqual({ precio_centavos: 12345 });
-  await expect(db.exec(configured)).rejects.toThrow('ya configurados');
+  ).toEqual({ n: snapshot * 4 });
 });

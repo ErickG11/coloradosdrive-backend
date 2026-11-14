@@ -171,14 +171,12 @@ describe('API de notificaciones del propietario', () => {
     expect(res.body).toEqual({ updatedCount: 2 });
     expect(rpc).toHaveBeenCalledWith('read_all_user_notifications', { p_user: 'test-user-id' });
   });
-  it('valida UUID y requiere sesion con rol de alumno o instructor', async () => {
+  it('valida UUID y requiere sesion', async () => {
     expect(
       (await request(app).patch('/notifications/no-uuid/read').set('Authorization', auth())).status,
     ).toBe(400);
     expect((await request(app).get('/notifications')).status).toBe(401);
-    expect(
-      (await request(app).get('/notifications').set('Authorization', auth('admin'))).status,
-    ).toBe(403);
+    // Desde los avisos de falta registrada, el administrador también tiene bandeja propia.
     expect(dataRpcCalls(rpc)).toHaveLength(0);
   });
 });

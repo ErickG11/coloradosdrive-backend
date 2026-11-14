@@ -118,7 +118,7 @@ describe('solicitudes de inscripción (admin)', () => {
 
   describe('GET /admin/solicitudes', () => {
     it('valida estado y paginación', async () => {
-      for (const query of ['estado=archivada', 'page=0', 'pageSize=101']) {
+      for (const query of ['estado=inexistente', 'page=0', 'pageSize=101']) {
         expect((await request(app).get(`/admin/solicitudes?${query}`).set('Authorization', adminAuth())).status).toBe(400);
       }
     });
