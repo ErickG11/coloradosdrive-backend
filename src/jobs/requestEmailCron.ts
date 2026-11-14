@@ -14,7 +14,9 @@ export function startRequestEmailCron(): void {
       if (running) return;
       running = true;
       void observeJob('request_email', () => service.run())
-        .catch((error: unknown) => logSafeError('request_email_failed', error))
+        .catch((error: unknown) => {
+          logSafeError('request_email_failed', error);
+        })
         .finally(() => {
           running = false;
         });

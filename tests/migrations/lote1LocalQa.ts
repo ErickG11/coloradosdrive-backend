@@ -21,10 +21,13 @@ async function main(): Promise<void> {
       if (command === 'exit') break;
       try {
         if (/^(apply|verify|rollback) \d{3}[ab]?$/.test(command)) {
-          const [action,id]=command.split(' ');
-          const entry=approvedMigrations().find(e=>e.id===id);
-          if(!entry || !entry.operations) throw new Error('Migración o guion no aprobado');
-          const path=action==='apply' ? `migrations/${entry.file}` : `docs/operations/${entry.operations}-${action==='verify'?'verificacion':'rollback'}.sql`;
+          const [action, id] = command.split(' ');
+          const entry = approvedMigrations().find((e) => e.id === id);
+          if (!entry?.operations) throw new Error('Migración o guion no aprobado');
+          const path =
+            action === 'apply'
+              ? `migrations/${entry.file}`
+              : `docs/operations/${entry.operations}-${action === 'verify' ? 'verificacion' : 'rollback'}.sql`;
           await db.exec(enrollmentSql(path));
         } else if (command === 'reset') {
           await db.close();

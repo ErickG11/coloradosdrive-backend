@@ -18,7 +18,7 @@ export async function observeJob<T>(job: string, run: () => Promise<T>): Promise
     const result = await run();
     const report = result && typeof result === 'object' ? (result as Record<string, unknown>) : {};
     const failed = ['failed', 'fallos', 'errors'].some(
-      (key) => typeof report[key] === 'number' && (report[key] as number) > 0,
+      (key) => typeof report[key] === 'number' && report[key] > 0,
     );
     await heartbeat(job, failed ? 'failed' : 'ok');
     return result;
