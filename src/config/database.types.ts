@@ -1,5 +1,15 @@
 import type { IdentityDocument } from '../utils/identityDocument';
 import type {
+  AdminPracticeAbsence,
+  PracticeBlock,
+  PracticeBlockMutation,
+  PracticeBlockOption,
+  PracticeBlockPreview,
+  PracticeBlockResolution,
+  PracticeBlockResolutionPreview,
+  PracticeBlockSummary,
+} from '../models/practiceBlock.model';
+import type {
   RequestReviewState,
   RequestRetentionPolicy,
   RequestEmailClaim,
@@ -136,15 +146,15 @@ export interface Database {
     };
     Functions: {
       instructor_practice_blocks_v14: {Args: {p_actor: string;p_from: string;p_to: string};Returns: {id:string;slotIds:string[];startsAt:string;endsAt:string;hours:number}[]};
-      student_practice_block_options_v14: { Args: { p_student: string }; Returns: import('../models/practiceBlock.model').PracticeBlockOption[] };
-      student_practice_block_summary_v14: { Args: { p_student: string }; Returns: import('../models/practiceBlock.model').PracticeBlockSummary };
-      preview_practice_block_cancellation_v14: { Args: { p_student: string; p_enrollment: string; p_date: string }; Returns: import('../models/practiceBlock.model').PracticeBlockPreview };
-      cancel_practice_block_with_reason_v14: { Args: { p_student: string; p_enrollment: string; p_date: string; p_category: string; p_reason: string }; Returns: import('../models/practiceBlock.model').PracticeBlockMutation };
-      confirm_practice_block_v14: { Args: { p_student: string; p_enrollment: string; p_date: string }; Returns: import('../models/practiceBlock.model').PracticeBlock };
-      take_practice_block_v14: { Args: { p_student: string; p_enrollment: string; p_option: string }; Returns: import('../models/practiceBlock.model').PracticeBlockMutation };
-      preview_practice_block_resolution_v17: { Args: { p_student: string; p_enrollment: string; p_date: string }; Returns: import('../models/practiceBlock.model').PracticeBlockResolutionPreview };
-      resolve_practice_block_v17: { Args: { p_student: string; p_enrollment: string; p_date: string; p_action: string; p_start: string | null; p_category: string; p_reason: string }; Returns: import('../models/practiceBlock.model').PracticeBlockResolution };
-      admin_practice_absences_v14: { Args: { p_actor: string; p_student?: string | null }; Returns: import('../models/practiceBlock.model').AdminPracticeAbsence[] };
+      student_practice_block_options_v14: { Args: { p_student: string }; Returns: PracticeBlockOption[] };
+      student_practice_block_summary_v14: { Args: { p_student: string }; Returns: PracticeBlockSummary };
+      preview_practice_block_cancellation_v14: { Args: { p_student: string; p_enrollment: string; p_date: string }; Returns: PracticeBlockPreview };
+      cancel_practice_block_with_reason_v14: { Args: { p_student: string; p_enrollment: string; p_date: string; p_category: string; p_reason: string }; Returns: PracticeBlockMutation };
+      confirm_practice_block_v14: { Args: { p_student: string; p_enrollment: string; p_date: string }; Returns: PracticeBlock };
+      take_practice_block_v14: { Args: { p_student: string; p_enrollment: string; p_option: string }; Returns: PracticeBlockMutation };
+      preview_practice_block_resolution_v17: { Args: { p_student: string; p_enrollment: string; p_date: string }; Returns: PracticeBlockResolutionPreview };
+      resolve_practice_block_v17: { Args: { p_student: string; p_enrollment: string; p_date: string; p_action: string; p_start: string | null; p_category: string; p_reason: string }; Returns: PracticeBlockResolution };
+      admin_practice_absences_v14: { Args: { p_actor: string; p_student?: string | null }; Returns: AdminPracticeAbsence[] };
 
       assign_pending_enrollment_cohort_with_reason_v13: {
         Args: {

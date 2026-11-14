@@ -271,7 +271,7 @@ export class ManualEnrollmentService {
         .sort(
           (a, b) => a.fecha_fin_curso.localeCompare(b.fecha_fin_curso) || a.id.localeCompare(b.id),
         );
-      const first = open[0];
+      const first = open.at(0);
       const precio = price.data.precio_centavos / 100;
       return {
         rulesActive: true,

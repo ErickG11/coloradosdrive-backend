@@ -55,7 +55,7 @@ studentBillingRouter.patch(
   asyncHandler(async (req, res) => {
     const result = await supabaseAdmin.rpc('save_billing_profile_v2', {
       p_student: authenticatedUserId(req),
-      p_profile: req.body.profile as Json,
+      p_profile: (req.body as { profile: Json }).profile,
     });
     if (result.error) throwStudentScheduleError(result.error);
     res.json(result.data);
@@ -86,7 +86,7 @@ adminBillingRouter.patch(
   asyncHandler(async (req, res) => {
     const result = await supabaseAdmin.rpc('save_billing_profile_v2', {
       p_student: req.params.id,
-      p_profile: req.body.profile as Json,
+      p_profile: (req.body as { profile: Json }).profile,
       p_actor: authenticatedUserId(req),
     });
     if (result.error) throwStudentScheduleError(result.error);

@@ -51,7 +51,7 @@ export interface PracticeBlockSummary {
 }
 export interface PracticeBlockMutation extends Record<string, unknown> {
   cohortId: string;
-  audience: string[];
+  audience?: string[];
   used: number;
   remaining: number;
   effect?: string;
@@ -89,7 +89,7 @@ export interface PracticeBlockResolutionPreview {
 }
 export interface PracticeBlockResolution extends Record<string, unknown> {
   cohortId: string;
-  audience: string[];
+  audience?: string[];
   block: PracticeBlock;
   action: 'mover' | 'falta';
   result: 'reprogramado' | 'falta';

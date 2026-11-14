@@ -25,15 +25,15 @@ export async function snapshotFuturePractices(
     .in('status', ['asignado', 'confirmado'])
     .gt('scheduled_at', new Date().toISOString());
   if (error) throw error;
-  return (data ?? []).map((row) => ({
+  return data.map((row) => ({
     id: row.id,
     instructorId: row.instructor_id,
     scheduledAt: row.scheduled_at,
-    minutes: row.duration_minutes ?? 60,
+    minutes: row.duration_minutes,
   }));
 }
 
-const key = (p: FuturePractice): string => `${p.instructorId}|${Date.parse(p.scheduledAt)}`;
+const key = (p: FuturePractice): string => `${p.instructorId}|${String(Date.parse(p.scheduledAt))}`;
 const part = (parts: Intl.DateTimeFormatPart[], type: string): string =>
   parts.find((p) => p.type === type)?.value ?? '';
 function dayLabel(ms: number): string {
@@ -62,14 +62,14 @@ export function describeRanges(practices: FuturePractice[]): string[] {
   for (const slot of sorted) {
     const last = ranges.at(-1);
     const end = slot.start + slot.minutes * 60000;
-    if (last && last.end === slot.start) last.end = end;
+    if (last?.end === slot.start) last.end = end;
     else ranges.push({ start: slot.start, end });
   }
   return ranges.map((r) => `${dayLabel(r.start)}, ${hourLabel(r.start)} a ${hourLabel(r.end)}`);
 }
 function list(lines: string[]): string {
   if (lines.length <= MAX_LINES) return lines.join('; ');
-  return `${lines.slice(0, MAX_LINES).join('; ')} y ${lines.length - MAX_LINES} más`;
+  return `${lines.slice(0, MAX_LINES).join('; ')} y ${String(lines.length - MAX_LINES)} más`;
 }
 
 // Un solo aviso de bandeja por instructor afectado, sin correo y sin duplicar en reintentos.
@@ -96,7 +96,7 @@ export async function notifyInstructorsOfPlanChange(
     .eq('activo', true);
   if (error) throw error;
   const notified: string[] = [];
-  for (const row of active ?? []) {
+  for (const row of active) {
     const taken = removed.filter((p) => p.instructorId === row.id);
     const given = added.filter((p) => p.instructorId === row.id);
     const sentences = [`Se cambió el horario de ${input.studentName}.`];
@@ -150,7 +150,7 @@ export async function releaseUnusedSlots(
     .gt('scheduled_at', new Date().toISOString())
     .select('id');
   if (error) throw error;
-  return data?.length ?? 0;
+  return data.length;
 }
 
 export async function safeReleaseUnusedSlots(
