@@ -1,4 +1,5 @@
 import type { Database } from '../config/database.types';
+import type { CourseType } from './course.model';
 
 export const PRACTICE_SLOT_STATUSES = [
   'disponible',
@@ -34,6 +35,9 @@ export interface PracticeSlot {
 export interface PracticeSlotWithNames extends PracticeSlot {
   instructorName: string;
   studentName: string | null;
+  // Solo el listado del instructor añade estos campos cuando existe la relación.
+  courseType?: CourseType;
+  cohortName?: string;
 }
 
 // Durante la selección, la identidad del instructor permanece oculta.

@@ -102,11 +102,14 @@ export async function notifyInstructorsOfPlanChange(
     const sentences = [`Se cambió el horario de ${input.studentName}.`];
     if (taken.length) sentences.push(`Se te quitan: ${list(describeRanges(taken))}.`);
     if (given.length) sentences.push(`Se te asignan: ${list(describeRanges(given))}.`);
+    // Fecha más temprana del cambio: la bandeja la usa para abrir ese día en la agenda.
+    const earliest = Math.min(...[...taken, ...given].map((p) => Date.parse(p.scheduledAt)));
     const insert = await db.from('notifications').insert({
       user_id: row.id,
       tipo: 'cambio_agenda_instructor',
       titulo: 'Cambio de horario de un alumno',
       mensaje: sentences.join(' '),
+      scheduled_at: Number.isFinite(earliest) ? new Date(earliest).toISOString() : null,
       domain_code: 'PLAN_CAMBIO_INSTRUCTOR',
       domain_entity_id: input.reservationId,
       email_status: null,
