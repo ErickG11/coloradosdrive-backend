@@ -37,6 +37,8 @@ export function createApp(): Express {
       origin: allowedCorsOrigins(env.FRONTEND_URL, env.CORS_ORIGINS),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+      // RF-08: el frontend lee el nombre del archivo exportado.
+      exposedHeaders: ['Content-Disposition'],
       maxAge: 600,
     }),
   );

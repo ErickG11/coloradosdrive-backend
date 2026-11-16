@@ -9,6 +9,7 @@ import {
   adminEnrollmentConfigRouter,
 } from './enrollmentConfig.routes';
 import { adminDashboardRouter } from './adminDashboard.routes';
+import { reportRouter } from './report.routes';
 
 import { cohortAssignmentRouter } from './cohortAssignment.routes';
 import { cohortRouter } from './cohort.routes';
@@ -45,6 +46,7 @@ apiRouter.use('/admin/inscripciones', adminEnrollmentConfigRouter);
 apiRouter.use('/notifications', notificationRouter);
 apiRouter.use('/admin/instructor-ratings', instructorRatingRouter);
 apiRouter.use('/admin/dashboard', adminDashboardRouter);
+apiRouter.use('/admin/reportes', reportRouter);
 
 apiRouter.use('/health', healthRouter);
 apiRouter.use('/courses', courseRouter);
