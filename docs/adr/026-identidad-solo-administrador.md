@@ -21,7 +21,7 @@ La tesis define al instructor con acceso de solo lectura sobre sus franjas y avi
 ## Consecuencias
 
 - El instructor ya no puede confirmar identidad por ninguna vía HTTP: la ruta responde 404. Una prueba de integración lo comprueba (`tests/integration/practiceIdentityRemoved.test.ts`).
-- Quien opera la escuela debe verificar la identidad desde el panel del administrador antes de la primera práctica de los alumnos que vienen de una solicitud.
+- **Decisión pendiente (producto y base de datos).** La función SQL del administrador (`confirmar_identidad_presencial_admin`, migración 056) está pensada como excepción auditada: exige un motivo de 10 a 300 caracteres y solo permite confirmar cuando ya venció la ventana del instructor, es decir, 48 horas después de terminar una franja confirmada o completada del alumno (error `IP410`). Con el instructor fuera del flujo, el administrador no puede verificar la cédula antes de la primera práctica ni sin esa espera. Para que el administrador verifique sin esa condición hace falta una migración 095 que la relaje. No se creó ni se aplicó: la decide el dueño. Mientras tanto, la verificación sigue disponible para el administrador solo después de la espera.
 - El frontend anterior a esta integración aún muestra el control del instructor y recibiría 404. Por eso el backend y el frontend se fusionan seguidos (backend primero) y se despliegan juntos.
 - Menos superficie de ataque: se reduce el número de rutas con permiso de escritura del instructor.
 
