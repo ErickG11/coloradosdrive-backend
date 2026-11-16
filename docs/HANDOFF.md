@@ -15,7 +15,7 @@ Dos repositorios públicos bajo ErickG11:
 Estado actualizado tras fusionar a `main` los PR #45, #44 y #54 (7 de noviembre de 2026):
 
 - El flujo de **inscripción en línea** (solicitud pública, revisión del admin, aprobación, reserva de horario y pago) está **fusionado en `main`** en backend y frontend y probado a mano con el modo de correo en consola.
-- Las migraciones **001 a 063 están todas aplicadas** en la base compartida.
+- Las migraciones **001 a 094** existen en `migrations/` (sin números repetidos; 066 tiene las variantes 066a y 066b). Constan como aplicadas en la base compartida hasta la 092 y la 094; la **093** no está confirmada como aplicada (es idempotente). Ver «Estado al 16/11/2026».
 - **El CI de `main` pasó en verde tras los merges**, incluidos los dos pasos de PostgreSQL aislado (`test:students-db` y `test:practice-attendance-db`). CircleCI aparece en rojo porque no tiene configuración: se ignora. Hay 26 pruebas saltadas con `TODO(F23)`, listadas en «Deuda de pruebas».
 - Siguiente paso: despliegue en Railway (backend) y Vercel (frontend) **desde `main`** (ver `docs/DESPLIEGUE.md`). Faltan además correo por API de Gmail con credenciales reales, Turnstile (F43), certificación de Kushki y un recorrido de ensayo. Ver sección 7.
 
@@ -93,7 +93,7 @@ En `console`, los códigos y enlaces aparecen en la terminal del backend.
 ## 4. Base de datos
 
 - Hay **un único proyecto Supabase compartido** por el desarrollo local y la futura producción. Cualquier SQL o prueba contra él afecta datos reales: ve con mucho cuidado y avisa antes.
-- Migraciones numeradas **001 a 063 en `migrations/`, todas aplicadas**. No se reaplican ni se reasignan números (057 es inmutable). 064 en adelante está libre.
+- Migraciones numeradas **001 a 094 en `migrations/`**; constan como aplicadas todas menos la 093, no confirmada (ver «Estado al 16/11/2026»). No se reaplican ni se reasignan números (057 es inmutable). La 064 es un borrador que no se aplica. La siguiente libre es la 095.
 - Cada migración reciente tiene su carpeta de scripts en `docs/operations/`: `inscripcion-NNN-preflight.sql`, `inscripcion-NNN-verificacion.sql` e `inscripcion-NNN-rollback.sql` (y un `.md` con el detalle). Orden y dependencias: `docs/operations/inscripcion-orden-migraciones.md`.
 
 Procedimiento seguro para aplicar una migración nueva:
@@ -249,3 +249,13 @@ Hay etiquetas `pre-cNN` (por ejemplo `pre-c17`, `pre-c20`, `pre-c25`, `pre-c27`;
 - **C20** — Materiales obligatorios previos para rendir un examen; abrir completa el material (094).
 - **C25** (partes B, C y D) — Cambio de horario del administrador: destino fijo a la cohorte actual, instructores por hora en solo lectura y aviso a instructores afectados.
 - **C27** — Las horas que el cambio de plan deja de usar vuelven a «disponible».
+
+---
+
+## Estado al 16/11/2026
+
+- **Reportes (RF-08, CD-346) ya está en `main`**: PR #61 del backend (`db1491f`) y PR #51 del frontend (`113a012`). Detalle en `docs/adr/025-reportes-exportacion.md` y `docs/operations/reportes-exportacion.md`. Sin migración.
+- **CD-364 (agenda del instructor y asistencias por bloques)** se integra con la rama `integracion/cierre-sprint-6`: se conservan los commits de Johao con `merge --no-ff`. Backend: las franjas del instructor incluyen `cohortName` y `courseType`. Se ajustó una prueba suya al acceso individual simulado que `main` ya configura de forma global.
+- **Cambio de requisito (control de cambios, 14/11/2026):** el instructor ya no confirma la cédula original; solo el administrador verifica la identidad. Ver `docs/adr/026-identidad-solo-administrador.md`. Se retiró `PATCH /practice-slots/:id/identidad-presencial`; las funciones SQL correspondientes siguen en la base sin uso. **Pendiente de decisión:** el administrador solo puede confirmar 48 horas después de una práctica (migración 056); relajarlo exige una migración 095 que no existe (ver el ADR).
+- **Migraciones:** la última es la 094 y no se añaden nuevas. Estado en la base real: aplicadas 085 a 092 y 094; la 093 sigue sin confirmar. Nadie debe aplicar nada desde el repositorio.
+- **Orden de fusión:** primero el backend, después el frontend, porque el frontend consume `cohortName` y `courseType`.

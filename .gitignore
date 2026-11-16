@@ -44,6 +44,7 @@ test-results/
 
 # Herramientas locales de asistentes
 .claude/
+CLAUDE.md
 .agents/
 .codex/
 .impeccable/

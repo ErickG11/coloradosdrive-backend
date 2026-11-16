@@ -9,7 +9,6 @@ import type {
   StudentPracticeSlot,
   UpdatePracticeSlotInput,
 } from '../models/practiceSlot.model';
-import { practiceIdentityService } from './practiceIdentity.controller';
 import { PracticeSlotService } from '../services/practiceSlot.service';
 import { AppError } from '../utils/AppError';
 import { normalizePracticeScheduledAt } from '../utils/practiceSlotTimestamp';
@@ -50,7 +49,7 @@ export async function listPracticeSlots(
       ? normalizePracticeScheduledAt(req.query.to) : undefined;
     const slots = await practiceSlotService.listSlotsForInstructor(req.user.id,
       from !== undefined && to !== undefined ? { from, to } : undefined);
-    res.status(200).json(await practiceIdentityService.marcarPendientes(req.user.id, slots));
+    res.status(200).json(slots);
     return;
   }
 
