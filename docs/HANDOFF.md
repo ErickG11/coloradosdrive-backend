@@ -256,6 +256,18 @@ Hay etiquetas `pre-cNN` (por ejemplo `pre-c17`, `pre-c20`, `pre-c25`, `pre-c27`;
 
 - **Reportes (RF-08, CD-346) ya está en `main`**: PR #61 del backend (`db1491f`) y PR #51 del frontend (`113a012`). Detalle en `docs/adr/025-reportes-exportacion.md` y `docs/operations/reportes-exportacion.md`. Sin migración.
 - **CD-364 (agenda del instructor y asistencias por bloques)** se integra con la rama `integracion/cierre-sprint-6`: se conservan los commits de Johao con `merge --no-ff`. Backend: las franjas del instructor incluyen `cohortName` y `courseType`. Se ajustó una prueba suya al acceso individual simulado que `main` ya configura de forma global.
-- **Cambio de requisito (control de cambios, 14/11/2026):** el instructor ya no confirma la cédula original; solo el administrador verifica la identidad. Ver `docs/adr/026-identidad-solo-administrador.md`. Se retiró `PATCH /practice-slots/:id/identidad-presencial`; las funciones SQL correspondientes siguen en la base sin uso. **Pendiente de decisión:** el administrador solo puede confirmar 48 horas después de una práctica (migración 056); relajarlo exige una migración 095 que no existe (ver el ADR).
+- **Cambio de requisito (control de cambios, 14/11/2026):** el instructor ya no confirma la cédula original; solo el administrador verifica la identidad. Ver `docs/adr/026-identidad-solo-administrador.md`. Se retiró `PATCH /practice-slots/:id/identidad-presencial`; las funciones SQL correspondientes siguen en la base sin uso. **Resuelto en la migración 095 (ADR 027), pendiente de aplicar:** el administrador puede confirmar en cualquier momento y el motivo es opcional.
 - **Migraciones:** la última es la 094 y no se añaden nuevas. Estado en la base real: aplicadas 085 a 092 y 094; la 093 sigue sin confirmar. Nadie debe aplicar nada desde el repositorio.
 - **Orden de fusión:** primero el backend, después el frontend, porque el frontend consume `cohortName` y `courseType`.
+
+---
+
+## Actualización 16/11/2026 (rama feat/cierre-sprint-6-ajustes)
+
+- **Migración 095 (pendiente de aplicar a mano):** `095_identidad_admin_sin_ventana.sql` quita la espera de 48 horas y el motivo obligatorio de la confirmación de identidad del administrador. Orden: preflight, aplicar, verificación y después desplegar. Ver `docs/adr/027-identidad-admin-sin-ventana.md` y `docs/operations/inscripcion-095-*.sql`.
+- **Estado de las anteriores:** 085 a 092 y 094 constan como aplicadas; la 093 no está confirmada (es idempotente).
+- La siguiente migración libre es la 096.
+- CD-346 (reportes) y CD-364 (agenda del instructor y asistencias por bloques) ya están en `main`.
+- Mapa técnico para la certificación digital: `docs/rf07-punto-de-partida.md`.
+- Prueba de la función con PostgreSQL en memoria: `npm run test:student-identity-db`.
+

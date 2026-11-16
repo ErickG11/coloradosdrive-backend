@@ -33,3 +33,7 @@ La tesis describe al instructor con acceso de solo lectura y avisos. La confirma
 
 - Mantener la ruta del instructor oculta en la interfaz: dejaría una acción de escritura accesible por API sin uso legítimo.
 - Eliminar también las funciones SQL: requiere una migración que se aplica a mano sobre la base compartida; no justifica el riesgo antes de la defensa.
+
+## Actualización
+
+La decisión pendiente de la ventana de 48 horas se resuelve en el [ADR 027](027-identidad-admin-sin-ventana.md) con la migración 095.
