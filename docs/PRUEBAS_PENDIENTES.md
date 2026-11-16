@@ -96,3 +96,34 @@ Lote 10: selectores de documento y representante, contacto según capacidad, res
 ## Instrucción posterior de cierre L11/L12
 
 No escribir ni ejecutar pruebas automáticas, lint o build. Única excepción al final: tipos en ambos repos y una instalación local completa 001–última con las verificaciones existentes; corregir y repetir solo el fallo. Privacidad, permisos, catálogo, concurrencia y QA de componentes de la punta final permanecen pendientes. No añadir skips. Las guías de cada lote se conservan; no se crea guía consolidada nueva.
+
+## CD-346 · Reportes y exportación (RF-08)
+
+Automatizadas (se ejecutan con `npm test`): `tests/unit/reportFormat.test.ts`, `tests/unit/report.service.test.ts`, `tests/unit/reportDocuments.test.ts` y `tests/integration/reports.test.ts`. Cubren cálculo de cada reporte, bordes de fecha en hora de Ecuador, división por cero, moneda, neutralización de fórmulas, nombres de hoja y archivo, 401/403/400/413/429, validez del PDF y del Excel, paridad de cifras con el JSON, auditoría e inventario de rutas protegidas. Se probaron con una base simulada en memoria: **no** se ejecutaron contra la base real de Supabase.
+
+### Guía de prueba manual del backend (pendiente de ejecutar)
+
+Preparación: backend en local o en Railway con datos de demostración; un token de administrador, uno de instructor y uno de alumno. `API` es la URL del backend. Reemplaza las fechas por un mes con datos.
+
+| N.º | Paso | Resultado esperado |
+| --- | --- | --- |
+| 1 | `curl -i "$API/admin/reportes?desde=2026-11-01&hasta=2026-11-30"` sin token | 401; no aparece ningún dato |
+| 2 | Lo mismo con el token del instructor y luego con el del alumno | 403 en ambos |
+| 3 | Lo mismo con el token del administrador | 200; JSON con `reports` de cinco tipos y `meta.filterSummary` |
+| 4 | Administrador sin segundo factor con `ADMIN_MFA_REQUIRED=true` | 403 con `code: MFA_REQUERIDA` |
+| 5 | `…/exportar?desde=2026-11-01&hasta=2026-11-30&formato=pdf&tipo=finanzas -o f.pdf` (administrador) | 200; `Content-Disposition: attachment; filename="reporte-finanzas-2026-11-01_2026-11-30.pdf"`; el PDF abre |
+| 6 | Igual con `formato=xlsx&tipo=todos` | 200; el Excel abre con cinco hojas |
+| 7 | Repetir 5 y 6 para cada `tipo`: `matriculas`, `asistencia`, `examenes`, `finanzas`, `instructores` | Diez archivos válidos; el título y la hoja corresponden al tipo |
+| 8 | Añadir `tipoCurso=A`; luego `tipoCurso=B` | Los totales cambian y suman lo mismo que sin filtro |
+| 9 | Añadir `cohorteId=<uuid de una cohorte>` | Solo aparece esa cohorte; «Cohorte» en los filtros muestra su nombre |
+| 10 | `cohorteId` de una cohorte tipo A con `tipoCurso=B` | 400 «La cohorte seleccionada no pertenece al curso tipo B» |
+| 11 | `desde` posterior a `hasta`; rango de más de 366 días; `formato=csv`; `tipo=otro`; `cohorteId=123` | 400 con mensaje en español y `field` del campo |
+| 12 | Un período sin datos (por ejemplo, enero de 2020) en PDF y en Excel | 200; el documento dice «Sin datos para el período seleccionado» |
+| 13 | Comparar el total de «Ingresos confirmados» con `select sum(total_centavos) from payments where estado='aprobado' and proveedor<>'simulado' and confirmed_at >= '2026-11-01T05:00:00Z' and confirmed_at < '2026-12-01T05:00:00Z'` | Coinciden al centavo |
+| 14 | Registrar un pago en efectivo como administrador y volver a exportar finanzas | Sube «Ingresos en efectivo» por ese importe |
+| 15 | Con `DEMO_MODE=true`, hacer un pago simulado y exportar finanzas | El documento dice «Datos de demostración»; el pago aparece en «Pagos simulados» y no suma a los ingresos |
+| 16 | Exportar 21 veces seguidas con el mismo administrador | La exportación 21 responde 429 «Demasiadas solicitudes…» |
+| 17 | Lanzar 4 exportaciones a la vez (`xargs -P 4`) | Todas terminan en 200 o alguna en 429 `EXPORTACION_OCUPADA`; el servidor sigue respondiendo |
+| 18 | Ejecutar la consulta de auditoría de `docs/operations/reportes-exportacion.md` | Una fila por exportación con actor, tipo, formato, filtros y filas; sin nombres ni correos |
+| 19 | Administrador sin el permiso `view_payments_invoices` (regla de permisos activa) pide `tipo=finanzas` y luego `tipo=todos` | 403 en el primero; en el segundo el documento no trae finanzas e indica «No incluido» |
+| 20 | Revisar en Railway la línea de registro `report_exported` | Muestra milisegundos y filas; anotar el tiempo real |

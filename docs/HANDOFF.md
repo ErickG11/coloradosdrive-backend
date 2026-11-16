@@ -158,6 +158,8 @@ La base compartida contiene datos ficticios de ensayo: solicitudes en distintos 
 
 `docs/operations/inscripcion-flujo-final.md`, `inscripcion-orden-migraciones.md`, `inscripcion-alumno-runbook.md`, `inscripcion-pagos-proveedores.md`, `inscripcion-kushki-verificacion.md`, `inscripcion-brief.md`, y los ADR 014 a 019 en `docs/adr/`.
 
+Reportes y exportación a PDF y Excel (RF-08, CD-346): `docs/adr/025-reportes-exportacion.md` y `docs/operations/reportes-exportacion.md`. Endpoints `GET /admin/reportes` y `GET /admin/reportes/exportar`, solo administrador.
+
 ## Deuda de pruebas
 
 `tsc`, lint, `npm test` y build pasan; hay 26 pruebas saltadas. Los pasos del CI `npm run test:students-db` y `npm run test:practice-attendance-db` requieren PostgreSQL aislado: no se pueden ejecutar en local, pero **están en verde en el CI de `main`**.
