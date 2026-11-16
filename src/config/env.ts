@@ -5,7 +5,8 @@ import { loadEnrollmentConfig } from './enrollmentConfig';
 import { validateCaptchaConfiguration } from './captcha';
 import { parseCorsOrigins } from './cors';
 
-loadDotenv();
+// dotenv 17+ escribe una línea por carga; se silencia para no ensuciar los registros.
+loadDotenv({ quiet: true });
 
 function requireEnv(name: string): string {
   const value = process.env[name];
