@@ -19,6 +19,7 @@
     "test:students-db": "node tests/database/students.mjs",
     "test:student-profile-db": "node tests/database/studentProfile.mjs",
     "test:student-access-db": "node tests/database/studentAccess.mjs",
+    "test:student-identity-db": "node tests/database/studentIdentity.mjs",
     "test:student-deletion-db": "node tests/database/studentDeletion.mjs",
     "test:practice-cancellation-db": "node tests/database/practiceCancellation.mjs",
     "test:practice-swap-db": "node tests/database/practiceSwap.mjs",
