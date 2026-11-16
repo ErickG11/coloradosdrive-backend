@@ -196,9 +196,6 @@ describe('compatibilidad de las respuestas de administrador y alumno', () => {
       .mockReturnValueOnce(createChain({
         data: [{ id: 'enrollment', cohort_id: cohortId }], error: null,
       }))
-      .mockReturnValueOnce(createChain({
-        data: { enabled: false, implemented: true }, error: null,
-      }))
       .mockReturnValueOnce(freeChain)
       .mockReturnValueOnce(ownChain);
     const service = new PracticeSlotService({ from: fromMock } as unknown as SupabaseClient<Database>);
@@ -222,7 +219,7 @@ describe('compatibilidad de las respuestas de administrador y alumno', () => {
       expectedOwnSlot,
     ]);
     expect(fromMock.mock.calls).toEqual([
-      ['enrollments'], ['enrollment_rule_flags'], ['practice_slots'], ['practice_slots'],
+      ['enrollments'], ['practice_slots'], ['practice_slots'],
     ]);
     expect(freeChain.select.mock.calls[0][0]).not.toMatch(/\b(cohort|course):/);
     expect(ownChain.select.mock.calls[0][0]).not.toMatch(/\b(cohort|course):/);
