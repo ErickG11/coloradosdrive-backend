@@ -127,3 +127,21 @@ Preparación: backend en local o en Railway con datos de demostración; un token
 | 18 | Ejecutar la consulta de auditoría de `docs/operations/reportes-exportacion.md` | Una fila por exportación con actor, tipo, formato, filtros y filas; sin nombres ni correos |
 | 19 | Administrador sin el permiso `view_payments_invoices` (regla de permisos activa) pide `tipo=finanzas` y luego `tipo=todos` | 403 en el primero; en el segundo el documento no trae finanzas e indica «No incluido» |
 | 20 | Revisar en Railway la línea de registro `report_exported` | Muestra milisegundos y filas; anotar el tiempo real |
+
+## Guía manual — migración 095 (identidad confirmada por el administrador)
+
+Orden: 1) ejecutar `docs/operations/inscripcion-095-preflight.sql`; 2) aplicar `migrations/095_identidad_admin_sin_ventana.sql` en Supabase; 3) ejecutar `docs/operations/inscripcion-095-verificacion.sql` (termina en ROLLBACK); 4) desplegar el backend. Reversa: `docs/operations/inscripcion-095-rollback.sql`.
+
+| # | Paso | Esperado |
+| --- | --- | --- |
+| 1 | El preflight informa la última migración aplicada | 094 (la 093 puede no constar) y ninguna fila bloqueante |
+| 2 | La verificación se ejecuta completa | Termina sin error y deshace sus cambios |
+| 3 | `POST /admin/estudiantes/:id/identidad-presencial` con un administrador, sin cuerpo | 200; `identidad_presencial_at` y `identidad_presencial_por` quedan llenos |
+| 4 | Misma llamada con `motivo` de 5 caracteres | 422 con «La observación debe tener entre 10 y 300 caracteres.» |
+| 5 | Repetir la llamada del paso 3 | 200 idempotente; no se crea otra fila de evidencia |
+| 6 | Con un alumno de matrícula manual (origen distinto de solicitud) | 412 `IP412` |
+| 7 | Con un alumno inexistente | 404 `IP404` |
+| 8 | Con un token de instructor o de alumno | 403 |
+| 9 | `select accion from solicitud_auditoria order by created_at desc limit 5` | Aparece `identidad_presencial_admin` |
+| 10 | `select slot_id, motivo from identidad_presencial_overrides order by created_at desc limit 3` | `slot_id` nulo y `motivo` nulo si no se envió |
+

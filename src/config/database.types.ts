@@ -1137,7 +1137,7 @@ export interface Database {
         Returns: Database['public']['Tables']['practice_slots']['Row'][];
       };
       confirmar_identidad_presencial_admin: {
-        Args: { p_student: string; p_actor: string; p_motivo: string };
+        Args: { p_student: string; p_actor: string; p_motivo?: string | null };
         Returns: {
           transicion: boolean;
           confirmadaAt: string;

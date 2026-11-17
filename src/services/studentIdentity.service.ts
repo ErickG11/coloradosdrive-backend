@@ -7,12 +7,7 @@ const ERRORS: Partial<Record<string, [number, string, string]>> = {
   IP403: [403, 'ACCESO_DENEGADO', 'Se requiere un administrador activo.'],
   IP404: [404, 'ALUMNO_NO_ENCONTRADO', 'Alumno no encontrado.'],
   IP412: [409, 'ALUMNO_SIN_SOLICITUD', 'La matrícula más reciente no proviene de una solicitud.'],
-  IP410: [
-    409,
-    'VENTANA_IDENTIDAD_NO_VENCIDA',
-    'La confirmación manual requiere una práctica cuyo plazo del instructor ya venció (48 horas después del fin).',
-  ],
-  IP422: [400, 'MOTIVO_INVALIDO', 'Escribe un motivo de 10 a 300 caracteres.'],
+  IP422: [400, 'MOTIVO_INVALIDO', 'La observación debe tener entre 10 y 300 caracteres.'],
 };
 
 export class StudentIdentityService {
@@ -24,19 +19,22 @@ export class StudentIdentityService {
     input: unknown,
   ): Promise<Database['public']['Functions']['confirmar_identidad_presencial_admin']['Returns']> {
     requireKnownFields(input, ['motivo']);
-    if (typeof input.motivo !== 'string' || input.motivo.length > 1200)
-      throw new AppError('Escribe un motivo de 10 a 300 caracteres.', 400, {
+    // La observación es opcional (ADR 027); si llega, debe tener entre 10 y 300 caracteres.
+    const raw = input.motivo ?? null;
+    if (raw !== null && (typeof raw !== 'string' || raw.length > 1200))
+      throw new AppError('La observación debe tener entre 10 y 300 caracteres.', 400, {
         code: 'MOTIVO_INVALIDO',
       });
-    const motivo = sanitizeEnrollmentText(input.motivo);
-    if (Array.from(motivo).length < 10 || Array.from(motivo).length > 300)
-      throw new AppError('Escribe un motivo de 10 a 300 caracteres.', 400, {
+    const motivo = raw === null ? '' : sanitizeEnrollmentText(raw);
+    const length = Array.from(motivo).length;
+    if (length > 0 && (length < 10 || length > 300))
+      throw new AppError('La observación debe tener entre 10 y 300 caracteres.', 400, {
         code: 'MOTIVO_INVALIDO',
       });
     const { data, error } = await this.db.rpc('confirmar_identidad_presencial_admin', {
       p_student: studentId,
       p_actor: actorId,
-      p_motivo: motivo,
+      p_motivo: motivo === '' ? null : motivo,
     });
     if (error) {
       const mapped = ERRORS[error.code];
